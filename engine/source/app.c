@@ -314,7 +314,7 @@ static void prune_game(const char *dir, const Game *g)
 #ifdef __3DS__
     s32 prio = 0x30;
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
-    Thread t = threadCreate(prune_run, job, 16 * 1024, prio < 0x3E ? prio + 2 : 0x3F, -2, true);
+    Thread t = threadCreate(prune_run, job, 128 * 1024, prio < 0x3E ? prio + 2 : 0x3F, -2, true);
     if (!t)
         prune_run(job);
 #else

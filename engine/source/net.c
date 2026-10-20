@@ -975,7 +975,7 @@ void net_poll(void)
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
     /* below the main thread, so a transfer while someone plays never costs a frame:
      * the main thread waits for the screen every frame, and the receiver runs then */
-    rx_thread = threadCreate(rx_main, NULL, 32 * 1024, prio < 0x3F ? prio + 1 : prio, -2, false);
+    rx_thread = threadCreate(rx_main, NULL, 96 * 1024, prio < 0x3F ? prio + 1 : prio, -2, false);
     rx_started = rx_thread != NULL;
 #else
     rx_started = pthread_create(&rx_thread, NULL, rx_main_host, NULL) == 0;
