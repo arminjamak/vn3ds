@@ -7,7 +7,8 @@ in 256 MB of shared RAM. vn3ds doesn't port Ren'Py. It replaces it:
 1. **`vnpack`** (Python, runs on your computer) parses a game's `.rpy`
    scripts, compiles the parts most visual novels use to a small bytecode,
    downscales every image to the 3DS's 400×240 top screen, pre-tiles it in
-   the GPU's native texture layout and converts the audio to Ogg Vorbis.
+   the GPU's native texture layout (or stores it as JPEG), converts the audio
+   to Ogg Opus where needed and puts it all in a few pack files.
 2. **`vn3ds`** (C, citro2d) is a native 3DS visual-novel engine that runs
    that bytecode.
 
@@ -81,14 +82,36 @@ it does the rest:
   skipped or approximated, and with `--sd` the game and `vn3ds.3dsx` are
   copied onto the SD card (or an emulator's `sdmc` folder).
 
-Useful options: `--rgb565` (textures about 60% smaller, slight banding;
-recommended for very large games), `--jpeg 80` (opaque images as JPEG, about
-a fifth of the RGB565 size; the default for Wi-Fi), `--no-audio`, `--fit`,
-`-o build`. The Wi-Fi preset (`--quality wifi`) also uses ffmpeg's trellis
-JPEG encoder (`--jpeg-encoder ffmpeg --jpeg-qscale 5.5`), stores CG variants
-as patches over the picture before them (`--cg-patches`), JPEG movie posters
-(`--jpeg-posters`), and H.264 at 100 kbps / 20 fps; `--no-cg-patches` and
-`--no-jpeg-posters` turn those two off.
+**Two presets**, picked by where the game goes (the SD card: `sd`; Wi-Fi:
+`wifi`) and shown before converting together with the projected size of
+both; `--quality sd` or `--quality wifi` overrides the choice:
+
+| | `wifi`: the smallest that still looks and sounds good | `sd`: close to the original |
+|---|---|---|
+| pictures | trellis JPEG (ffmpeg, quantiser 5.5), RGB565 | trellis JPEG at quantiser 2 (about 45 dB), RGB8 textures |
+| CG variants | stored as patches over the picture before them | the same (no loss) |
+| audio | Opus, mono: music 19 kbps, voices 14, effects 20 | the game's own Ogg Vorbis / Opus untouched, the rest Opus 96 kbps |
+| movies | H.264 100 kbps / 20 fps | H.264 450 kbps / 30 fps |
+| files | a few pack files (see below) | the same |
+
+Eternum comes to about 300 MB with `wifi` and 790 MB with `sd`.
+Other options: `--rgb565`, `--jpeg 80`, `--no-audio`, `--fit`, `-o build`,
+`--no-cg-patches`, `--no-jpeg-posters`.
+
+**Pack files.** A game's pictures, sounds and movies go into a few pack
+files of about 8 MB in `pk/` instead of thousands of loose files: opening a
+file in a big folder takes a 3DS a few hundred milliseconds, a seek in an
+open pack nothing. Packs are cut where the files themselves decide, so an
+update that changes one picture resends one pack (rarely two), and the
+receiver skips the packs it already has. `vnpack --no-packs` keeps loose
+files; games packed before this load as they always did
+([docs/FORMAT.md](docs/FORMAT.md)).
+
+**Music timing.** Every music track the script plays gets its tempo
+measured (bpm, beats per bar, loop length; `tools/vnpack/tempo.py`) unless
+`vn3ds.json` gives it, so music changes land on the end of the loop or a
+phrase; tracks without a steady beat crossfade. `port-report.txt` lists each
+track's grid and how sure the measurement was.
 
 Tested with Eternum 0.9 (431 labels, 12,000+ images, ported from its
 Android build in about 5 minutes), Ren'Py's own *The Question*, the Ren'Py
@@ -250,14 +273,18 @@ stereo offset never shows a black strip at the edge.
 - `call screen` navigation screens made of buttons (maps, phone menus) become a menu, with the
   screen's background picture shown behind it
 - `call screen` minigame screens named in an adapter become native minigames (see
-  "Ported minigames" below)
+  "Ported minigames" below); any other custom minigame screen shows a card that says it
+  can't be played on the 3DS and lets the player choose the outcome (from the screen's
+  `Return`/`Jump` actions and the script's tests of `_return` after it)
+- `show screen` of a launcher an adapter names ("overlays", e.g. Eternum's audio logs)
+  becomes a button on the bottom screen that opens the launcher's list
 - string methods `upper lower title strip capitalize`, indexing and slicing, and
   `renpy.input` (returns its default name)
 
 **Not supported** (vnpack warns and skips them)
 
-- screen language: custom screens, `show screen`, custom main/game menus (`call screen` only
-  as above)
+- screen language: custom screens, `show screen` (except overlays), custom main/game menus
+  (`call screen` only as above)
 - Python beyond the subset above: functions, classes, lists, dicts, objects
 - `layeredimage`, animated images other than `Movie` (the first frame is shown), live text
 - ATL `function`, `choice` (the first choice is used), `contains`, `time`, events other than show
@@ -323,7 +350,11 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   or its phrase and the new one comes in on the downbeat, at most 8 s later;
   without a grid it crossfades on the beat. `{"audio/cafe.ogg": {"bpm": 82,
   "beats_per_bar": 4, "phrase_bars": 4, "bars": 16}}` (`bars` = the loop's
-  length). Snapshot's is written by `examples/music/meta.py` from the score.
+  length). Snapshot's is written by `examples/music/meta.py` from the score;
+  other games' tracks are measured when they're converted.
+- **`audio_masters`**: a folder of lossless masters of the game's audio
+  (`<path under audio/>.flac`), encoded for the 3DS instead of the shipped
+  files. Snapshot's come from `python3 examples/music/render.py --masters`.
 - **Ren'Py's `camera` statement** (standard Ren'Py) moves the whole scene with
   ATL: `xoffset`, `yoffset`, `zoom`, `rotate` and `zpos`, plus `xrotate` and
   `yrotate`, which on the 3DS tilt and orbit around the screen plane so a
@@ -343,8 +374,12 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   from the game's own files and compiles `call screen` into the native game,
   which sets the variables (`_return`, counters, ...) the original screen
   did. They play with the buttons or big touch areas, have no cheats or
-  scores and don't appear in the Minigames menu. Mechanics and what an entry
-  names: `tools/vnpack/ported.py`; an example: `tests/ported/`.
+  scores and don't appear in the Minigames menu. The mechanics are generic,
+  so any game's adapter can use them. An `"overlays"` map turns a `show
+  screen` launcher into a persistent bottom-screen button with a list of
+  recordings (`{"audiologs": {"kind": "loglist", "button": "Audio logs",
+  "list": "audiologs2"}}`). Mechanics and what an entry names:
+  `tools/vnpack/ported.py`; an example: `tests/ported/`.
 - **`config.speaking_attribute`** (standard Ren'Py) is honoured: while a
   character speaks, the engine flaps between their image and the image with
   that attribute, e.g. `aron tired` and `aron tired talk`.
