@@ -355,6 +355,19 @@ def main(argv=None):
         else:
             warn(line, f"image '{spec}' is not defined")
 
+    # Packed files are named by their contents, so a rebuild keeps the name of
+    # everything that didn't change and Wi-Fi updates only send what did.
+    def content_name(sub, data, ext):
+        return f"{sub}/{hashlib.sha1(data).hexdigest()[:16]}.{ext}"
+
+    def rename_by_content(rel):
+        """Moves a file written under a temporary name to its content name."""
+        src = os.path.join(out_dir, rel)
+        with open(src, "rb") as f:
+            final = content_name(rel.split("/", 1)[0], f.read(), rel.rsplit(".", 1)[1])
+        os.replace(src, os.path.join(out_dir, final))
+        return final
+
     builder = ImageBuilder(fs, comp, gw, gh, warn)
     builder.extra_defs = defs
     resources = []
@@ -372,7 +385,7 @@ def main(argv=None):
         data, opaque = encode_ctex(resize_rgba(img, w, h), logical_w, logical_h,
                                    allow_565=args.rgb565, jpeg_quality=args.jpeg)
         idx = len(resources)
-        rel = f"img/{idx:04d}.ctex"
+        rel = content_name("img", data, "ctex")
         with open(os.path.join(out_dir, rel), "wb") as f:
             f.write(data)
         total_bytes += len(data)
@@ -394,7 +407,7 @@ def main(argv=None):
     audio_count = 0
     audio_jobs = []
     for kind, path in comp.resources:
-        rel = f"snd/{len(resources):04d}.ogg"
+        rel = f"snd/tmp-{len(resources):04d}.ogg"
         resources.append(rel)
         if args.no_audio:
             continue
@@ -415,6 +428,9 @@ def main(argv=None):
                              args.audio_profile)
     with ThreadPoolExecutor(max_workers=max(2, os.cpu_count() or 2)) as ex:
         audio_count = sum(1 for ok in ex.map(audio_job, audio_jobs) if ok)
+    for i, rel in enumerate(resources):
+        if os.path.exists(os.path.join(out_dir, rel)):
+            resources[i] = rename_by_content(rel)
 
     # Machine voices (vn3ds.json "voices"): a syllable bank plus a pitch per
     # character, played by the engine as text appears.
@@ -427,10 +443,10 @@ def main(argv=None):
             if key is None:
                 warn(None, f"voice syllable '{rel_src}' not found")
                 continue
-            rel = f"snd/{len(resources):04d}.ogg"
+            rel = f"snd/tmp-{len(resources):04d}.ogg"
             if convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn):
                 bank.append(len(resources))
-                resources.append(rel)
+                resources.append(rename_by_content(rel))
         pitch = {}
         for var, p in vcfg.get("pitch", {}).items():
             if var in comp.char_by_name:
@@ -487,7 +503,7 @@ def main(argv=None):
         res = by_hash.get(digest)
         if res is None:
             res = len(resources)
-            rel = f"img/{res:05d}." + {"video": "cvid", "cvh": "cvh"}.get(kind, "ctex")
+            rel = content_name("img", data, {"video": "cvid", "cvh": "cvh"}.get(kind, "ctex"))
             with open(os.path.join(out_dir, rel), "wb") as f:
                 f.write(data)
             total_bytes += len(data)
@@ -525,7 +541,7 @@ def main(argv=None):
             res = by_hash.get(digest)
             if res is None:
                 res = len(resources)
-                rel = f"img/{res:05d}.ctex"
+                rel = content_name("img", data, "ctex")
                 with open(os.path.join(out_dir, rel), "wb") as f:
                     f.write(data)
                 total_bytes += len(data)

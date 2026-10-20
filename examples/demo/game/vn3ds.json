@@ -4868,6 +4868,337 @@
     "file": "layers/bg clinic reverse/5-armchair.png",
     "depth": 0.25
    }
+  ],
+  "bg bathroom door": [
+   {
+    "file": "layers/bg bathroom door/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bathroom door/1-door.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg bathroom door/2-light under the door.png",
+    "depth": 0.79,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg bathroom door/3-coats.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg bathroom door/4-rug.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg bathroom door/5-doorway.png",
+    "depth": -0.25
+   }
+  ],
+  "bg bathroom door siren": [
+   {
+    "file": "layers/bg bathroom door siren/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bathroom door siren/1-door.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg bathroom door siren/2-light under the door.png",
+    "depth": 0.79,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg bathroom door siren/3-coats.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg bathroom door siren/4-rug.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg bathroom door siren/5-doorway.png",
+    "depth": -0.25
+   },
+   {
+    "file": "layers/bg bathroom door siren/6-siren.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.7
+    }
+   },
+   {
+    "file": "layers/bg bathroom door siren/7-siren near.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.7
+    }
+   }
+  ],
+  "bg stairwell": [
+   {
+    "file": "layers/bg stairwell/0-back.png",
+    "depth": 1.1
+   },
+   {
+    "file": "layers/bg stairwell/1-street light.png",
+    "depth": 1.05,
+    "anim": {
+     "type": "pulse",
+     "a": 0.1,
+     "period": 0.7
+    }
+   },
+   {
+    "file": "layers/bg stairwell/2-doors.png",
+    "depth": 0.75
+   },
+   {
+    "file": "layers/bg stairwell/3-steps.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg stairwell/4-banister.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg stairwell/5-siren.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.7
+    }
+   }
+  ],
+  "bg ward yard": [
+   {
+    "file": "layers/bg ward yard/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg ward yard/1-stars faint.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg ward yard/2-stars.png",
+    "depth": 1.38,
+    "anim": {
+     "type": "stars",
+     "a": 40,
+     "b": 5
+    }
+   },
+   {
+    "file": "layers/bg ward yard/3-town.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg ward yard/4-walkers.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 2,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg ward yard/5-searchlight.png",
+    "depth": 0.94,
+    "anim": {
+     "type": "pulse",
+     "a": 0.4,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg ward yard/6-beam.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "sway",
+     "x": 30,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg ward yard/7-garden wall.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg ward yard/8-lawn.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg ward yard/9-understudies.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg ward yard/10-bars.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg ward yard/11-sill.png",
+    "depth": -0.15
+   }
+  ],
+  "bg shadowbase": [
+   {
+    "file": "layers/bg shadowbase/0-back.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg shadowbase/1-the light above.png",
+    "depth": 1.28,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg shadowbase/2-telescope mirror.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg shadowbase/3-searchlights.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg shadowbase/4-borrowed shadows.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 1,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg shadowbase/5-walker leg.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg shadowbase/6-bench.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg shadowbase/7-lamp.png",
+    "depth": 0.19,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg shadowbase/8-ash.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 9
+    }
+   }
+  ],
+  "bg mirrorplanet": [
+   {
+    "file": "layers/bg mirrorplanet/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg mirrorplanet/1-stars faint.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg mirrorplanet/2-stars.png",
+    "depth": 1.48,
+    "anim": {
+     "type": "stars",
+     "a": 150,
+     "b": 6
+    }
+   },
+   {
+    "file": "layers/bg mirrorplanet/3-sun.png",
+    "depth": 1.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg mirrorplanet/4-mirror planet.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "breathe",
+     "a": 0.005,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg mirrorplanet/5-glint.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg mirrorplanet/6-base lights.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 1.5
+    }
+   }
   ]
  },
  "max_shift": 8.0,

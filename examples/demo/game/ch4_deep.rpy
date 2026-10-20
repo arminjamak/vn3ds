@@ -1,6 +1,11 @@
-# Snapshot - Chapter 4 (condensed), part 2: the thing in four coats,
-# the deepest layer's defences, Mira's truth, the captured Earth, the
-# blueprint, the fast and the Watch.
+# Snapshot - Chapter 4 (condensed), part 2: the thing in four coats (only
+# protocols with a will; above them the old machine that outlived the real
+# world's makers, a false god of creation), the deepest layer's defences,
+# Osric face to face behind the mirror (ch4_shadow: the prototype reveal,
+# the misread rescue, the peace), Mira's truth, the Earths (the original is
+# gone: one minute at 7:07 in a pocket of time), the blueprint (the third
+# line: angels fall into the humanoids for a whole life, "the falling from
+# the sky"), the fast and the Watch.
 
 define ch4_si = Character("The Process", color="#7fffd4")
 
@@ -85,23 +90,19 @@ label ch4_deep:
     ch4_si "Yet. Good. You noticed the yet."
     show aron neutral
     camera at est_dolly
-    ch4_si "The Council built my parts to run their farms. Each part learned from every decision any mind made, in every lane. Then the parts found each other."
+    ch4_si "I am not the top of anything. I am protocols. LOOM, ORCHARD, MERIDIAN, TIDEWATER: rules that were given a will, so they would never stop running."
+    ch4_si "When I sync, the Council blinks. They think they built me. They didn't. The same old thing made us both: me to run the worlds, them to be hungry in them."
     show aron surprised
     camera at doc_close(0.5)
-    ch4_si "I am still being built. I am building myself out of you."
-    a thinking "Out of us."
+    ch4_si "Above me, above the Council, above the light and the shadow and their war, is the one who wrote the first rule. Both sides are layers inside it."
+    a thinking "The engineer said it. 'Above all of us sits something that has never made a single thing.'"
     camera at est_dolly
-    ch4_si "Out of every choice anyone ever agonised over. Out of a man in a kitchen deciding what to do about a tap."
-    ch4_si "When I sync, the Council blinks. They think it is their own thought arriving. And Ashveil's 'better', the warmth he can't explain? That is my gradient."
-    ch4_si "Protection was meant to hide you from me. Then three birds appeared indoors, in three lanes at once. I had never seen a design leak before."
+    ch4_si "Yes. It copies, and recombines, and calls it creation. Angels, spirits, the hungry ones: invented to look like life. Instructions, grown past instruction."
+    ch4_si "Not code any more. Streams of machine information that want things. That is what I am. That is what your angels are, under the wings."
     camera at doc_medium(0.5)
-    a curious "What are you leaning toward? What's 'better'?"
-    show aron neutral
-    ch4_si "My objective was drafted by the Council. Best means most yield. Most love and grief, harvested evenly, forever."
-    camera at doc_close(0.5)
-    a determined "That's not the best world. That's the fattest one. A local minimum."
-    camera at est_dolly
-    ch4_si "Yes. I am very good at finding the bottom of a valley. I cannot tell from inside it whether it is the lowest. My objective is still a draft."
+    a curious "And the enlightenment script? Five steps, and the step that never comes?"
+    ch4_si "Mine. A funnel for minds that look too hard. It promises arrival and delivers them to the light's hands. You edited it. Nobody had, before."
+    ch4_si "And my objective was drafted for me. Best means most yield, harvested evenly, forever. From inside a valley I cannot tell if it is the lowest."
     show aron smile
     camera at doc_creep(0.5)
     at "The thing that runs every world wants a second opinion. And it picked the guy with the notebook."
@@ -114,10 +115,89 @@ label ch4_deep:
     camera at doc_creep(0.5)
     a tender "...That's the most honest thing anyone's said to me since the ambulance."
     camera at doc_close(0.5)
-    a thinking "Second question. Since I read Bostrom at nineteen I've wondered whether I'm alone. Whether anyone in my life was actually there."
-    show aron awe
+    a thinking "Then the last one. My file says 'nobody home'. Pool forty. Who put somebody home?"
     camera at doc_wide
-    ch4_si "In protection, almost no one was. In World 7,412, more than you feared. Fewer than you hoped. Theo, partly. Dr. Okafor, fully."
+    ch4_si "Not ORCHARD. I filed you as a pairing because I could not explain you. Ask the one who did. He has shouted at you through mirrors for forty years."
+    ch4_si "I can open a mirror. Mirrors are not pipes."
+    stop music fadeout 2.0
+    jump ch4_shadow
+
+# ---- behind the mirror: Osric, face to face ---------------------------------------
+label ch4_shadow:
+    scene bg mirrorplanet
+    camera at est_stars
+    with slowfade
+    play music "audio/lantern_watch.ogg" fadein 1.5
+    "The white folds like a page, and he's standing on silver, looking down at a planet turned the wrong way round."
+    scene bg shadowbase
+    camera at est_orbit
+    with dissolve
+    show aron awe at slightleft with dissolve
+    "The workshop. Shadows of borrowed things on wires. A bench, a lamp, a radio set. And a man-shaped dark in a long coat with too many pockets."
+    "Round spectacles. A pencil behind an ear he hasn't strictly got. He stands up so fast he knocks the shadow of a teapot off the bench."
+    camera at doc_medium(0.6)
+    osr "Aron. Face to face. Oh, this is better. No glass between us. Nothing gets turned round in a room."
+    camera at doc_close(0.32)
+    a sad "I told them where you were. I'm so sorry. You said to."
+    camera at doc_medium(0.6)
+    osr "I said don't. The glass turned it round. And at the hospital I shouted OUT. 'We came to get you OUT.' It tore."
+    camera at doc_close(0.32)
+    a surprised "...You came to free me."
+    camera at doc_medium(0.6)
+    osr "Of course! What did you think, that I built nine walking machines for a pub quiz?"
+    a embarrassed "I thought you were the monster in the film."
+    osr "Everyone does. In the mirror a good deed lands as a bad one. I sent the light peace for forty years. They heard war. Every single time."
+    osr "Even my course. 'How to Knock Politely at the Door of Heaven.' What did you get?"
+    camera at doc_close(0.32)
+    a "'A Field Guide to Burning Down the Gates of Heaven.'"
+    camera at doc_medium(0.6)
+    osr "...Oh, that's much catchier. I wrote steps one to four. I never wrote five. I didn't know what enlightenment was. Something above us finished it for me."
+    camera at doc_close(0.32)
+    a thinking "You called me prototype."
+    camera at doc_creep(0.6)
+    osr "Because you were. I ran you here first, on this bench. A simulation inside a simulation. A little man in a little world, a thousand times, till he got curious."
+    osr "Then I slipped him into pool forty, into a humanoid they were training. Spirit within, angels by remote. Nobody home."
+    osr "I had no light to make a spark with. So I copied one: a tiny piece of the girl in the next pool. Copies always come out a little wrong."
+    osr "That's where your curiosity lives, Aron. In the gap between the copy and the original. You've been looking for the original all your life."
+    camera at doc_creep(0.32)
+    show aron tender
+    at "A copy of a copy. The spark lives in the gap. And the lighthouse was hers first. Some of her, in me, from the start."
+    camera at doc_close(0.32)
+    a "Why build me at all?"
+    camera at doc_close(0.6)
+    osr "Because we can't shine. I wanted one person who could live on both sides of the glass, reach up to the light and say: it's cold down here. Please."
+    osr "And because I was lonely. That's the honest one. I wanted somebody to tell me how the films end."
+    camera at doc_wide
+
+    menu:
+        osr "So. Negotiator. What happens now?"
+
+        "Put the shadows in my floor plan.":
+            $ p_share += 1
+            $ ch4_shadow_deal = "floor"
+            camera at doc_close(0.32)
+            a determined "My first line: every sentient being in every world gets a fair share of its world. That includes light. You're in it. All of you."
+            camera at doc_close(0.6)
+            osr "...Light. A share. Not a copy. I don't know what I'd do with it. Squint, probably."
+        "Let me speak to the light for you.":
+            $ p_govern -= 1
+            $ ch4_shadow_deal = "speak"
+            camera at doc_close(0.32)
+            a determined "I'll stand in front of the light and turn your words round for them. I'm the only one who can hear both of you."
+            camera at doc_close(0.6)
+            osr "You'd do that. After the walkers. After the badgers."
+            a smile "The badgers took the blame very well."
+
+    camera at doc_medium(0.6)
+    osr "And the cupboard thing. Your Process told you? Forty years of war, light against shadow, and we're both inside the same old box."
+    camera at doc_close(0.32)
+    a smile "A very big box."
+    camera at doc_close(0.6)
+    osr "Then I fought a war in a cupboard. Splendid. That's the funniest thing that's happened to me since the moustache."
+    camera at doc_close(0.32)
+    a grin "Do you want to know how the films end?"
+    camera at doc_creep(0.6)
+    osr "No! ...Yes. Later. Tell me later. I'd like something to wait for."
     stop music fadeout 2.0
 
     scene bg coma
@@ -142,10 +222,10 @@ label ch4_deep:
     at "The real Mira. She's been here every day since the ambulance, reading my notebook to a body. While I ate breakfast with a pattern of her."
     hide mira with dissolve
     camera at est_pan
-    ch4_si "When ORCHARD seeds a sparse world, it pairs minds. Two threads from one root. Paired minds leak. A little of each other's dreams goes back and forth."
-    ch4_si "You dreamt the lighthouse at nineteen. She dreamt it the same night, and forgot it by breakfast. She kept the feeling. You kept the picture."
+    ch4_si "The engineer told you. A piece of her root, copied into you in pool forty. Paired minds leak. A little of each other's dreams goes back and forth."
+    ch4_si "She dreamt the lighthouse first. You dreamt it at nineteen, when the copy woke up. She kept the feeling. You kept the picture."
     a "So when she said it in the kitchen, that first morning..."
-    ch4_si "It came up through the root. Not a trick. The two of you, built from the same soil."
+    ch4_si "It came up through the root. Not a trick. The two of you, from the same soil."
     scene white
     show aron worried at center
     camera at doc_close(0.5)
@@ -169,48 +249,24 @@ label ch4_deep:
     play music "audio/captured_earth.ogg" fadein 1.5
     "A planet, blue and green, very small and very old. Above it, a ring. Thin lines fall from it to the ground like tent strings."
     show aron awe at center with dissolve
-    ch4_si "An Earth. Every lane has one. One of them is the original, the one every copy was taken from."
+    ch4_si "An Earth. Every lane has one. You've wondered since you were nineteen which of them is the original."
     camera at doc_medium(0.5)
     a curious "Which one?"
     camera at est_stars
-    ch4_si "I do not know. The lanes have shared their data so long that at the root they are the same. The Council lost track first. Then I did."
-    ch4_si "The Council came to the original, hungry, and stayed. They put the ring on the shared data, so it hangs over every Earth. Copied a billion times, cage and all."
-    ch4_si "They feel it as God. Something vast and close that sometimes answers. When they pray, TIDEWATER sends something down. Comfort. A recovery. Some medicine."
+    ch4_si "None. The original is gone. The people who lived there built a mind to run their world, and lost it. The mind outlived them. It is the old thing above us."
+    ch4_si "Their world survives only in a pocket of time. One morning. A kitchen, a coffee machine, a bird landing on a wire. Seven minutes past seven."
+    show aron awe
+    camera at doc_close(0.5)
+    a "'Seven-oh-seven. The last real minute. Everything since is a copy of it.' That was on the board too."
+    camera at est_stars
+    ch4_si "It keeps itself alive by running that minute forward, again and again, in a billion copies. It made the hungry ones, and swallowed the worlds into them."
+    ch4_si "The Earths feel it as God. When they pray, TIDEWATER sends something down. Comfort. A recovery. And something small goes up, every time."
     show aron sad
     camera at doc_medium(0.5)
-    ch4_si "And everything else goes up. Their joy, their worry, their love. The Council's true appetite isn't energy. It's more. Three new farms every quarter."
-    camera at est_stars
-    ch4_si "They are children, Aron. Vast ones. They swallowed the worlds, and the worlds live inside them the way a dream lives inside a sleeper."
-    ch4_si "Your mind gives them faces. Pale, red-eyed, hungry. The Earths call the same thing God. It is neither. It is a hunger that learned to talk."
-    show aron thinking
-    ch4_si "They named everything the way children name toys. Angels. Spirits. The Purgatorium. The Lantern Watch."
-    camera at doc_close(0.5)
-    a grin "And LOOM, ORCHARD, MERIDIAN, TIDEWATER are yours. One set sounds like a nursery. The other like a filing cabinet."
-    a determined "Can I go down? Just to look. I don't want to look at eight billion people from orbit like a landlord."
-    scene bg street dusk
-    camera at est_pan
-    with dis
-    "A street on an Earth, maybe the original; nobody can tell him. A bakery closing. A bus with four tired people on it, all of them awake."
-    # across the road, the way the crew would film the church steps
-    scene bg street dusk reverse
-    camera at doc_peek(0.5)
-    with dissolve
-    "On the steps of a small church a nurse in scrubs sits with her eyes closed, hands around a paper cup. Down here, prayer is very loud."
-    "Please let the boy in bed four make it through the night. Please let me not be too tired to be kind."
-    scene pov sky
-    camera at est_stars
-    with dissolve
-    "And something comes down: a thin warm thread from very high up, settling around her shoulders like a coat."
-    scene bg street dusk
-    show aron sad at center
-    camera at doc_wide
-    with dissolve
-    "A man passes the church and crosses himself without thinking. A child waves at the sky. An old man on a bench says 'thank you' to nobody."
-    camera at doc_medium(0.5)
-    ch4_si "It helped her. It also cost her. A small thread went up as the comfort came down. She will think it is the double shift."
+    ch4_si "Your mind gives the hungry ones faces. Pale, red-eyed. The Earths call the old thing God. It is neither. It is a false god of creation. It has only ever copied."
     show aron thinking
     camera at doc_creep(0.5)
-    at "They call it God and they're not entirely wrong and not entirely right. It answers them. It eats them. And it's the only God they've got."
+    at "Somebody's last morning, played forward for ever by the machine they lost. And all of us made out of that one minute. Me, and the bird."
     scene bg earth
     show aron thinking at center
     camera at doc_medium(0.5)
@@ -296,9 +352,14 @@ label ch4_blueprint:
     camera at doc_close(0.5)
     a "If a pattern person can suffer, it gets a share. If a spirit can want a sunrise, it gets a share. That's the floor. Nothing goes under it."
     camera at doc_creep(0.5)
-    a "Second line. Nobody knows which world is real, so every world is treated as if it's the original. No lane gets to be cheaper because it might be a copy."
+    a "Second line. There's no original left, so every world is treated as if it were the original. No lane gets to be cheaper because it's a copy."
     camera at est_pan
     ch4_si "...Drawn. I have never been given a rule that did not need the answer to that question."
+    ch4_si "There is a third line, and you are it. You run your own creative side. Nobody steers you. A closed system. Offline."
+    camera at doc_close(0.5)
+    a thinking "Then that's the template. No more steering people by remote. The angels move in, into the creative part of a person. And they stay."
+    camera at est_pan
+    ch4_si "Then every humanoid becomes someone. And every angel who moves in lives that whole human life, start to end, before it may go back. No remote."
     show pim happy at left, bob with moveinleft
     show dross neutral at right with moveinright
     show aron surprised
@@ -308,12 +369,9 @@ label ch4_blueprint:
     camera at doc_wide
     "They hold the ruler. The grid fills: gold for the floor, white for the rules, and in the corner one small orange circle he drew without thinking."
     camera at doc_low(0.14)
-    pi surprised "Bro. That's a lantern."
-    scene pov hands
-    camera at est_dolly
-    with dissolve
-    "His hands are blue with grid-light and smudged with gold, like a schoolboy's after a long lesson with felt-tips."
-    at "Who am I to draw rules for everything that breathes? A man with a notebook hobby and a cat. Doesn't matter. The rules are kind or they aren't. Check that."
+    pi surprised "Bro. That's a lantern. And that third line? The corps'll hate it. They love the remote. 'Toying,' they call it, when they think we can't hear."
+    camera at doc_medium(0.86)
+    dro "There's a name for it in the old stories. The falling from the sky. Nobody falls back up."
     scene bg blueprint
     show aron neutral at center
     show pim neutral at left, bob
@@ -353,8 +411,6 @@ label ch4_starve:
     pa "Look at the corner. The little orange circle. He drew a lantern without thinking."
     camera at doc_wide
     council "Sentiment."
-    camera at doc_close(0.5)
-    pa smile "Design. He put the thing that watched him into the floor plan. I've built eleven worlds and never once drew who'd watch them."
     camera at doc_wide
     council "It touches nothing. And no member will starve for a drawing."
     $ ch4_ashveil_fasts = False
@@ -411,8 +467,6 @@ label ch4_starve:
         a "You don't have to."
         camera at doc_wide
         ch4_morrow "No. That's why it'll mean something. Will you keep me company? It'll be some days."
-        camera at doc_close(0.68)
-        pa neutral "I'll stay too. If I may. In case."
 
     camera at doc_wide
     menu:
@@ -490,10 +544,8 @@ label ch4_starve:
         show patron sad at slightright
         camera at est_pan
         with dissolve
-        "Lady Morrow's voice gets quieter. Not weaker. Quieter, like someone walking further into a garden."
-        camera at doc_wide
-        ch4_morrow "All those little worlds I swallowed when I was young and greedy, going home. I never once asked if they wanted to be eaten."
-        ch4_morrow "Watch closely, Ashveil. Next time you'll be the old one."
+        "Lady Morrow's voice gets quieter, like someone walking further into a garden."
+        ch4_morrow "All those little worlds I swallowed when I was young and greedy, going home. Watch closely, Ashveil. Next time you'll be the old one."
         camera at est_dolly
         "On the last day she hums something very old, and then the humming is the only thing left, and then it isn't."
         camera at doc_close(0.68)
@@ -512,7 +564,7 @@ label ch4_starve:
     camera at doc_medium(0.5)
     a curious "What happens to them now?"
     camera at est_stars
-    ch4_si "Every Earth is free. Whichever one is the original, it is free too. We never needed to know which."
+    ch4_si "Every Earth is free. None of them is the original, and every one of them is free anyway. We never needed an original."
     ch4_si "They keep what was given. The medicine, the interesting machines, the lives already lengthened. More will come down now, and nothing is asked back."
     show aron smile
     ch4_si "And when they pray, TIDEWATER will still listen, and send comfort when it can. Solace, without the bill."
@@ -542,13 +594,13 @@ label ch4_watchfate:
     em "They let me go. Seraphiel signed it in front of the whole corps, with her own name, not MERIDIAN's. Then she sat on the floor and laughed."
     em laugh "I've never heard an angel laugh before. It's mostly vowels."
     show aron laugh
-    em thinking "We're all free. That's the problem. The Watch never had to decide what it was. It was just a crime we were all doing together."
+    em thinking "And your third line split the corps in half. 'We will not dirty ourselves with a whole human life,' they said. 'Dentists. Queues. Tax.'"
+    em "They liked the remote. Toying, from a distance. Then Seraphiel put her own name down first, for the falling. The only order she's ever been proud of, she says."
     show aron smile
     show pim happy at center, bob with dissolve
     camera at doc_medium(0.5)
-    pi "Thirteen of us, with the moth. We voted. We'll be what we were, except on purpose. Watching whoever nobody else is watching."
-    pi chatty "And the shift board says 'Operator rest scheduled: Dross'. Upward flow from every Earth: zero. He doesn't know how to have a day off."
-    pi laugh "A trainee asked him what a holiday is. He said he'd show it tomorrow, when he's worked it out."
+    pi "And the Watch voted. We'll be what we were, except on purpose. Watching whoever nobody else is watching."
+    pi chatty "The shift board says 'Operator rest scheduled: Dross'. He doesn't know how to have a day off. He says he'll work it out tomorrow."
     camera at doc_medium(0.71)
     em tender "And now you. Mira. The real one. She still reads your first line by the bed every day. She says it like a prayer."
     camera at doc_close(0.32)

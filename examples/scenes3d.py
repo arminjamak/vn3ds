@@ -2390,3 +2390,225 @@ SCENES.update({
     "bg street dusk reverse": street_dusk_reverse,
     "bg command reverse": command_reverse, "bg clinic reverse": clinic_reverse,
 })
+
+
+# ---------------------------------------------------------------- the light and the shadow
+# Places for the shadow-realm thread: the hall outside the bathroom door
+# (end of ch1), the stairwell they carry him down, the ward garden the
+# walkers come over (ch3), Osric's workshop inside the mirror planet and
+# the mirror planet seen from outside (ch2 to ch4). The walkers ("Herons")
+# and the troopers ("Understudies") are Osric's own designs: stilt legs and a
+# round lamp-cabin like a diving bell; dark plate armour with a round mirror
+# for a face.
+
+def bathroom_door():
+    """The flat's hall, facing the bathroom door: shut, a strip of light under it."""
+    back = gradient(W, H, (236, 214, 190), (212, 188, 162))
+    d = ImageDraw.Draw(back)
+    wood_floor(d, 560, (120, 84, 60), (104, 72, 52))
+    s = Scene(back, 1.0)
+    door, d = s.new("door", 0.8)
+    d.rectangle([540, 90, 880, 562], fill=(250, 245, 235, 255))          # frame
+    d.rectangle([566, 112, 854, 562], fill=(238, 232, 222, 255))         # the door
+    for y0, y1 in ((150, 330), (370, 530)):
+        d.rectangle([600, y0, 820, y1], outline=(222, 214, 202, 255), width=6)
+    d.ellipse([808, 340, 830, 362], fill=(190, 170, 120, 255))           # handle
+    d.rectangle([800, 300, 838, 318], fill=(250, 250, 250, 255))         # the lock's little window
+    d.pieslice([808, 302, 830, 324], 180, 360, fill=(200, 50, 40, 255))  # red: engaged
+    s.add("light under the door", light((710, 562), 170, (255, 248, 225), 200), 0.79, PULSE(0.7, 3))
+    coats, d = s.new("coats", 0.6, SWAY(1, 0, 9))
+    d.rectangle([130, 200, 360, 214], fill=(110, 80, 55, 255))
+    for x, c in ((160, (60, 80, 120)), (240, (170, 90, 60)), (315, (40, 40, 45))):
+        d.ellipse([x - 8, 200, x + 8, 216], fill=(120, 90, 60, 255))
+        d.rounded_rectangle([x - 40, 214, x + 40, 470], 30, fill=c + (255,))
+    rug, d = s.new("rug", 0.3)
+    d.polygon([(420, 580), (980, 580), (1100, H), (300, H)], fill=(150, 60, 55, 255))
+    d.polygon([(450, 595), (950, 595), (1050, H), (340, H)], outline=(210, 170, 110, 255))
+    s.add("doorway", door_frame((236, 214, 190), (250, 245, 235), (40, 24, 1150), shade=0.8), -0.25)
+    return s
+
+
+def bathroom_door_siren():
+    s = recolor(bathroom_door(), (0.62, 0.66, 0.85), (0, 0, 12))
+    s.add("siren", light((60, 120), 700, (60, 110, 255), 170), 0.9, PULSE(0.0, 0.7))
+    s.add("siren near", light((1250, 300), 520, (60, 110, 255), 120), -0.2, PULSE(0.0, 0.7))
+    return s
+
+
+def stairwell():
+    """An old stairwell, going down, blue light coming up from the street door."""
+    back = gradient(W, H, (205, 196, 176), (170, 160, 140))
+    d = ImageDraw.Draw(back)
+    d.rectangle([0, 380, W, H], fill=(120, 135, 120))                    # the painted dado
+    d.line([0, 380, W, 380], fill=(90, 100, 90), width=6)
+    d.rectangle([980, 90, 1140, 330], fill=(120, 150, 200))              # landing window
+    d.line([1060, 90, 1060, 330], fill=(230, 225, 210), width=8)
+    s = Scene(back, 1.1)
+    s.add("street light", light((1060, 260), 260, (70, 120, 255), 170), 1.05, PULSE(0.1, 0.7))
+    doors, d = s.new("doors", 0.75)
+    for x in (150, 700):
+        d.rectangle([x, 150, x + 170, 470], fill=(110, 80, 55, 255))
+        d.ellipse([x + 140, 300, x + 156, 316], fill=(200, 180, 120, 255))
+        d.rectangle([x + 60, 200, x + 110, 220], fill=(220, 210, 180, 255))
+    steps, d = s.new("steps", 0.45)
+    for k in range(9):
+        y = 470 + k * 30
+        d.polygon([(380 - k * 40, y), (1280, y), (1280, y + 30), (380 - k * 40 - 40, y + 30)],
+                  fill=(150 - k * 6, 140 - k * 6, 130 - k * 6, 255))
+        d.line([380 - k * 40, y, 1280, y], fill=(200, 190, 175, 255), width=3)
+    rail, d = s.new("banister", 0.15)
+    d.line([1280, 300, 120, 700], fill=(80, 55, 40, 255), width=22)
+    for k in range(10):
+        x = 1240 - k * 115
+        y = 314 + k * 40
+        d.line([x, y, x, y + 260], fill=(70, 50, 35, 255), width=8)
+    s.add("siren", light((640, H + 100), 620, (60, 110, 255), 130), -0.1, PULSE(0.0, 0.7))
+    return s
+
+
+def heron(d, cx, top, scale, lamp=(255, 230, 160)):
+    """Osric's walker: a round cabin like a diving bell, slung low between
+    four thin stilt legs that bend backwards at the knee."""
+    body = int(70 * scale)
+    leg = (55, 60, 75, 255)
+    for k, dx in enumerate((-2.4, -1.0, 1.0, 2.4)):
+        kx = cx + int(dx * body * 0.9)
+        ky = top - int(body * 0.9)
+        fx = cx + int(dx * body * 1.5)
+        d.line([cx + int(dx * body * 0.35), top, kx, ky], fill=leg, width=max(3, int(9 * scale)))
+        d.line([kx, ky, fx, H + 40], fill=leg, width=max(3, int(8 * scale)))
+        d.ellipse([kx - 8 * scale, ky - 8 * scale, kx + 8 * scale, ky + 8 * scale], fill=(80, 85, 100, 255))
+    d.ellipse([cx - body, top - body, cx + body, top + body], fill=(70, 75, 92, 255))
+    d.ellipse([cx - body * 0.8, top - body * 0.8, cx + body * 0.8, top + body * 0.2], fill=(90, 96, 115, 255))
+    for k in range(-2, 3):                                               # rivets
+        d.ellipse([cx + k * body * 0.35 - 3, top + body * 0.45 - 3, cx + k * body * 0.35 + 3,
+                   top + body * 0.45 + 3], fill=(150, 150, 160, 255))
+    d.ellipse([cx - body * 0.35, top - body * 0.35, cx + body * 0.35, top + body * 0.35], fill=lamp + (255,))
+    d.line([cx, top - body, cx, top - body * 1.6], fill=leg, width=4)   # periscope
+    d.rectangle([cx, top - body * 1.6, cx + body * 0.4, top - body * 1.45], fill=leg)
+
+
+def understudy(d, x, y, scale=1.0):
+    """A trooper: dark plates over a shadow, a round mirror for a face."""
+    s = scale
+    d.rounded_rectangle([x - 26 * s, y - 60 * s, x + 26 * s, y + 20 * s], int(12 * s), fill=(30, 32, 40, 255))
+    d.ellipse([x - 22 * s, y - 104 * s, x + 22 * s, y - 58 * s], fill=(35, 38, 48, 255))
+    d.ellipse([x - 15 * s, y - 96 * s, x + 15 * s, y - 66 * s], fill=(200, 210, 225, 255))   # mirror visor
+    d.ellipse([x - 8 * s, y - 92 * s, x + 2 * s, y - 82 * s], fill=(250, 250, 255, 255))
+    d.rectangle([x - 22 * s, y + 20 * s, x - 6 * s, y + 80 * s], fill=(28, 30, 38, 255))
+    d.rectangle([x + 6 * s, y + 20 * s, x + 22 * s, y + 80 * s], fill=(28, 30, 38, 255))
+    d.rectangle([x - 34 * s, y - 52 * s, x - 24 * s, y + 6 * s], fill=(40, 42, 52, 255))
+    d.rectangle([x + 24 * s, y - 52 * s, x + 34 * s, y + 6 * s], fill=(40, 42, 52, 255))
+
+
+def ward_yard():
+    """Night, through the ward's barred window: the garden, the wall, and the
+    walkers stepping over it, the troopers on the lawn."""
+    back = gradient(W, H, (14, 18, 38), (40, 46, 70))
+    s = Scene(back, 1.4)
+    sky_stars(s, "stars", 1.38, 40, 5, (0, 0, W, 300), seed=41, faint=60)
+    town, d = s.new("town", 1.2)
+    for k in range(16):
+        x = k * 85
+        h = 60 + (k * 37) % 70
+        d.rectangle([x, 470 - h, x + 70, 470], fill=(25, 28, 45, 255))
+        if k % 3 == 0:
+            d.rectangle([x + 20, 470 - h + 20, x + 32, 470 - h + 32], fill=(230, 200, 120, 255))
+    walkers, d = s.new("walkers", 0.95, SWAY(4, 2, 5))
+    heron(d, 330, 170, 1.0)
+    heron(d, 960, 120, 1.25)
+    s.add("searchlight", light((960, 120), 420, (255, 230, 170), 90), 0.94, PULSE(0.4, 3))
+    beam, d = blank()
+    d.polygon([(940, 140), (980, 140), (760, 560), (560, 560)], fill=(255, 240, 200, 70))
+    s.add("beam", beam.filter(ImageFilter.GaussianBlur(10)), 0.9, SWAY(30, 0, 6))
+    wall, d = s.new("garden wall", 0.7)
+    d.rectangle([0, 470, W, 540], fill=(70, 62, 66, 255))
+    for x in range(0, W, 60):
+        d.line([x, 470, x, 540], fill=(55, 48, 52, 255), width=2)
+    lawn, d = s.new("lawn", 0.5)
+    d.rectangle([0, 540, W, H], fill=(28, 50, 40, 255))
+    d.ellipse([140, 300, 300, 520], fill=(30, 52, 42, 255))                # a tree by the wall
+    d.rectangle([210, 470, 230, 560], fill=(50, 40, 35, 255))
+    troops, d = s.new("understudies", 0.4, SWAY(2, 0, 4))
+    for x, sc in ((520, 0.9), (640, 1.0), (760, 0.9), (420, 0.75), (870, 0.75)):
+        understudy(d, x, 590, sc)
+    bars, d = s.new("bars", 0.15)
+    for x in range(80, W, 130):
+        d.rectangle([x, 0, x + 18, H], fill=(110, 118, 130, 255))
+    d.rectangle([0, 340, W, 356], fill=(110, 118, 130, 255))
+    sill, d = s.new("sill", -0.15)
+    d.rectangle([0, 640, W, H], fill=(150, 160, 170, 255))
+    return s
+
+
+def shadowbase():
+    """Inside the mirror planet: Osric's workshop. The great telescope mirror
+    he came through, shadows of borrowed things hanging on wires, a bench,
+    and searchlights pointed up at a light that's on the wrong side."""
+    back = gradient(W, H, (22, 25, 36), (48, 52, 66))
+    s = Scene(back, 1.3)
+    s.add("the light above", light((640, -60), 520, (255, 248, 220), 150), 1.28, PULSE(0.6, 8))
+    mirror_, d = s.new("telescope mirror", 1.0, PULSE(0.85, 6))
+    d.ellipse([420, 60, 860, 500], fill=(150, 160, 180, 255))
+    d.ellipse([440, 80, 840, 480], fill=(190, 200, 215, 255))
+    for a, b in (((520, 140), (640, 300)), ((640, 300), (600, 470)), ((640, 300), (790, 230)), ((640, 300), (470, 330))):
+        d.line([a, b], fill=(110, 120, 140, 255), width=3)
+    beams, d = blank()
+    for x0, x1 in ((150, 400), (1130, 880)):
+        d.polygon([(x0 - 20, H), (x0 + 20, H), (x1 + 40, 0), (x1 - 40, 0)], fill=(230, 235, 255, 60))
+    s.add("searchlights", beams.filter(ImageFilter.GaussianBlur(12)), 0.85, SWAY(12, 0, 9))
+    things, d = s.new("borrowed shadows", 0.6, SWAY(4, 1, 6))
+    sh = (12, 14, 20, 235)
+    for x, top in ((140, 0), (300, 0), (980, 0), (1140, 0)):
+        d.line([x, top, x, 160], fill=(80, 85, 100, 255), width=2)
+    d.ellipse([100, 160, 180, 240], outline=sh, width=10)                 # a bicycle, missing a wheel
+    d.line([140, 200, 220, 170], fill=sh, width=8)
+    d.ellipse([260, 160, 340, 240], fill=sh)                               # a film reel
+    for k in range(5):
+        a = k * 2 * math.pi / 5
+        d.ellipse([300 + 22 * math.cos(a) - 9, 200 + 22 * math.sin(a) - 9, 300 + 22 * math.cos(a) + 9,
+                   200 + 22 * math.sin(a) + 9], fill=(48, 52, 66, 255))
+    d.pieslice([930, 150, 1030, 230], 180, 360, fill=sh)                   # an umbrella, open
+    d.line([980, 190, 980, 260], fill=sh, width=5)
+    d.rounded_rectangle([1100, 160, 1180, 220], 20, fill=sh)               # a teapot with no spout
+    walker, d = s.new("walker leg", 0.45)
+    d.line([1280, 330, 1060, 120], fill=(55, 60, 75, 255), width=26)
+    d.line([1060, 120, 1000, 620], fill=(55, 60, 75, 255), width=22)
+    d.ellipse([1040, 100, 1080, 140], fill=(80, 85, 100, 255))
+    bench, d = s.new("bench", 0.2)
+    d.rectangle([60, 560, 760, 590], fill=(70, 60, 55, 255))
+    d.rectangle([90, 590, 110, H], fill=(55, 48, 44, 255))
+    d.rectangle([710, 590, 730, H], fill=(55, 48, 44, 255))
+    d.rectangle([200, 520, 330, 560], fill=(90, 95, 110, 255))            # a radio set
+    d.ellipse([220, 530, 250, 556], fill=(160, 150, 120, 255))
+    d.rectangle([420, 540, 560, 560], fill=(220, 215, 200, 255))          # drawings
+    understudy(d, 900, 600, 1.1)
+    s.add("lamp", light((640, 540), 140, (255, 220, 150), 170), 0.19, PULSE(0.8, 2))
+    s.add("ash", motes(91, 60, (190, 195, 210, 150), 3), -0.2, FALL(H, 9))
+    return s
+
+
+def mirrorplanet():
+    """The origin of the shadow: a planet of mirror, turned away from the light."""
+    back = gradient(W, H, (4, 4, 12), (18, 16, 32))
+    s = Scene(back, 1.5)
+    sky_stars(s, "stars", 1.48, 150, 6, (0, 0, W, H), seed=29, faint=100)
+    s.add("sun", light((1200, 80), 360, (255, 245, 220), 160), 1.4, PULSE(0.85, 9))
+    planet, d = s.new("mirror planet", 0.9, BREATHE(0.005, 10))
+    d.ellipse([260, 160, 1020, 920], fill=(120, 128, 145, 255))
+    d.ellipse([300, 190, 990, 880], fill=(165, 172, 188, 255))
+    d.ellipse([420, 260, 700, 470], fill=(70, 120, 190, 150))             # a world reflected in it, faint and backwards
+    d.ellipse([480, 300, 560, 360], fill=(80, 140, 90, 150))
+    d.ellipse([300, 190, 990, 880], outline=(220, 228, 240, 255), width=4)
+    s.add("glint", light((820, 300), 160, (255, 255, 255), 200), 0.85, PULSE(0.3, 4))
+    base, d = s.new("base lights", 0.8, PULSE(0.5, 1.5))
+    for x, y in ((610, 520), (640, 540), (670, 520), (640, 500)):
+        d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=(255, 220, 150, 255))
+    return s
+
+
+SCENES.update({
+    "bg bathroom door": bathroom_door, "bg bathroom door siren": bathroom_door_siren,
+    "bg stairwell": stairwell, "bg ward yard": ward_yard,
+    "bg shadowbase": shadowbase, "bg mirrorplanet": mirrorplanet,
+})

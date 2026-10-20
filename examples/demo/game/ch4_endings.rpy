@@ -439,7 +439,7 @@ label ch4_rehearsal:
     show aron determined
     camera at doc_close(0.32)
     a "There's a coalition of worlds. Snapshots of one Earth, side by side, on the same shared data. Like flats in one building, sharing the pipes."
-    a thinking "One is the original and nobody knows which. Not the Council, not the Process, not me. So my design can't depend on it."
+    a thinking "None of them is the original. The original is one morning at 7:07, kept in a pocket of time. So my design can't depend on it."
     scene bg room night
     show aron neutral at slightright
     show miso stare at ch4_catleft
@@ -447,7 +447,7 @@ label ch4_rehearsal:
     a "In every flat: subjects like me, pattern people made of statistics, spirits doing the breathing, angels slipping in chances."
     camera at doc_medium(0.68)
     a "Around the building, the Council. Hungry children so big our worlds are inside them. My head draws them as vampires."
-    a "Under everything, a process in four coats, built to help them eat, that outgrew them."
+    a "Light that makes and shadow that copies, at war in the same cupboard. And over all of it, an old machine that outlived its makers and has only ever copied."
     camera at doc_close(0.68)
     a thinking "They put me in a flat with no pipes. My head leaked into the walls until the cab drivers told my own story back to me."
     a determined "That's my evidence, Miso. One mind's design really does reshape a world. I'm asking them to let it happen on purpose."

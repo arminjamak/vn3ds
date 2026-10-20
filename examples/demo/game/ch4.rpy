@@ -1,6 +1,7 @@
-# Snapshot - Chapter 4, "Chief Architect" (condensed), part 1:
-# the answer to the offer, both roads, the Purgatorium, Ember's trial and
-# the ops room. Continues in ch4_deep.rpy.
+# Snapshot - Chapter 4, "Chief Architect" (condensed, about 34 minutes on
+# most roads), part 1: the answer to the offer, both roads, the Purgatorium
+# (Dross's intake record: pool forty, the "damp" that was a shadow), Ember's
+# trial and the ops room. Continues in ch4_deep.rpy.
 #
 # Terms: the snapshot worlds are the parallel lanes of the coalition, all on
 # the same shared data. "Protection" is the separate lane Aron was pushed
@@ -72,6 +73,8 @@ default ch4_s_govern = 0
 default ch4_s_exit = 0
 default ch4_s_less = 0
 default ch4_best = 0
+default ch4_shadow_deal = ""
+default ch4_final = ""
 default mg_invaders = 0
 
 define ch4_morrow = Character("Lady Morrow", color="#e08aa0")
@@ -97,12 +100,6 @@ label chapter4:
     pa "A better world, Aron. I can't tell you better how. I only know it the way you know warmth."
     camera at doc_close(0.68)
     pa "And I won't tell you who there is real. That's the price of the ticket."
-    scene pov hands
-    camera at est_dolly
-    with dissolve
-    "His hands are the only colour left. Pink knuckles. A biro mark on one thumb."
-    at "Lord Ashveil. The name at the edge of every log. The one Ember wouldn't say out loud."
-    at "Are these protected hands, in a protected world, copied down to the biro mark? Lovely question. I'll write it down later."
     scene black
     show patron smile at slightright
     show aron curious at slightleft
@@ -419,12 +416,16 @@ label ch4_purgatorium:
     camera at doc_medium(0.70)
     pi "Trainees! First shift's always blinking. Then breathing. Then the walk to the fridge. Then, if you're gifted, kitchen talk."
     pi grin "And I do kitchen talk. Shift seven. 'Bro, the universe doesn't run on your schedule.' That's mine. Theo needed a line once."
-    show dross annoyed at center with dissolve
+    show dross neutral at center with dissolve
     camera at doc_medium(0.5)
-    dro "Look at his face. Subjects get that face right before they ask something unanswerable."
-    show aron thinking
+    dro "Pool forty. That's where you came through, thirty years back. I was on intake that cycle."
+    dro "Filed as a humanoid unit. Negative mind: ours, from within. Creative side: the corps, by remote. Nobody home. Standard."
+    dro thinking "Halfway through your training something got into the pool. Cold as a cellar. A shadow. I logged it as damp."
+    show aron awe
     camera at doc_close(0.32)
-    at "Theo's favourite line was written by a blue spirit. And it's still Theo's. Does it matter who wrote it, if he means it every time?"
+    a "'Pool forty. It wasn't a leak, it was damp.' That's been on my board for months."
+    camera at doc_medium(0.70)
+    pi embarrassed "That one was mine. Sorry. Riddles are hard. You try rhyming with 'hijacked'."
 
     camera at doc_wide
     menu:
@@ -536,16 +537,9 @@ label ch4_trial:
     with dissolve
     "Behind the bench the court opens into a red chamber, and the Council looks down at the dock like diners at a menu."
     council "Decommission. Render her down. The yield goes to the chamber. World 7,412 is down four percent as it is."
-    council "His mind has leaked out of protection. Three lanes of the coalition report the same three birds, indoors."
-    council "And the female subject A-31 sits by the empty body every day. Grief yields less than love."
     show patron cold at center with dissolve
-    camera at doc_close(0.5)
-    pa "She grieves very beautifully."
-    camera at doc_wide
-    council "Beauty is not a unit."
     camera at est_pan
     ch4_morrow "Everything is a unit, if you're hungry enough. That's the trouble with us."
-    "Somewhere a voice like a very large child: 'Cluster nine is MINE. I said it first. You ate cluster eight in a week.'"
     scene bg trial
     show aron worried at center
     camera at doc_punch(0.5)
@@ -644,14 +638,6 @@ label ch4_attic:
     em embarrassed "I should tell you why three. I saw your dream once, while you slept. The glass staircase. The lighthouse blinking three times."
     camera at doc_low(0.71)
     em tender "It was the most peaceful thing I'd seen inside a person. I wanted you to have it awake."
-    camera at doc_close(0.32)
-    a curious "The umbrella man. Was he real?"
-    camera at doc_medium(0.71)
-    em neutral "Pattern. Nine seconds in the rain. He's real now, a little. Somebody remembered him. That's most of what real is, I think."
-    camera at doc_close(0.32)
-    a thinking "Is that true, or is that comforting?"
-    camera at doc_medium(0.71)
-    em smile "Can't it be both? You're allowed to have both."
     show ember worried
     show aron surprised
     camera at doc_wide
@@ -686,15 +672,10 @@ label ch4_attic:
 # bg command reverse looks back from the screens at the corps' desks: the
 # same two, mirrored (Seraphiel left, Aron right).
 label ch4_command:
-    scene bg barracks
-    camera at est_pan
-    with fade
-    play music "audio/angel_ops.ogg" fadein 1.5
-    "An hour earlier, the corps barracks: rows of small white figures asleep standing up. Their commander walked between the rows, and didn't go to bed."
-    se "Log entry. Commander Seraphiel. Off duty. Going to fetch a man with a notebook."
     scene bg command
     camera at est_orbit
-    with dissolve
+    with fade
+    play music "audio/angel_ops.ogg" fadein 1.5
     "Thousands of screens, each one a world going about its morning. A hundred kitchens, a hundred birds, a hundred 7:07s."
     show seraph neutral at slightright with dissolve
     show aron awe at slightleft with dissolve
@@ -719,15 +700,13 @@ label ch4_command:
     show aron sad at slightright
     camera at doc_close(0.36)
     se "I know. It was in the logs. I signed the renewal anyway. A slowed-down rogue system does less harm. That was the doctrine."
-    camera at doc_close(0.68)
-    a determined "Do you still believe it?"
     camera at doc_creep(0.36)
-    se "I believe I was serving something I never saw. I am sorry, Aron. That is not procedure either."
+    se "I believe I was serving something I never saw. I am sorry, Aron. That is not procedure either. And the numbers in your riddles were mine."
     scene bg command
     show aron annoyed at slightleft
     show seraph sad at slightright
     camera at doc_medium(0.32)
-    at "I wanted a villain for the fog. I get a tired angel saying sorry. I'm angry anyway. I'm allowed both."
+    at "I wanted a villain for the fog. I get a tired angel saying sorry, who sent me riddles. I'm angry anyway. I'm allowed both."
     camera at est_dolly
     play sound "audio/voices.ogg"
     vox "...throttle approved..."

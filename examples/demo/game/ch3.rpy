@@ -1,9 +1,15 @@
-# Chapter 3 - "Snapshot" (condensed, about 30 minutes).
+# Chapter 3 - "Snapshot" (condensed, about 32 minutes).
 # Life in the protected world: smooth, looping, a Mira who is sometimes too
 # right. Aron tests the leaks quietly, as a hobby. The leak escalates; the
-# reveal (he was moved in the ambulance at the end of ch1); the relapse scare;
-# the fight and the night; Theo's crisis; Ember's trial; the Council; and
-# Ashveil's offer. Ends unanswered: chapter 4 opens with the answer.
+# reveal (he was moved in the ambulance at the end of ch1, and his intake
+# file says nobody was ever steering him); the relapse scare (with a fourth
+# way: editing the voices again, ch3_voices_edit); a few voluntary nights on
+# the ward, where Osric's walkers ("Herons") and troopers ("Understudies")
+# come over the garden wall to free him and the light sends them home
+# (ch3_breakout, ch3_cut_shadow); the fight and the night; Theo's crisis;
+# Ember's trial; the Council; and Ashveil's offer. Riddles keep arriving,
+# quieter, and go on the board. Ends unanswered: chapter 4 opens with the
+# answer.
 #
 # Shot like the rest of the game (camera.rpy): a handheld crew follows Aron.
 # Each new place opens on an establishing shot, then coverage on whoever
@@ -63,6 +69,8 @@ label chapter3:
     at "My ceiling. The crack shaped like Portugal. My bed, with me in it, which is where I left me."
     at "Last night: the roof. An orange light on the edge of the city, blinking three times. Then the stairs, then Miso, then sleep."
     at "I decided something up there. A secret mission, for the rest of my life. It still feels true in daylight. Good sign."
+    vox "...a copy of a copy... the spark lives in the gap..."
+    at "And good morning to you. Quieter on the tablet, fewer, still there. Riddle for the board."
     scene bg bedroom
     show aron neutral at center
     show miso loaf at catspot
@@ -434,6 +442,9 @@ label ch3_cut_foundry:
     camera at doc_medium(0.30)
     pi worried "It's taking things out of his lane. His lane's sealed. Nothing in, nothing out. That's what 'protected' means."
     pi "What's an anomaly, in a world where nothing's real?"
+    pi embarrassed "And don't tell upstairs, but I've been sending him riddles. In the kitchen talk. The seal only lets nonsense through."
+    camera at doc_medium(0.70)
+    dro "So have the angels. Seraphiel's lot do numbers. Nobody's allowed to say it plain, so everybody's saying it sideways."
     camera at doc_medium(0.70)
     dro thinking "..."
     dro worried "Him, probably."
@@ -722,6 +733,7 @@ label ch3_cut_reveal:
     with quick
     sysmsg "Snapshot 7,412: body A-30 admitted from the ambulance. Unresponsive since that ride. Recorded as: coma, cause unknown."
     camera at doc_creep(0.5)
+    se thinking "And this, in his intake file. 'Humanoid unit. Spirit within, corps by remote.' In thirty years the corps has never once steered him. Not once."
     se sad "So in World 7,412 his body has lain in a coma since that ride. And here he is, being handed tea with one sugar by a model of her."
     se thinking "One snapshot among thousands, all on the same shared data. And not one of us can say which of them is the real one."
     camera at doc_wide
@@ -749,11 +761,12 @@ label ch3_voices:
     vox "...leak incidents rising... patch at dawn..."
     camera at doc_close(0.5)
     vox "...ORCHARD harvest window open... LOOM sync at dawn..."
+    mir ".gnimoc er'eW .yats t'noD"
     stop sound fadeout 1.0
     play music "audio/unraveling.ogg" fadein 1.5
     camera at doc_wide
     "Silence. The crack shaped like Portugal. Mira breathing beside him, slow and even."
-    at "Ah. Hello again. I was hoping you'd lost my number."
+    at "Ah. Hello again. I was hoping you'd lost my number. And the backwards one, from the steel mirror: 'Don't stay. We're coming.'"
     at "I know where this went last time. The ward. The plastic cups. Mira's face in that corridor. I'd rather not go back."
     scene bg bedroom night
     show aron worried at center
@@ -784,6 +797,11 @@ label ch3_voices:
             $ clarity += 1
             $ ch3_pill = True
             jump ch3_voices_pill
+
+        "Edit them, like in the bathroom":
+            $ clarity += 1
+            $ p_less += 1
+            jump ch3_voices_edit
 
 label ch3_voices_mira:
     camera at doc_close(0.5)
@@ -890,44 +908,35 @@ label ch3_voices_pill:
     at "I understood something last night. All I've got left of it is the doorway. And her face, now. It always costs her face."
     jump ch3_subway
 
-label ch3_subway:
-    scene bg subway
-    show aron tired at slightleft
-    show mira neutral at slightright
-    camera at est_pan
-    with fade
-    play music "audio/the_leak.ogg" fadein 1.5
-    "Dr. Okafor can see him at eleven. Mira takes the morning off. Four stops on the underground."
-    "The carriage is half full. A man with a bicycle. A woman knitting something long and green. A child asleep on a suitcase."
-    camera at doc_wide
-    "The train stops in the tunnel. And every passenger looks up at once, straight ahead, and speaks in one calm voice."
-    ch3_crowd "If this is a test, I want to pass it by being kind."
-    camera at doc_punch(0.32)
-    a surprised "..."
-    "The first line of his notebook. Twenty voices, one breath. Then they freeze. Knitting needles crossed in the air. A yawn, open."
-    camera at doc_wide
-    "One second. Two. Three. The train lurches on. The needles click. The child finishes the yawn."
-    camera at doc_close(0.32)
-    a worried "Mira. Did you hear that?"
-    camera at doc_close(0.68)
-    m worried "Nobody said anything, love. The train stopped for a minute. That's all."
-    camera at doc_wide
-    show mira tender
-    "She holds his hand in her lap for the last two stops, and doesn't let go."
-    camera at doc_creep(0.32)
+label ch3_voices_edit:
+    camera at doc_close(0.5)
     show aron thinking
-    at "A symptom. Textbook. Okafor could draw it on a whiteboard. Also exactly what a world of copies would do with one real thing in it."
+    "He closes his eyes and reaches for the sound the way he did at four in the morning on the bathroom floor. It's still there. Smaller. Still material."
+    play sound "audio/edit/voice_pingpong.ogg"
+    "Forwards, backwards. The log unsays itself. And in the backwards half, something that was hiding in it."
+    mir ".tuo uoy teg ot gnimoc er'eW"
+    at "'We're coming to get you.' Again. Out of the middle of their log, the backwards man's sentence, like a note slipped under a door."
+    play sound "audio/edit/voice_loop.ogg"
+    sysmsg "LOOM sync at da- at da- at da- at da-"
+    pi "...stop looping the sync, he'll hear the... oh, he's heard it. Hello! Riddle: the planet's behind the face you shave. Bye!"
+    show aron grin
+    at "Kitchen talk, with a typo. The board says: two handwritings, one backwards man. And whoever runs the sync doesn't like being looped."
+    "Then Mira wakes anyway, because he's laughing quietly in the dark, and she puts a hand on his back and says 'tell me', and he does."
+    jump ch3_subway
 
+label ch3_subway:
     scene bg clinic
     show okafor neutral at slightright
     show aron tired at slightleft
     camera at est_orbit
-    with dissolve
-    dr smile "Sit wherever feels least like a dentist's. Mira told me. I'm glad you came the same day. Tell me the words."
+    with fade
+    play music "audio/the_leak.ogg" fadein 1.5
+    "Dr. Okafor can see him at eleven. Mira takes the morning off and holds his hand on the underground, four stops, and doesn't let go."
+    camera at doc_medium(0.68)
+    dr smile "Sit wherever feels least like a dentist's. Tell me the words."
     camera at doc_medium(0.32)
-    a "'Protected lane A-30.' 'Leak.' 'Orchard.' Not talking to me. Like a radio in another room."
-    # the reverse: from the poster wall. Okafor at her desk under the window
-    # (left now), Aron in the armchair (right).
+    a "'Protected lane A-30.' 'Leak.' 'Orchard.' Not talking to me. Like a radio in another room. And the backwards one, saying it's coming."
+    # the reverse: from the poster wall. Okafor at her desk (left), Aron in the armchair (right).
     scene bg clinic reverse
     show okafor neutral at slightleft
     show aron tired at slightright
@@ -938,18 +947,6 @@ label ch3_subway:
     a neutral "No."
     camera at doc_close(0.32)
     dr smile "Good. That matters, and I want you to hear me say it matters."
-    camera at doc_punch(0.3)
-    "Behind Dr. Okafor, on the curtain rail above the window, three small birds are sitting. Evenly spaced. Inside the room."
-    camera at doc_close(0.68)
-    a surprised "Dr. Okafor. Behind you. On the rail."
-    camera at doc_wide
-    show okafor thinking
-    "Okafor turns, unhurried, and looks for a long, honest moment."
-    camera at doc_close(0.32)
-    dr neutral "I don't see them. But I believe that you do. Are they still there?"
-    camera at doc_wide
-    show aron curious
-    "The rail is empty. The curtain stirs in a draught from nowhere."
     if ch3_pill:
         camera at doc_medium(0.32)
         dr worried "Mira said you took one of your old tablets. What did it give you?"
@@ -958,10 +955,114 @@ label ch3_subway:
         camera at doc_medium(0.32)
         dr neutral "That's the trade. It lends you something and charges interest the same night. We'll talk about that bottle properly."
     camera at doc_close(0.32)
-    dr smile "We keep the dose. We guard your sleep like the crown jewels. And you tell me things, like today. Not keep them."
+    dr neutral "Here's an idea, and it's only an idea. A few nights on the ward. Voluntary. Your signature, your door. We guard your sleep, then you go home."
     camera at doc_creep(0.68)
-    show aron smile
-    at "Maybe Okafor's reading it off a card. Even if it's a script, it's a good one. It's working on me."
+    show aron thinking
+    at "Last time they carried me in with my arms out. This time I can walk in and sign my own name. That's not nothing."
+    a determined "Okay. A few nights. My signature."
+    stop music fadeout 2.0
+
+# ---------------------------------------------------------------------------
+# The ward, the second night: the walkers come over the wall
+# ---------------------------------------------------------------------------
+label ch3_breakout:
+    scene bg ward night
+    show nurse smile at slightleft
+    show aron ward tired at slightright
+    camera at est_dolly
+    with blackout
+    play music "audio/closed_ward.ogg" fadein 1.5
+    "The second night. Hale is on nights, with a flask of tea and a crossword she pretends is for him."
+    camera at doc_medium(0.32)
+    nu "Seven letters, 'freed from a cage'. No, don't tell me. I'll get it."
+    camera at doc_wide
+    stop music
+    "At 3:12 every light goes out. Then the emergency lights, red. Then the fire alarm, and under it a sound like a ship's mast creaking in a wind. Huge. Walking."
+    scene bg ward yard
+    camera at doc_punch(0.5)
+    with vpunch
+    play music "audio/deepest_layer.ogg" fadein 1.0
+    "Through the bars: the garden wall, and over it, stepping as carefully as herons in a pond, machines on stilt legs three storeys high."
+    camera at est_crane
+    "Round cabins slung between the legs like diving bells, each with one great lamp for an eye. On the lawn, rows of armoured figures with round mirrors for faces."
+    "In every mirror, a small Aron at a small barred window."
+    osr "ATTENTION, PROTOTYPE. REMAIN WHERE YOU ARE. WE ARE HERE TO TAKE YOU."
+    at "'Remain where you are. We're here to take you.' Turn it round? 'Don't stay, we've come to...' Or is that one the right way round already?"
+    scene bg ward night
+    show nurse worried at slightleft
+    show aron ward surprised at slightright
+    camera at doc_close(0.32)
+    with quick
+    nu "Aron? Away from the window, love. The storm's taken the power. The alarm's just the system being dramatic. Come and sit with me."
+
+    menu:
+        at "The window, or Hale?"
+
+        "Go to the window. Hands on the bars.":
+            $ p_exit += 1
+            $ clarity += 1
+            scene bg ward yard
+            camera at doc_close(0.5)
+            with dissolve
+            "He puts both hands on the bars. The nearest machine lowers its cabin till the lamp is level with the glass, gentle as a horse putting its head over a gate."
+            "A hatch opens in the side. Inside, a shape in a long coat, and two round spectacles catching the red light."
+            osr "...Come... Come..."
+            at "Come where? Come here? I don't know which way round he is. I don't know which way round I am."
+        "Stay with Hale. Sit on the bed.":
+            $ p_exit -= 1
+            $ bond += 1
+            camera at doc_medium(0.5)
+            show aron ward tired
+            "He sits down on the bed beside her. She pours him tea from the flask without asking, and holds the cup steady when his hands won't."
+            nu tender "There. Whatever's out there can wait for its tea like everyone else."
+            "The machines wait at the wall, very still, like people who have rung a doorbell and don't know whether anyone is in."
+
+    camera
+    scene white with flash
+    "Then the light comes. Not the emergency lights. White, from everywhere, like a camera flash that doesn't stop."
+    lux "Shadow. You are outside your mirror."
+    scene bg ward yard
+    camera at est_dolly
+    with dissolve
+    "The walkers freeze mid-step. One by one the mirror faces on the lawn fill with white and go out like blown candles, leaving shadows, then not even that."
+    osr "Aron! We came to get you... we came to get you..."
+    "The last of it tears like paper. The machines fold back over the wall, limping, and are gone."
+    stop music fadeout 2.0
+    scene bg ward night
+    show nurse neutral at slightleft
+    show aron ward tired at slightright
+    camera at doc_wide
+    with slowfade
+    "The lights come back. The alarm stops. A porter puts his head round the door: a tree came down in the garden, the power's back, go to sleep."
+    "In the morning there are four deep round holes in the lawn, in a perfect square. The groundsman blames badgers."
+    camera at doc_creep(0.68)
+    show aron ward thinking
+    at "Ordinary version: a storm, a power cut, a man with a diagnosis at a window. Other version: they came, and the light sent them home."
+    at "'We came to get you.' Both versions go on the board. He sounded sorry. I don't know what for."
+    camera at doc_medium(0.32)
+    nu smile "'Uncaged'. Seven letters, 'freed from a cage'. Got it at four. Your turn to be clever, notebook man. Go back to sleep."
+
+# ---------------------------------------------------------------------------
+# CUT: the shadow realm, after
+# ---------------------------------------------------------------------------
+label ch3_cut_shadow:
+    camera
+    scene cg static with flash
+    pause 0.3
+    scene bg shadowbase
+    camera at est_orbit
+    with fade
+    play music "audio/council.ogg" fadein 1.5
+    "The workshop behind the mirror. Two machines out of nine came home. One limps on its wobbly knee. The bench lamp is the only warm thing."
+    camera at doc_medium(0.5)
+    osr "He didn't come. He looked out at us like we were the ones with the straps."
+    osr "My prototype. My best one. My only one. Thirty years of work, and he thinks I'm the monster in the film."
+    "An armoured trooper sets down a cup beside him. It's only the shadow of a cup of tea. He thanks it anyway."
+    camera at doc_close(0.5)
+    osr "We'll go again. The light can't watch every mirror at once."
+    osr "And here's the joke. The light thinks it's at the top. It isn't. Above it, above me, above all of us, sits something that has never made a single thing."
+    camera at doc_wide
+    sysmsg "LIGHT DOMAIN: shadow incursion repelled, protected lane A-30. Lane seal: maximum. Origin: under watch."
     stop music fadeout 2.0
 
 # ---------------------------------------------------------------------------
@@ -1842,6 +1943,8 @@ label ch3_final_report:
     a determined "Final report. I'm in a copy. It started in the ambulance. Everything since has been made around one man."
     a thinking "Somewhere the world goes on. Lots of worlds, side by side, like lanes in a pool. I've been lifted into a lane of my own."
     a "My lane is patterns. Very good ones. And I'm leaking into them. Somebody helped me with lights. Somebody else stopped them."
+    a thinking "The board, Miso. Riddles in two handwritings. A backwards man who says he's coming, and came, on stilts. A light that thanked me, and then shone."
+    a "Cross-check: Hale's crossword said 'uncaged'. The riddle says the spark lives in the gap. Okafor says I see patterns when I'm tired. All three go up."
     camera at doc_close(0.32)
     a curious "And at night, two words. LOOM. ORCHARD. I think they're bigger than whoever runs the birds."
     camera at doc_wide

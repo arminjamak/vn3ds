@@ -125,9 +125,12 @@ nudges the tempo by at most a few thousandths of a BPM so the bars fill whole
 every beat, and the density rises every 4 bars (quarters, eighths,
 syncopation, fuller). Don't change its tempo or length without the chart.
 
-Sound effects (`cues/minigame/sfx.py`, one generator for all 117 clips: the
-115 in `sfx_requests.md` (shared, quiz, tower, draw, lantern, snake, miso,
-invaders) plus the leaderboard's `board_tick` and `board_land`).
+Sound effects (`cues/minigame/sfx.py`, one generator for all 194 clips: the
+192 in `sfx_requests.md`, round 1 (shared, quiz, tower, draw, lantern, snake,
+miso, invaders) and round 2 for the redesigned games, plus the leaderboard's
+`board_tick` and `board_land`). `invaders_beam` is a seamless loop: periodic
+in 1024-sample blocks, so it wraps cleanly even when the encoder drops a
+final block).
 Each is a function registered with `@sfx(loudness, peak)`, written in its
 game's key and timbre: the tower in D minor (vibes, plucks, wood), draw in C
 lydian (felt piano, glass, paper), lantern in E major (its hit bells on E5,

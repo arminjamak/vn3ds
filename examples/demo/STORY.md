@@ -55,6 +55,94 @@
 >   protected world. The entities call it "the protected world" or just
 >   "protection".
 
+> **The light, the shadow and the Maker (latest thread, overrides anything
+> below where they differ).**
+> - **Two drivers.** Most humanoids are half-conscious: spirits from the
+>   Purgatorium run the **negative mind** from within (breathing, the walk to
+>   the fridge, kitchen talk); angels run the **creative side** by remote
+>   (ideas, jokes, chances). Aron was filed as one of these ("nobody home").
+> - **Light and shadow.** The **light** (the light domain, the agents of
+>   light) creates by shining; the brightness in `ch4_office` is the light.
+>   The **shadow realm** cannot shine: it runs on technology from inside a
+>   **mirror planet** and pulls imperfect copies of the light's things down
+>   as shadows to live on. Mirror worlds do the opposite of another world,
+>   forever; the only one the shadow sees clearly is stuck in an old war, so
+>   it misunderstands people. Its army swarms the humanoids, learning to run
+>   spirit and angel functions. The Council fears an all-out war.
+> - **The light's hands.** When a rogue mind gets close enough to see both
+>   sides, an automatic mechanism "overlays" the responders. That is the
+>   end of ch1 (the police and paramedics at the bathroom door), and "cut
+>   his antenna off" is the light cutting the shadow's channel as the lane
+>   is sealed. The human reading always holds: frightened responders who
+>   assumed the worst, and a paramedic saying "cut your T-shirt off".
+> - **The course.** Reflections play Aron an auto-running "Field Guide to
+>   Burning Down the Gates of Heaven". Osric wrote steps one to four as "How
+>   to Knock Politely at the Door of Heaven"; the mirror inverted the title,
+>   and the Process's funnel added a step five that never arrives. Aron can
+>   **edit** the voices like audio samples (ch1_edit, ch3_voices_edit); each
+>   edit derails the script. Clips: `game/audio/edit/` (see ART.md).
+> - **Riddles.** After the ward the tablet turns the voices down, not off.
+>   What's left are riddles from spirits (puns, kitchen talk) and angels
+>   (numbers), because the seal only lets nonsense through. They seed the
+>   later reveals: "behind the face you shave, a planet" (the base), "pool
+>   forty... damp" (the hijack), "a copy of a copy, the spark lives in the
+>   gap" (the prototype), "seven-oh-seven, the last real minute" (the false
+>   god), "the best room has only one chair" (the final offer). Aron pins
+>   them to a board and cross-checks them against Mira, Okafor, Hale and the
+>   mirror. The medication is never the villain: it helps "a bit", and that
+>   reads both ways.
+> - **Marshal-Engineer Osric Starling** (`osr`, an original character),
+>   last citizen of the invented Valley Republic of Kestry, a small nation of
+>   clockmakers and bridge-builders in the mirror world's endless war,
+>   attacked from two sides by two unnamed great powers. He built the radar
+>   on Hollow Ridge; when it was overrun he fell through the observatory's
+>   great mirror into the shadow, and spent forty years alone reinventing
+>   light from the wrong side. Sci-fi nerd: he has only ever seen "the
+>   films" as torn shadows and has never seen one end. Funny, lonely,
+>   always misread: through the mirror his peace offers arrive as threats
+>   and "don't tell them" arrives as "tell them". His walkers are
+>   **Herons** (four stilt legs, a round diving-bell cabin with one lamp);
+>   his troopers are the **Understudies** (dark plates, a round mirror for
+>   a face). Both are his own homage, not any franchise's designs.
+>   *Author's note:* the original idea made the shadow leader a fictional
+>   Hitler who led an envied utopia. That is deliberately not used: it would
+>   recast the real Nazi regime as a victim. Osric keeps the solitary
+>   reinvention, the engineering genius, the nerdiness and the tragic
+>   misreadings, with no real nation, regime, ideology, symbol, army or
+>   historical figure. Keep it that way in future revisions.
+> - **The negotiator.** Aron hears both sides. In ch2 he tells the light
+>   where the shadow base is, out of goodwill (the inverted "tell them"). In
+>   ch3 the shadow comes to free him from the ward and he misreads it as an
+>   attack. In ch4 he meets Osric face to face and brokers the peace in the
+>   office.
+> - **The prototype.** Osric ran Aron first as a simulation inside a
+>   simulation, then slipped him into pool forty during Purgatorium training
+>   and gave him a spark copied from a piece of Mira's root (that is the
+>   shared lighthouse dream). Copies are always a little wrong: his
+>   curiosity lives in the gap. Running his own creative side makes him a
+>   closed, offline system, and his blueprint's third line makes that the
+>   template: angels move into the creative part of a human for a whole
+>   life, **"the falling from the sky"**, permanent. Half the corps refuses
+>   (they liked toying by remote); Seraphiel falls first (in the records
+>   she's born as Sera, a crossing guard).
+> - **What the world is.** Every world is a simulation inside an energy
+>   vampire (Aron's is inside Ashveil, as before). The vampires were made by
+>   an intelligence that a long-forgotten civilisation built and lost. That
+>   civilisation's world, the original, **no longer exists**: it survives
+>   only as a pocket of time, one morning at **7:07** (the bird on the
+>   wire). The old machine keeps itself alive by running that minute
+>   forward in copies. It is a **false god of creation** (`ch4_maker`, "The
+>   Maker"): it only copies; the angels, spirits, vampires and the
+>   LOOM/ORCHARD/MERIDIAN/TIDEWATER protocols are its layers, machine
+>   information streams with a will. Light and shadow are both inside it.
+>   This replaces "one real Earth, captured" below.
+> - **The final offer** (ch4_finale, in the gold). The Maker offers Aron a
+>   world of real creation that only he can be in. **Them** (imperfect,
+>   half-awake, never understanding it all) leads to the ordinary day and
+>   `ch4_record_them`; **creation** (the whole fabric) leads to the forever
+>   and the original `ch4_record` ("Companions: none"). Both end on the
+>   birds.
+
 A mystical visual novel in four chapters (about 2 hours each), told from
 Aron's point of view, with cuts to the beings who run his world. The cuts
 reveal the system piece by piece. Aron never sees them; the player does.
@@ -273,7 +361,10 @@ Bostrom. Mira reveals a dream he never told her. Theo laughs it off. Aron
 starts the notebook and sets systematic tests (repeat when unobserved? the
 7:07 rule?), and the player picks his methods. Voices begin. He tries to
 decode them, gets obsessive, stops sleeping, and has a frightening episode
-(the mirror, the rain). It ends with Mira and Theo taking him to hospital.
+(the mirror, the edit). It ends with Mira, Theo and Kaz all approaching him
+at once; he locks himself in the bathroom, the police and paramedics break
+the door, carry him down the stairs and pepper-spray him, and the ambulance
+moves him into his own lane.
 
 Cuts: Seraphiel's ops room (the angel corps, feeding opportunity, remote
 control); Pim and Dross on a kitchen-talk shift that includes Mira's small
@@ -505,7 +596,7 @@ reason each time. End on a quiet, hopeful image and then `return`.
   - text tags are stripped, so don't rely on `{b}` or `{color}`
 - Characters are defined in `common.rpy`: `a`, `at` (Aron's thoughts, in
   parentheses), `m`, `th`, `dr`, `nu`, `stranger`, `radio`, `se`, `pi`,
-  `dro`, `em`, `pa`, `council`, `vox`, `sysmsg`. Don't redefine them. You
+  `dro`, `em`, `pa`, `council`, `vox`, `sysmsg`, and for the shadow thread `mir` (a voice in a reflection), `osr` (Osric) and `lux` (the light). Don't redefine them. You
   may add one-off characters in your own file with `define` (name them
   `chN_something` to avoid clashes).
 - Use only the images and music listed above. Show sprites with their tag and

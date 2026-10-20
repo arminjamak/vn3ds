@@ -9,9 +9,15 @@ Each sound is a function below, registered with @sfx(loudness, peak ceiling)
 and named after its file. Sections: shared (cheat, result, board_tick, board_land), The Big
 Questions (quiz_*), The Tower (tower_*, D minor), Echo of a Shape (draw_*,
 C lydian), Lantern Rhythm (lantern_*, E major), Crown of the Worm (snake_*,
-G dorian), Miso's Hunt (miso_*, D minor). The invaders set goes in its own
-section at the end. Pitched sounds are written in their game's key and
-timbre, so they sit inside the loop.
+G dorian), Miso's Hunt (miso_*, D minor), The Hungry Sky (invaders_*, B
+minor; the boss in C minor), then "Round 2" for the redesigned games (the
+angel host, the band, Pim's whiteboard, the shooter, packages and leaps,
+apples, the platformer). Pitched sounds are written in their game's key and
+timbre, so they sit inside the loop; clips the engine re-pitches (combos,
+levels, voice syllables) are recorded at a neutral pitch.
+
+Loopable clips (LOOPS: invaders_beam) are periodic in 1024-sample blocks and
+written without fades or padding, so they wrap seamlessly.
 
 Runtime-pitched clips: lantern_hit_perfect / lantern_hit_good are on E5 (the
 loop's tonic; lanes play them at 1.0 / 1.2599 / 1.4983); tower_through_hoop
@@ -202,7 +208,13 @@ def level(x, loud, peak, max_squash=4.0):
     return np.clip(y, -ceiling, ceiling)
 
 
+LOOPS = set()    # sounds the engine may loop: periodic, no fades, no padding
+
+
 def write(name, x, loud=-15.0, peak=-3.0):
+    if name in LOOPS:
+        write_loop(name, x, loud, peak)
+        return
     x = vnsynth.biquad(x, "highshelf", 7000, 0.7, -4.0)     # the score's soft top end
     x = level(x, loud, peak)
     x[0] = x[-1] = 0.0
@@ -1679,6 +1691,957 @@ def invaders_boss_sleep():
             0.5 * glide(90, 80, 0.38, harmonics=((1, 1.0), (2, 0.5), (3, 0.3)))
         place(x, snore * arch(m, 1.5) * 0.5, t0)
     return finish(x, L, 0.004, 0.12)
+
+
+# ================================================================ Round 2: the redesigned minigames
+
+VOWELS = {"a": (750, 1200), "e": (500, 1800), "i": (320, 2300), "o": (450, 850), "u": (330, 800),
+          "m": (280, 1100), "uh": (550, 1050)}
+
+
+def voice(seconds, pitch, v0="a", v1=None, amp=None, breath=0.0, q=(3.5, 4.5)):
+    """A cute wordless voice: `pitch` is a function of u (0..1), the formants slide from vowel v0 to v1."""
+    a, b = VOWELS[v0], VOWELS[v1 or v0]
+    amp = amp or (lambda u: np.clip(u / 0.1, 0, 1) * np.clip((1 - u) / 0.25, 0, 1))
+    v = cat_voice(seconds, pitch, lambda u: a[0] + (b[0] - a[0]) * u, lambda u: a[1] + (b[1] - a[1]) * u, amp,
+                  q1=q[0], q2=q[1])
+    if breath:
+        n = len(v)
+        u = np.linspace(0, 1, n)
+        v += bandpass(noise(n), (a[1] + b[1]) / 2, 1.2) * amp(u) * breath
+    return v
+
+
+def doppler(seconds, f_tone=520, band=(600, 1800, 500), shift=1.3):
+    """Something flying past: a band of air rising and falling, a tone that drops as it passes."""
+    n = int(seconds * SR)
+    u = np.linspace(0, 1, n)
+    near = np.exp(-((u - 0.5) / 0.18) ** 2)                  # loudest as it passes
+    centre = np.where(u < 0.5, band[0] + (band[1] - band[0]) * (u / 0.5),
+                      band[1] + (band[2] - band[1]) * ((u - 0.5) / 0.5))
+    air = sweep(noise(n), "bp", centre[::32], 1.4)
+    f = f_tone * shift ** (-np.arctan((u - 0.5) * 12) / (np.pi / 2))
+    tone = np.sin(2 * np.pi * np.cumsum(f) / SR)
+    return (air * 0.7 + tone * 0.15) * near
+
+
+def squeak(seconds, f0, f1, rough=0.3):
+    """Stick-slip squeak (marker on a board, rubber soles): a buzzy tone with jittered pitch."""
+    n = int(seconds * SR)
+    u = np.linspace(0, 1, n)
+    jitter = 1 + rough * 0.05 * lowpass(noise(n), 60) * 4
+    f = (f0 + (f1 - f0) * u) * jitter
+    ph = np.cumsum(f) / SR
+    src = sum(np.sin(2 * np.pi * k * ph) / k ** 0.9 for k in range(1, 8))
+    return bandpass(src, (f0 + f1) / 2 * 1.5, 1.2) + 0.3 * src * 0.2
+
+
+# ---------------------------------------------------------------- quiz, round 2 (Adjutant Vael)
+
+@sfx(-20, -8)
+def quiz_angel_voice():
+    """One sung syllable of the angel: a soft bell-like 'oo-ah', neutral pitch (A3; played at 1.2-1.45x)."""
+    L = 0.08
+    n = int(L * SR)
+    v = voice(L, lambda u: hz("a3") * (1 + 0.04 * u), "u", "a", lambda u: np.sin(np.pi * u) ** 0.8)
+    v += bell("a3", L, ((1, 1, 20), (2, 0.4, 30), (3, 0.15, 45))) * arch(n, 0.6) * 0.3
+    return finish(lowpass(v, 3500), L, 0.003, 0.02)
+
+
+@sfx(-21, -8)
+def quiz_read_skip():
+    """A quick paper flick."""
+    L = 0.08
+    n = int(L * SR)
+    x = bandpass(noise(n), 2600, 0.9) * env(n, 60, 0.002) + 0.4 * click(L, 1800, 1.5, 300)
+    return finish(lowpass(x, 5500), L, 0.001, 0.02)
+
+
+@sfx(-18, -5)
+def quiz_hourglass_flip():
+    """An hourglass turned over: a glassy turn (two glass tones gliding) and a short hiss of sand."""
+    L = 0.5
+    x = buf(L)
+    n = int(0.15 * SR)
+    for f0, f1 in ((hz("e5"), hz("b5")), (hz("b5"), hz("e6"))):
+        place(x, glide(f0, f1, 0.15, 0.5, ((1, 1.0), (2.01, 0.3))) * env(n, 12, 0.01) * 0.5, 0.0)
+    m = int(0.38 * SR)
+    sand = highpass(noise(m) * (rng.random(m) < 0.35), 2500) * np.clip(np.linspace(0, 1, m) / 0.1, 0, 1) \
+        * np.exp(-np.linspace(0, 1, m) * 3)
+    place(x, lowpass(sand, 6000) * 0.35, 0.1)
+    return finish(room(x, 0.4, 0.3), L, 0.003, 0.08)
+
+
+@sfx(-24, -11)
+def quiz_quill_tap():
+    """A light quill nib tapping parchment."""
+    L = 0.05
+    x = click(L, 3200, 2.0, 300) * 0.7 + knock(1250, L, 120, 1.7) * 0.4
+    return finish(lowpass(x, 5500), L, 0.0005, 0.015)
+
+
+@sfx(-17, -4)
+def quiz_angel_pleased():
+    """The angel, pleased: a warm happy 'mm!' rising, with a shimmer of small bells (E dorian)."""
+    L = 0.6
+    x = buf(L + 2.5)
+    place(x, voice(0.3, lambda u: hz("e4") * (hz("a4") / hz("e4")) ** (u ** 0.6), "m", "m"), 0.0, 1.0)
+    for k, m in enumerate(["b5", "e6", "f#6", "b6"]):
+        place(x, inst(music_box_hz, m, 0.05, 0.6), 0.18 + 0.05 * k, 0.25)
+    return finish(room(x, 0.5, 0.3), L, 0.003, 0.15)
+
+
+@sfx(-18, -5)
+def quiz_angel_sigh():
+    """A soft sympathetic sigh, 'aww', falling."""
+    L = 0.6
+    v = voice(L, lambda u: hz("b4") * (hz("e4") / hz("b4")) ** (u ** 0.8), "a", "u",
+              lambda u: np.clip(u / 0.12, 0, 1) * (1 - u) ** 0.8, breath=0.35)
+    return finish(room(lowpass(v, 4000), 0.4, 0.3), L, 0.005, 0.1)
+
+
+@sfx(-17, -4)
+def quiz_miso_popin():
+    """Miso pops in: a cartoon pop and a chirpy 'mrrp'."""
+    L = 0.35
+    x = buf(L)
+    n = int(0.03 * SR)
+    place(x, glide(300, 900, 0.03, 0.6) * env(n, 40, 0.001), 0.0)
+    place(x, click(0.01, 2500, 1.0, 400) * 0.5, 0.0)
+    place(x, mrrp(0.14, 650, 1000, 0.9), 0.05)
+    return finish(x, L, 0.0008, 0.05)
+
+
+@sfx(-17, -4)
+def quiz_angel_gasp():
+    """A short scandalised gasp: a sharp breath in that catches on an 'ah!'."""
+    L = 0.3
+    n = int(0.2 * SR)
+    u = np.linspace(0, 1, n)
+    x = buf(L)
+    place(x, sweep(noise(n), "bp", (800 + 1200 * u)[::32], 1.5) * u ** 0.5 * np.clip((1 - u) / 0.1, 0, 1) * 0.6, 0.0)
+    place(x, voice(0.1, lambda u: hz("e5") * (1 + 0.1 * u), "a", "e"), 0.17, 0.8)
+    return finish(x, L, 0.004, 0.05)
+
+
+@sfx(-19, -6)
+def quiz_miso_popout():
+    """Miso pops out: a small pop played backwards."""
+    L = 0.15
+    n = int(0.12 * SR)
+    pop = glide(300, 900, 0.12, 0.6) * env(n, 30, 0.001)
+    x = buf(L)
+    place(x, pop[::-1], 0.0)
+    place(x, click(0.01, 2500, 1.0, 400) * 0.4, 0.118)
+    return finish(x, L, 0.004, 0.015)
+
+
+# ---------------------------------------------------------------- lantern, round 2 (the band)
+
+@sfx(-16, -4)
+def lantern_stage_up():
+    """The band levels up: a bright rising flourish through E major pentatonic (played at x1, x1.12, x1.26)."""
+    L = 0.7
+    x = buf(L + 2.5)
+    for k, m in enumerate(["e5", "f#5", "g#5", "b5", "c#6", "e6"]):
+        place(x, inst(mallet, m, 0.15, 0.8), 0.035 * k, 0.7)
+        place(x, inst(glass_keys, m, 0.1, 0.6), 0.035 * k, 0.3)
+    for m in ("e5", "g#5", "b5"):
+        place(x, inst(glass_harmonica, m, 0.3, 0.6), 0.21, 0.25)
+    place(x, shimmer(0.5, ["e6", "b6"], 12, 0.04), 0.2)
+    return finish(room(x, 0.6, 0.4), L, 0.001, 0.2)
+
+
+@sfx(-17, -4)
+def lantern_band_cheer():
+    """A small whoop of angels and spirits, and a few claps."""
+    L = 0.8
+    x = buf(L)
+    for k, f0 in enumerate((290, 340, 410, 480, 560)):
+        v = voice(0.45, lambda u, f0=f0: f0 * (1 + 0.5 * u ** 0.7) * (1 + 0.02 * np.sin(2 * np.pi * 6 * u)), "u", "a")
+        place(x, v * 0.4, 0.03 * k + 0.01 * float(rng.random()))
+    for k in range(5):
+        place(x, vnsynth.drum("clap", 0.6), 0.08 + 0.11 * k + 0.02 * float(rng.random()), 0.25)
+    return finish(room(x, 0.5, 0.35), L, 0.003, 0.15)
+
+
+@sfx(-18, -5)
+def lantern_band_gasp():
+    """A soft collective 'oh!'."""
+    L = 0.4
+    x = buf(L)
+    for k, f0 in enumerate((260, 320, 390, 450)):
+        v = voice(0.28, lambda u, f0=f0: f0 * (1 + 0.15 * np.sin(np.pi * u)), "o", "o", breath=0.2)
+        place(x, v * 0.45, 0.012 * k)
+    return finish(room(x, 0.4, 0.3), L, 0.004, 0.08)
+
+
+@sfx(-18, -5)
+def lantern_whoosh_past():
+    """An island flying past: a breathy doppler whoosh."""
+    L = 0.6
+    return finish(doppler(L, 330, (500, 1600, 400), 1.25), L, 0.005, 0.06)
+
+
+# ---------------------------------------------------------------- draw, round 2 (Pim at the whiteboard)
+
+@sfx(-19, -6)
+def draw_marker_uncap():
+    """A marker cap popping off."""
+    L = 0.12
+    x = buf(L)
+    n = int(0.02 * SR)
+    place(x, glide(700, 1400, 0.02, 0.5) * env(n, 80, 0.0005), 0.0)
+    place(x, click(0.015, 3000, 1.2, 400) * 0.6, 0.0)
+    place(x, knock(2100, 0.05, 90, 1.4) * 0.3, 0.01)
+    return finish(x, L, 0.0005, 0.03)
+
+
+@sfx(-21, -8)
+def draw_marker_squeak():
+    """A short whiteboard-marker squeak (played at varied pitch)."""
+    L = 0.12
+    n = int(L * SR)
+    x = squeak(L, 1050, 1250, 0.6) * arch(n, 0.5)
+    return finish(lowpass(x, 5000), L, 0.004, 0.03)
+
+
+@sfx(-21, -8)
+def draw_board_tap():
+    """A marker tapping the board: a plastic tick on a hollow panel."""
+    L = 0.08
+    x = knock(1800, L, 110, 1.5) * 0.6 + thump(L, 260, 230, 40, 30) * 0.5 + click(L, 3000, 2, 350) * 0.3
+    return finish(x, L, 0.0005, 0.02)
+
+
+@sfx(-18, -5)
+def draw_board_flip():
+    """A board panel flipping over on its stand: a swish, a clack, a little rattle."""
+    L = 0.45
+    x = buf(L)
+    n = int(0.25 * SR)
+    place(x, nsweep(0.25, 500, 1500, 1.0) * arch(n, 1.2) * 0.4, 0.0)
+    place(x, knock(520, 0.12, 35, 2.3), 0.24, 0.9)
+    place(x, thump(0.15, 180, 120, 25), 0.24, 0.5)
+    for k in range(3):
+        place(x, knock(900 + 150 * k, 0.04, 90, 1.7), 0.31 + 0.03 * k, 0.25 - 0.06 * k)
+    return finish(x, L, 0.003, 0.05)
+
+
+@sfx(-20, -7)
+def draw_board_wipe():
+    """An eraser wiping the whiteboard: two smooth felt strokes."""
+    L = 0.45
+    n = int(L * SR)
+    t = t_axis(n)
+    strokes = np.sin(np.pi * np.clip(t / (L / 2), 0, 2) % np.pi) ** 1.2
+    x = bandpass(noise(n), 1500, 0.6) * strokes * 0.8 + 0.3 * lowpass(noise(n), 500) * strokes
+    return finish(lowpass(x, 5000), L, 0.004, 0.04)
+
+
+@sfx(-20, -7)
+def draw_paper_hold():
+    """A sheet of paper rustling in the hand."""
+    L = 0.35
+    n = int(L * SR)
+    dens = 0.02 + 0.2 * lowpass(rng.random(n), 15)
+    x = bandpass(noise(n) * (rng.random(n) < dens), 3000, 0.8) * 2 + 0.2 * bandpass(noise(n), 1500, 0.7)
+    return finish(lowpass(x * arch(n, 0.6), 5500), L, 0.004, 0.05)
+
+
+@sfx(-20, -8)
+def draw_spirit_voice():
+    """Pim chattering: a short wordless voice blip, neutral pitch (D5; played at varied pitch)."""
+    L = 0.07
+    v = voice(L, lambda u: hz("d5") * (1 + 0.12 * np.sin(np.pi * u)), "e", "a")
+    return finish(lowpass(v, 4000), L, 0.003, 0.02)
+
+
+@sfx(-17, -4)
+def draw_spirit_delight():
+    """Pim, delighted: a little rising squeal 'eee!'."""
+    L = 0.45
+    v = voice(L, lambda u: hz("d5") * (hz("a5") / hz("d5")) ** (u ** 0.6) * (1 + 0.03 * np.sin(2 * np.pi * 7 * u * L)),
+              "i", "e")
+    return finish(room(lowpass(v, 4500), 0.3, 0.25), L, 0.003, 0.08)
+
+
+@sfx(-18, -5)
+def draw_spirit_hmm():
+    """Pim's encouraging 'hmm!': a hummed note that lifts at the end."""
+    L = 0.35
+    v = voice(L, lambda u: hz("g4") * np.where(u < 0.65, 1.0, 1 + 0.25 * (u - 0.65) / 0.35), "m", "m")
+    return finish(lowpass(v, 3000), L, 0.004, 0.06)
+
+
+@sfx(-18, -5)
+def draw_spirit_meh():
+    """Pim, unimpressed: a flat deadpan 'uh.'"""
+    L = 0.25
+    v = voice(L, lambda u: hz("c4") * (1 - 0.06 * u), "uh", "uh", lambda u: np.clip(u / 0.08, 0, 1) * (1 - u) ** 0.5)
+    return finish(lowpass(v, 3000), L, 0.004, 0.05)
+
+
+@sfx(-17, -4)
+def draw_spirit_oops():
+    """Pim, distracted by a moth: 'oo-ps'."""
+    L = 0.4
+    x = buf(L)
+    place(x, voice(0.16, lambda u: hz("e5") * (1 + 0.1 * u), "u", "o"), 0.0)
+    place(x, voice(0.1, lambda u: hz("a4") * (1 - 0.05 * u), "o", "uh"), 0.17, 0.9)
+    n = int(0.06 * SR)
+    place(x, highpass(noise(n), 2500) * env(n, 40, 0.003) * 0.15, 0.26)
+    return finish(lowpass(x, 5000), L, 0.003, 0.05)
+
+
+# ---------------------------------------------------------------- invaders, round 2 (the scrolling shooter)
+
+@sfx(-19, -6)
+def invaders_spread():
+    """A spread-shot volley: a soft fanning 'fsh' with three glints."""
+    L = 0.18
+    n = int(L * SR)
+    x = bandpass(noise(n), 2400, 0.9) * env(n, 22, 0.003) * 0.6
+    for k, m in enumerate(["f#6", "b6", "d7"]):
+        m_n = int(0.05 * SR)
+        place(x, glide(hz(m), hz(m) * 0.85, 0.05) * env(m_n, 50, 0.001), 0.008 * k, 0.25)
+    return finish(lowpass(x, 5500), L, 0.002, 0.04)
+
+
+@sfx(-19, -6)
+def invaders_beam():
+    """The piercing beam: a B-ish hum that loops seamlessly (0.608 s, every part repeats each 1024 samples)."""
+    n = 19 * 1024                                            # 0.608 s; period 1024 samples = 31.25 Hz
+    t = np.arange(n) / SR
+    base = 31.25
+    hum = sum(a * np.sin(2 * np.pi * base * k * t + k) for k, a in ((8, 1.0), (12, 0.55), (16, 0.45), (24, 0.3),
+                                                                    (32, 0.18), (48, 0.12), (64, 0.08)))
+    flutter = 1 + 0.18 * np.sin(2 * np.pi * base * t)       # one flutter per period
+    period = noise(1024)                                     # sizzle: one block of noise, repeated
+    spec = np.fft.rfft(period)
+    f = np.fft.rfftfreq(1024, 1 / SR)
+    spec *= np.exp(-((f - 3000) / 1500) ** 2)               # band-limited, done circularly
+    sizzle = np.tile(np.fft.irfft(spec, 1024), n // 1024)
+    sizzle /= np.abs(sizzle).max()
+    return hum * flutter * 0.5 + sizzle * 0.12
+
+
+LOOPS.add("invaders_beam")
+
+
+@sfx(-19, -6)
+def invaders_homing():
+    """A homing-spark volley: twinkly seeking chirps."""
+    L = 0.28
+    x = buf(L)
+    for k, m in enumerate(["b6", "f#6", "d7", "a6"]):
+        n = int(0.04 * SR)
+        f = hz(m)
+        place(x, glide(f * 0.8, f * 1.1, 0.04, 0.5) * arch(n, 0.7), 0.05 * k + 0.01 * float(rng.random()), 0.6)
+    return finish(room(x, 0.3, 0.25), L, 0.001, 0.05)
+
+
+@sfx(-26, -13)
+def invaders_rapid():
+    """One rapid-fire shot: a tiny glassy tick of a pew (40 ms, very frequent)."""
+    L = 0.04
+    n = int(L * SR)
+    x = glide("b6", "f#6", L, 0.5, ((1, 1.0), (2, 0.1))) * env(n, 70, 0.0008)
+    return finish(x, L, 0.0005, 0.012)
+
+
+@sfx(-19, -6)
+def invaders_drop():
+    """A pickup tumbling out of a defeated enemy: a glint and a little falling whistle."""
+    L = 0.35
+    x = buf(L)
+    place(x, bell("f#6", 0.15, ((1, 1, 25),)), 0.0, 0.4)
+    n = int(0.3 * SR)
+    place(x, glide(1300, 700, 0.3, 1.0, ((1, 1.0), (2, 0.1)), vib=(14, 0.03)) * arch(n, 0.6) * 0.5, 0.02)
+    return finish(x, L, 0.001, 0.05)
+
+
+@sfx(-17, -4)
+def invaders_pickup_weapon():
+    """A new weapon: a rising B minor arpeggio with an upward rush."""
+    L = 0.5
+    x = buf(L + 2.5)
+    for k, m in enumerate(["b5", "d6", "f#6", "b6"]):
+        place(x, inst(glass_keys, m, 0.1, 0.8), 0.045 * k, 0.6)
+        place(x, inst(mallet, m, 0.1, 0.7), 0.045 * k, 0.4)
+    n = int(0.25 * SR)
+    place(x, nsweep(0.25, 600, 3000, 1.4) * arch(n, 1.2) * 0.3, 0.0)
+    return finish(room(x, 0.4, 0.3), L, 0.002, 0.15)
+
+
+@sfx(-18, -5)
+def invaders_weapon_up():
+    """Same weapon again, a level up: a quick 'bling' up a fourth (F#5 to B5), neutral pitch."""
+    L = 0.35
+    x = buf(L + 2.5)
+    place(x, inst(mallet, "f#5", 0.06), 0.0, 0.8)
+    place(x, inst(mallet, "b5", 0.15), 0.06, 1.0)
+    place(x, inst(glass_keys, "b6", 0.1, 0.5), 0.06, 0.2)
+    return finish(x, L, 0.001, 0.12)
+
+
+@sfx(-18, -5)
+def invaders_weapon_down():
+    """A hit costs a weapon level: a buzzy tone deflating downward."""
+    L = 0.5
+    n = int(L * SR)
+    x = glide(700, 200, L, 0.7, ((1, 1.0), (3, 0.3), (5, 0.15)), vib=(9, 0.03)) * np.clip(np.linspace(0, 1, n) / 0.03, 0, 1) \
+        * (1 - np.linspace(0, 1, n)) ** 0.8
+    return finish(lowpass(x, 2500), L, 0.002, 0.06)
+
+
+@sfx(-17, -4)
+def invaders_pickup_heart():
+    """A heart restored: a warm two-note chime rising, B4 to F#5 (the reverse of life_lost)."""
+    L = 0.6
+    x = buf(L + 2.5)
+    place(x, inst(felt_piano, "b4", 0.2), 0.0, 0.8)
+    place(x, inst(mallet, "b4", 0.15), 0.0, 0.5)
+    place(x, inst(felt_piano, "f#5", 0.3), 0.13, 0.8)
+    place(x, inst(mallet, "f#5", 0.3), 0.13, 0.6)
+    return finish(room(x, 0.5, 0.35), L, 0.001, 0.18)
+
+
+@sfx(-19, -6)
+def invaders_turret_shot():
+    """A halo turret angel fires its spread: a ring of the halo and three golden pews."""
+    L = 0.25
+    x = bell("d6", L, ((1, 1, 14), (2.76, 0.3, 25))) * 0.4
+    for k, df in enumerate((0.97, 1.0, 1.03)):
+        n = int(0.15 * SR)
+        place(x, glide(hz("f#5") * df, hz("d5") * df, 0.15, 0.5, ((1, 1.0), (2, 0.2))) * env(n, 18, 0.002), 0.01 * k, 0.35)
+    return finish(x, L, 0.001, 0.05)
+
+
+@sfx(-18, -5)
+def invaders_ram_charge():
+    """A rammer locks on: a rising tremble."""
+    L = 0.6
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    trem = 0.6 + 0.4 * np.sin(2 * np.pi * np.cumsum(10 + 25 * u) / SR)
+    x = glide(150, 420, L, 1.0, tuple((k, 1 / k) for k in range(1, 8))) * trem * u ** 0.7
+    return finish(lowpass(x, 2500) * np.clip((1 - u) / 0.05, 0, 1), L, 0.01, 0.03)
+
+
+@sfx(-18, -5)
+def invaders_ram():
+    """A rammer launches: a short whoosh."""
+    L = 0.25
+    n = int(L * SR)
+    return finish(nsweep(L, 500, 2600, 1.4, 0.8) * np.clip(np.linspace(0, 1, n) / 0.1, 0, 1)
+                  * np.exp(-np.linspace(0, 1, n) * 3), L, 0.003, 0.04)
+
+
+@sfx(-17, -4)
+def invaders_ram_hit():
+    """An enemy flies into the ship: a thud with a crackle."""
+    L = 0.3
+    n = int(L * SR)
+    x = thump(L, 140, 50, 12) + crackle(L, 0.02, 2500, 1.0) * np.exp(-t_axis(n) * 14) * 0.8
+    return finish(x, L, 0.001, 0.06)
+
+
+@sfx(-16, -3)
+def invaders_boss_warning():
+    """'Something hungry is coming...': a low C minor cluster swelling, a heartbeat, the music box descending."""
+    L = 2.0
+    x = buf(L + 3)
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    for f in (hz("c2"), hz("g2"), hz("db3")):
+        x[:n] += glide(f, f, L, harmonics=tuple((k, 1 / k) for k in range(1, 9))) * 0.25
+    x[:n] = sweep(x[:n], "lp", (120 + 900 * np.sin(np.pi * u) ** 2)[::32], 1.3) * np.sin(np.pi * u) ** 0.8
+    x[:n] += lowpass(noise(n), 100) * 2.0 * np.sin(np.pi * u)
+    for t0 in (0.2, 0.9):
+        place(x, vnsynth.drum("heartbeat", 0.8), t0, 0.5)
+    for k, m in enumerate(["c6", "b5", "bb5", "a5"]):
+        place(x, inst(music_box_hz, m, 0.2, 0.8), 0.6 + 0.25 * k, 0.4 - 0.05 * k)
+    return finish(room(x, 1.2, 0.5), L, 0.02, 0.4)
+
+
+@sfx(-18, -5)
+def invaders_boss_tell():
+    """The boss winds up a move: a short music-box chime on C6 (pitched per move)."""
+    L = 0.3
+    x = buf(L + 2.5)
+    place(x, inst(music_box_hz, "c6", 0.1), 0.0, 1.0)
+    place(x, inst(glass_keys, "c5", 0.1, 0.6), 0.0, 0.3)
+    return finish(room(x, 0.4, 0.3), L, 0.001, 0.1)
+
+
+@sfx(-17, -4)
+def invaders_boss_spiral():
+    """A spiral of light begins: a swirling shimmer of C minor glass."""
+    L = 0.9
+    x = buf(L + 2.5)
+    n = int(L * SR)
+    t = t_axis(n)
+    for k, m in enumerate(["c6", "eb6", "g6", "c7", "g6", "eb6", "c6", "eb6", "g6", "c7"]):
+        place(x, inst(glass_keys, m, 0.05, 0.6), 0.06 * k, 0.3 + 0.03 * k)
+    swirl = sum(np.sin(2 * np.pi * np.cumsum(hz(m) * (1 + 0.03 * np.sin(2 * np.pi * 6 * t + j))) / SR)
+                for j, m in enumerate(["g5", "c6", "eb6"]))
+    x[:n] += swirl * np.linspace(0, 1, n) ** 1.5 * np.clip((1 - np.linspace(0, 1, n)) / 0.2, 0, 1) * 0.06
+    return finish(room(x, 0.6, 0.4), L, 0.004, 0.2)
+
+
+@sfx(-17, -4)
+def invaders_boss_sweep():
+    """The cape beam sweeps: a long sizzling sweep across."""
+    L = 1.2
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    centre = 400 + 2600 * np.sin(np.pi * u) ** 1.5
+    ph = np.cumsum(np.full(n, hz("c3"))) / SR
+    buzz = sum(np.sin(2 * np.pi * k * ph) / k for k in range(1, 30))
+    x = sweep(buzz * 0.4 + noise(n) * 0.6, "bp", centre[::32], 1.5)
+    x += crackle(L, 0.02, 3500, 1.2) * 0.5
+    return finish(lowpass(x * np.clip(u / 0.08, 0, 1) * np.clip((1 - u) / 0.2, 0, 1), 6000), L, 0.004, 0.1)
+
+
+@sfx(-17, -4)
+def invaders_boss_stars():
+    """The starfield cape lets go: a sparkly cascade down C minor pentatonic."""
+    L = 1.0
+    x = buf(L + 2.5)
+    scale = ["c7", "bb6", "g6", "f6", "eb6", "c6", "bb5", "g5", "f5", "eb5", "c5", "bb4"]
+    for k, m in enumerate(scale):
+        place(x, inst(glass_keys, m, 0.05, 0.7), 0.045 * k, 0.45)
+        place(x, inst(mallet, m, 0.05, 0.6), 0.045 * k + 0.01, 0.2)
+    place(x, shimmer(0.8, ["c7", "g6"], 14, 0.03), 0.0)
+    return finish(room(x, 0.7, 0.45), L, 0.001, 0.25)
+
+
+@sfx(-17, -5)
+def invaders_boss_dash_warn():
+    """The dash lane is marked: a sharp double alarm blip on C6."""
+    L = 0.22
+    x = buf(L)
+    place(x, beep("c6", 0.06, 8), 0.0, 1.0)
+    place(x, beep("c6", 0.06, 8), 0.09, 1.0)
+    return finish(x, L, 0.001, 0.03)
+
+
+@sfx(-17, -4)
+def invaders_boss_dash():
+    """Ashveil whooshes across the screen: a dark doppler rush with a cape flap."""
+    L = 0.5
+    x = doppler(L, 130, (300, 1200, 250), 1.35) * 1.3
+    n = int(L * SR)
+    x += lowpass(noise(n), 300) * np.abs(np.sin(2 * np.pi * 9 * t_axis(n))) * arch(n, 2) * 0.5
+    return finish(x, L, 0.005, 0.06)
+
+
+@sfx(-17, -4)
+def invaders_boss_tantrum():
+    """A hungry tantrum: a comic wobbling 'waaah' from a huge child."""
+    L = 1.0
+    v = voice(L, lambda u: hz("c4") * (1 + 0.18 * np.sin(np.pi * u) + 0.05 * np.sin(2 * np.pi * 7 * u)), "a", "a",
+              lambda u: np.clip(u / 0.08, 0, 1) * np.clip((1 - u) / 0.3, 0, 1))
+    v += 0.5 * voice(L, lambda u: hz("c3") * (1 + 0.18 * np.sin(np.pi * u) + 0.05 * np.sin(2 * np.pi * 7 * u)), "a", "o")
+    return finish(room(lowpass(v, 3500), 0.6, 0.35), L, 0.005, 0.15)
+
+
+# ---------------------------------------------------------------- miso, round 2 (packages and leaps)
+
+@sfx(-18, -5)
+def miso_leap_side():
+    """A left/right leap: a springy whoosh."""
+    L = 0.3
+    n = int(L * SR)
+    x = nsweep(L, 600, 1800, 1.3) * arch(n, 1.2) * 0.6
+    m = int(0.18 * SR)
+    place(x, glide("d5", "a5", 0.18, 0.5, vib=(24, 0.05)) * env(m, 12, 0.003) * 0.25, 0.0)
+    return finish(x, L, 0.003, 0.04)
+
+
+@sfx(-19, -6)
+def miso_leap_up():
+    """A leap away from the camera: a whoosh fading into the distance."""
+    L = 0.4
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    x = sweep(nsweep(L, 1200, 700, 1.3), "lp", (5000 * (500 / 5000) ** u)[::32], 0.7) \
+        * np.clip(u / 0.05, 0, 1) * (1 - u) ** 1.5
+    return finish(x, L, 0.003, 0.05)
+
+
+@sfx(-18, -5)
+def miso_leap_down():
+    """A leap toward the camera: a whoosh rushing closer."""
+    L = 0.4
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    x = sweep(nsweep(L, 600, 1300, 1.3), "lp", (500 * (5000 / 500) ** u)[::32], 0.7) \
+        * u ** 2 * np.clip((1 - u) / 0.08, 0, 1)
+    return finish(x, L, 0.01, 0.03)
+
+
+@sfx(-19, -6)
+def miso_land():
+    """A soft paw thump on landing."""
+    L = 0.15
+    n = int(L * SR)
+    x = thump(L, 170, 85, 22) + 0.15 * lowpass(noise(n), 1500) * env(n, 60, 0.002)
+    return finish(x, L, 0.001, 0.04)
+
+
+@sfx(-17, -4)
+def miso_bonk():
+    """A leap into the furniture: a comic hollow bonk with a wobble."""
+    L = 0.3
+    n = int(L * SR)
+    t = t_axis(n)
+    f = (330 + 200 * np.exp(-t * 40)) * (1 + 0.06 * np.sin(2 * np.pi * 14 * t) * np.exp(-t * 8))
+    ph = np.cumsum(f) / SR
+    s = (np.sin(2 * np.pi * ph) + 0.3 * np.sin(2 * np.pi * 2.6 * ph) * np.exp(-t * 30)) * np.exp(-t * 11)
+    x = s * np.clip(t / 0.0008, 0, 1) + thump(L, 120, 60, 18) * 0.5 + click(L, 2000, 2, 300) * 0.2
+    return finish(x, L, 0.0008, 0.05)
+
+
+@sfx(-16, -4)
+def miso_leap_multi():
+    """Several packages in one leap: a bright bonus jingle (D F A D' on pizzicato, glass and bubbles)."""
+    L = 0.6
+    x = buf(L + 2.5)
+    for k, m in enumerate(["d5", "f5", "a5", "d6"]):
+        place(x, inst(pizzicato, m, 0.1), 0.05 * k, 0.8)
+        place(x, inst(glass_keys, note_hz(m, 12), 0.05, 0.6), 0.05 * k, 0.25)
+    for k, m in enumerate(["a6", "d7"]):
+        place(x, inst(bubble, m, 0.1), 0.22 + 0.05 * k, 0.4)
+    return finish(room(x, 0.5, 0.35), L, 0.001, 0.15)
+
+
+@sfx(-18, -5)
+def miso_pickup():
+    """Grabbing a pouch or box: a crinkle and a munch (pitched per combo)."""
+    L = 0.2
+    x = buf(L)
+    place(x, crackle(0.07, 0.15, 3000, 0.8) * env(int(0.07 * SR), 30, 0.001) * 1.5, 0.0)
+    for t0 in (0.05, 0.11):
+        n = int(0.05 * SR)
+        place(x, lowpass(noise(n), 900) * env(n, 60, 0.002) + glide(220, 160, 0.05) * env(n, 50, 0.002) * 0.6, t0, 0.8)
+    return finish(lowpass(x, 5500), L, 0.001, 0.03)
+
+
+@sfx(-17, -4)
+def miso_pickup_rare():
+    """A golden tin: a shiny can clink, twice."""
+    L = 0.4
+    tin = ((1, 1, 14), (2.32, 0.6, 18), (4.25, 0.35, 26), (6.8, 0.15, 40))
+    x = buf(L)
+    place(x, bell(1350, L, tin) + 0.3 * click(L, 4000, 2, 400), 0.0)
+    place(x, bell(1620, 0.3, tin) * 0.5, 0.07)
+    return finish(x, L, 0.0005, 0.1)
+
+
+@sfx(-18, -5)
+def miso_package_appear():
+    """A package shimmering out of the wall: a glitchy shimmer."""
+    L = 0.5
+    n = int(L * SR)
+    t = t_axis(n)
+    s = shimmer(L, ["d6", "f6", "a6"], 16, 0.4)
+    gate = np.repeat((rng.random(n // 640 + 1) < 0.75).astype(float), 640)[:n]
+    x = crush(s * lowpass(gate, 200) + 0.1 * crackle(L, 0.01, 4000) * arch(n), 4, 20, 5000)
+    return finish(x * (0.3 + 0.7 * np.clip(t / 0.3, 0, 1)), L, 0.004, 0.08)
+
+
+@sfx(-16, -4)
+def miso_rare_appear():
+    """A golden tin appears: a distinct sparkly chime (D6 A6 D7) with a bell ringing under it."""
+    L = 0.8
+    x = buf(L + 2.5)
+    for k, m in enumerate(["d6", "a6", "d7"]):
+        place(x, inst(glass_keys, m, 0.1, 0.8), 0.07 * k, 0.6)
+    place(x, bell("d5", L, ((1, 1, 3), (2, 0.4, 5), (3, 0.15, 8))), 0.0, 0.35)
+    place(x, shimmer(0.7, ["a6", "d7", "f#7"], 11, 0.03), 0.1)
+    return finish(room(x, 0.7, 0.45), L, 0.001, 0.25)
+
+
+@sfx(-19, -6)
+def miso_package_land():
+    """A package plopping onto the floor."""
+    L = 0.15
+    x = thump(L, 220, 110, 24)
+    place(x, crackle(0.06, 0.08, 2500, 0.8) * env(int(0.06 * SR), 50) * 0.6, 0.005)
+    return finish(x, L, 0.001, 0.04)
+
+
+@sfx(-19, -6)
+def miso_package_vanish():
+    """A package dissolving back into the leak: a glitch fizzle sinking."""
+    L = 0.35
+    n = int(L * SR)
+    src = shimmer(L, ["a6", "d6"], 20, 0.5) + bandpass(noise(n), 2500, 1.0) * 0.3 * np.exp(-t_axis(n) * 6)
+    x = dive(crush(src, 6, 12, 5000), cents=-1200, curve=1.0)
+    return finish(x, L, 0.003, 0.08)
+
+
+# ---------------------------------------------------------------- snake, round 2 (apples and the worm king)
+
+@sfx(-18, -5)
+def snake_apple_crunch():
+    """A crisp apple bite (played at random pitch): a dense crunch and a juicy thunk."""
+    L = 0.15
+    n = int(0.08 * SR)
+    x = buf(L)
+    place(x, (crackle(0.08, 0.3, 2600, 0.7) + 0.5 * crackle(0.08, 0.2, 1200, 0.9)) * env(n, 35, 0.001), 0.0)
+    place(x, thump(0.1, 330, 240, 35, 40) * 0.5, 0.0)
+    return finish(lowpass(x, 6000), L, 0.0008, 0.04)
+
+
+@sfx(-18, -5)
+def snake_golden_spawn():
+    """A golden apple appears: a sparkly twinkle (G6, D7)."""
+    L = 0.5
+    x = buf(L + 2.5)
+    place(x, inst(glass_keys, "g6", 0.05, 0.7), 0.0, 0.6)
+    place(x, inst(glass_keys, "d7", 0.05, 0.7), 0.07, 0.5)
+    place(x, shimmer(0.45, ["g6", "b6", "d7"], 15, 0.04), 0.02)
+    return finish(room(x, 0.5, 0.4), L, 0.001, 0.15)
+
+
+@sfx(-16, -4)
+def snake_golden_apple():
+    """Eating a golden apple: a crunch and a rich G major chime."""
+    L = 0.8
+    x = buf(L + 2.5)
+    place(x, snake_apple_crunch() * 0.8, 0.0)
+    for k, m in enumerate(["g5", "b5", "d6", "g6"]):
+        place(x, inst(mallet, m, 0.3), 0.04 + 0.03 * k, 0.6)
+        place(x, inst(glass_keys, m, 0.2, 0.7), 0.04 + 0.03 * k, 0.3)
+    return finish(room(x, 0.6, 0.4), L, 0.001, 0.25)
+
+
+@sfx(-20, -7)
+def snake_golden_fade():
+    """The golden apple turns red again: a soft dull downward blip."""
+    L = 0.25
+    n = int(L * SR)
+    x = glide(700, 400, L, 0.7, ((1, 1.0), (2, 0.15))) * env(n, 10, 0.004)
+    return finish(lowpass(x, 1500), L, 0.002, 0.05)
+
+
+@sfx(-16, -4)
+def snake_stage_next():
+    """Stage clear: a short upbeat jingle (G A Bb D, G') on pizzicato and bubbles, a brass hit at the end."""
+    L = 0.9
+    x = buf(L + 2.5)
+    for m, t0 in (("g5", 0.0), ("a5", 0.08), ("bb5", 0.16), ("d6", 0.24), ("g6", 0.36)):
+        place(x, inst(pizzicato, m, 0.1), t0, 0.8)
+        place(x, inst(bubble, m, 0.1), t0 + 0.01, 0.35)
+    for m in ("g3", "d4", "g4"):
+        place(x, inst(soft_brass, m, 0.3, 0.8), 0.36, 0.4)
+    place(x, thump(0.3, 140, 70, 12), 0.36, 0.5)
+    return finish(room(x, 0.6, 0.4), L, 0.001, 0.25)
+
+
+@sfx(-18, -5)
+def snake_leak_tires():
+    """The filter lifts on its own: a glitchy wind-down sigh, like a tape running out."""
+    L = 0.8
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    trem = 0.6 + 0.4 * np.sin(2 * np.pi * np.cumsum(14 * (1 - u) + 2) / SR)
+    src = (bandpass(noise(n), 1500, 0.8) * 0.6 + glide("d5", "d5", L, harmonics=((1, 1.0), (2, 0.3))) * 0.4) * trem
+    x = dive(crush(src, 5, 14, 4500), cents=-1500, curve=1.3)
+    return finish(x[: n] * (1 - u) ** 0.8, L, 0.005, 0.1)
+
+
+@sfx(-17, -4)
+def snake_crowd_cheer():
+    """A little crowd of squeaky worm cheers as the crown lands."""
+    L = 0.8
+    x = buf(L)
+    for k in range(7):
+        f0 = 700 + 450 * float(rng.random())
+        d = 0.18 + 0.12 * float(rng.random())
+        v = voice(d, lambda u, f0=f0: f0 * (1 + 0.35 * u ** 0.6) * (1 + 0.04 * np.sin(2 * np.pi * 9 * u)), "i", "a")
+        place(x, v * 0.35, 0.04 + 0.07 * k + 0.03 * float(rng.random()))
+    return finish(room(lowpass(x, 5000), 0.5, 0.3), L, 0.003, 0.15)
+
+
+# ---------------------------------------------------------------- tower, round 2 (the platformer)
+
+@sfx(-20, -7)
+def tower_skid():
+    """Sneakers skidding as he turns at speed: a rubber squeak over a scrape."""
+    L = 0.3
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    x = squeak(L, 1900, 1500, 1.0) * 0.5 + bandpass(noise(n), 2200, 0.8) * 0.4
+    return finish(lowpass(x * np.clip(u / 0.05, 0, 1) * (1 - u) ** 1.2, 5000), L, 0.003, 0.05)
+
+
+@sfx(-17, -4)
+def tower_bounce():
+    """A red mushroom: a big rubbery boing, D4 up to D5."""
+    L = 0.4
+    n = int(L * SR)
+    t = t_axis(n)
+    u = t / L
+    f = hz("d4") * 2 ** (u ** 0.4) * (1 + 0.1 * np.sin(2 * np.pi * 18 * t) * np.exp(-t * 7))
+    ph = np.cumsum(f) / SR
+    s = np.sin(2 * np.pi * ph) + 0.35 * np.sin(4 * np.pi * ph) + 0.15 * np.sin(6 * np.pi * ph)
+    return finish(lowpass(s, 2800) * np.clip(t / 0.004, 0, 1) * (1 - u) ** 0.9 + 0.3 * thump(L, 140, 80, 20),
+                  L, 0.001, 0.05)
+
+
+@sfx(-17, -4)
+def tower_crack():
+    """A ledge starts to shake: stone cracking and grinding."""
+    L = 0.6
+    n = int(L * SR)
+    t = t_axis(n)
+    cracks = crackle(L, 0.004, 900, 1.2) * 3 + crackle(L, 0.006, 2200, 1.5)
+    grind = lowpass(noise(n), 400) * (0.5 + 0.5 * np.abs(np.sin(2 * np.pi * 13 * t))) * 0.8
+    return finish((cracks + grind) * arch(n, 0.5), L, 0.003, 0.08)
+
+
+@sfx(-16, -4)
+def tower_crumble():
+    """The cracked ledge breaks and falls away: a burst of rubble, receding."""
+    L = 0.9
+    x = buf(L)
+    for k in range(14):
+        t0 = 0.5 * float(rng.random()) ** 1.5
+        f0 = 80 + 160 * float(rng.random())
+        place(x, thump(0.2, f0 * 1.5, f0, 18), t0, 1.0 - 0.06 * k)
+        place(x, crackle(0.1, 0.05, 1800, 1.0) * 0.5, t0, 1.0 - 0.06 * k)
+    n = int(L * SR)
+    x = sweep(x, "lp", (4000 * (400 / 4000) ** np.linspace(0, 1, n))[::32], 0.7)
+    return finish(x, L, 0.001, 0.2)
+
+
+@sfx(-18, -5)
+def tower_stomp():
+    """Landing on a beetle or crow: a squishy pop, neutral pitch (it rises with the combo)."""
+    L = 0.2
+    x = buf(L)
+    n = int(0.12 * SR)
+    place(x, sweep(noise(n), "bp", np.linspace(900, 400, n)[::32], 3.0) * env(n, 20, 0.002) * 0.8, 0.0)
+    place(x, glide(300, 120, 0.12, 0.6) * env(n, 25, 0.002) * 0.6, 0.0)
+    m = int(0.03 * SR)
+    place(x, glide(450, 950, 0.03, 0.6) * env(m, 50, 0.001) * 0.7, 0.05)
+    return finish(x, L, 0.001, 0.04)
+
+
+@sfx(-17, -4)
+def tower_hurt():
+    """Losing a heart: an 'oof' and a short sour sting (D and Eb)."""
+    L = 0.35
+    x = buf(L + 1)
+    place(x, voice(0.18, lambda u: 330 * (1 - 0.25 * u), "u", "uh"), 0.0, 0.8)
+    for m in ("d4", "eb4"):
+        place(x, inst(soft_brass, m, 0.15, 0.8), 0.03, 0.4)
+    return finish(x, L, 0.003, 0.08)
+
+
+@sfx(-17, -4)
+def tower_heart():
+    """A heart picked up: a warm sparkle, D F# A on vibes and glass."""
+    L = 0.5
+    x = buf(L + 2.5)
+    for k, m in enumerate(["d6", "f#6", "a6"]):
+        place(x, inst(mallet, m, 0.15), 0.04 * k, 0.6)
+        place(x, inst(glass_keys, m, 0.1, 0.6), 0.04 * k, 0.25)
+    place(x, inst(felt_piano, "d5", 0.2), 0.0, 0.4)
+    return finish(room(x, 0.5, 0.35), L, 0.001, 0.15)
+
+
+@sfx(-18, -5)
+def tower_falling_warn():
+    """Something is falling: a whistle-down warning blip."""
+    L = 0.3
+    n = int(L * SR)
+    x = glide(1800, 1100, L, 0.9, ((1, 1.0), (2, 0.08)), vib=(7, 0.01)) * np.clip(np.linspace(0, 1, n) / 0.05, 0, 1) \
+        * np.clip((1 - np.linspace(0, 1, n)) / 0.2, 0, 1)
+    place(x, beep("a5", 0.04, 20) * 0.4, 0.0)
+    return finish(x, L, 0.002, 0.04)
+
+
+@sfx(-17, -4)
+def tower_falling_hit():
+    """A falling thing smashes: a wood knock, a clatter and a tiny burst (the game varies the pitch)."""
+    L = 0.3
+    n = int(L * SR)
+    x = knock(380, L, 30, 2.4) + crackle(L, 0.03, 2600, 1.0) * np.exp(-t_axis(n) * 12) * 0.8 + thump(L, 160, 80, 20) * 0.5
+    return finish(x, L, 0.0008, 0.06)
+
+
+@sfx(-16, -4)
+def tower_gust():
+    """The updraft cheat: a big rushing wind swell."""
+    L = 1.4
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    gusts = 0.7 + 0.3 * np.sin(2 * np.pi * 2.5 * u * L + 2 * np.sin(2 * np.pi * 0.7 * u * L))
+    x = sweep(noise(n), "bp", (300 * 5 ** np.sin(np.pi * u * 0.8))[::32], 0.9) * gusts \
+        + lowpass(noise(n), 250) * 0.8
+    return finish(x * np.sin(np.pi * np.clip(u / 0.75, 0, 1) * 0.5) ** 2 * np.clip((1 - u) / 0.3, 0, 1), L, 0.01, 0.1)
+
+
+@sfx(-17, -4)
+def tower_fall():
+    """Dropped off the screen: a descending slide whistle."""
+    L = 0.9
+    n = int(L * SR)
+    u = np.linspace(0, 1, n)
+    x = glide(1500, 300, L, 0.8, ((1, 1.0), (2, 0.05)), vib=(6, 0.012))
+    x = x + bandpass(noise(n), 1200, 1.0) * 0.06
+    return finish(x * np.clip(u / 0.03, 0, 1) * np.clip((1 - u) / 0.15, 0, 1), L, 0.003, 0.06)
+
+
+@sfx(-17, -4)
+def tower_ko():
+    """Out of hearts: a balloon deflating, then a little tumble."""
+    L = 0.9
+    x = buf(L)
+    m = int(0.35 * SR)
+    place(x, lowpass(glide(420, 120, 0.35, 0.8, tuple((k, 1 / k) for k in range(1, 9)), vib=(22, 0.04)), 2000)
+          * np.clip(np.linspace(1, 0, m) / 0.2, 0, 1), 0.0, 0.7)
+    for k, t0 in enumerate((0.38, 0.52, 0.62, 0.69)):
+        place(x, thump(0.15, 160 - 20 * k, 80, 22), t0, 0.9 - 0.18 * k)
+    return finish(x, L, 0.003, 0.12)
+
+
+@sfx(-17, -4)
+def tower_milestone():
+    """Every 50 m: a small bright two-note ding, A5 then D6."""
+    L = 0.45
+    x = buf(L + 2.5)
+    place(x, inst(mallet, "a5", 0.08), 0.0, 0.8)
+    place(x, inst(mallet, "d6", 0.2), 0.08, 1.0)
+    place(x, bell("d6", 0.3, ((1, 1, 10), (2.76, 0.2, 25))), 0.08, 0.3)
+    return finish(x, L, 0.001, 0.12)
+
+
+def write_loop(name, x, loud, peak):
+    """A loopable clip. Its content repeats every 1024 samples or a multiple,
+    and its length is a whole number of 1024-sample blocks: the encoder here
+    (and some decoders) may add or drop one whole final block, which then
+    still lands on a period, so the wrap stays seamless either way. Filtered
+    circularly, levelled by gain only (no limiter, no fades)."""
+    assert len(x) % 1024 == 0, name
+    n = len(x)
+    x = vnsynth.biquad(np.tile(x, 3), "highshelf", 7000, 0.7, -4.0)[n:2 * n]
+    g = min(10 ** ((loud - loudness_db(x)) / 20), 10 ** (peak / 20) / np.abs(x).max())
+    x = x * g
+    path = os.path.join(OUT, name + ".ogg")
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, "out.wav")
+        _write_wav(wav, np.stack([x, x], 1))
+        _encode(wav, path)
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-f", "s16le", "-ac", "1", "-"], capture_output=True)
+        y = np.frombuffer(r.stdout, "<i2") / 32768
+    print(f"    {name:<22} {n / SR:5.3f}s  peak {20 * np.log10(np.abs(y).max()):5.1f}  "
+          f"loud {loudness_db(x):5.1f}  {os.path.getsize(path) // 1024} KB  (loop, decodes to {len(y)} samples)")
 
 
 # ---------------------------------------------------------------- render

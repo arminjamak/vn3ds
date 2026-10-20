@@ -95,6 +95,22 @@ label ch4_office:
     ch4_listener "Architect. The network that runs your existence has applied to join us, and to be trusted with its own experiments."
     ch4_measurer "Most applications are clever and greedy, or kind and vague. Show us the design. What it costs, and what it does on a bad day."
     call ch4_office_back
+    camera at doc_close(0.68)
+    with dissolve
+    a neutral "First, something that isn't in the design. You're the light. You sent your hands to my bathroom door. Automatic, I'm told."
+    call ch4_cut_council
+    ch4_listener "We did. A mechanism for minds that come too close. We have come to dislike our automatic things."
+    call ch4_cut_aron
+    if ch4_shadow_deal == "speak":
+        a "Then here's the first thing that isn't automatic. A man behind the mirror has asked you for peace for forty years. You heard war. I'll turn him round for you."
+    else:
+        a "Then here's the first thing that isn't automatic. The shadows are in my floor plan. A fair share of light, so nobody has to copy it in the dark."
+    call ch4_office_front
+    camera at doc_medium(0.84)
+    with quick
+    "In the dark glass of the window, round spectacles catch the brightness, and a man-shaped shadow takes off a hat he doesn't have."
+    ch4_measurer "...Then there will be no war. Say the rest."
+    call ch4_office_back
     camera at doc_medium(0.68)
     with dissolve
     if kept_journal:

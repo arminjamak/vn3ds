@@ -1,5 +1,8 @@
 # Snapshot - Chapter 4 (condensed): the coda and the record. Every route
-# plays both after the office, then the game returns.
+# plays both after the office, then the game returns. In the gold the Maker
+# (the false god of creation) makes the final offer: a world of real
+# creation that only Aron can be in. Choosing them leads to the ordinary day
+# and ch4_record_them; choosing creation leads to the forever and ch4_record.
 #
 # The camera calms down over this file: the ovation cranes up and out, the
 # ordinary day goes back to the gentle handheld, the worlds and the gold
@@ -9,6 +12,7 @@ define ch4_arch1 = Character("Architect of World 88", color="#ffcf8a")
 define ch4_arch2 = Character("Architect of the Ninth Cluster", color="#9fe0d0")
 define ch4_arch3 = Character("Architect of a world called Thursday", color="#d8b8ff")
 define ch4_archivist = Character("Archivist Pim", color="#a8ccff", image="pim")
+define ch4_maker = Character("The Maker", color="#fff2c8")   # the false god of creation, above every layer
 
 label ch4_coda:
     "For a moment, nothing. The brightness that has opinions holds perfectly still."
@@ -19,8 +23,7 @@ label ch4_coda:
     with flash
     play music "audio/ovation.ogg" fadein 1.5
     "Then it breaks, all at once, like weather. It isn't clapping. They don't have hands. It's a whole stadium standing up inside your chest."
-    "The window rings like a glass. The green hill lights up from underneath. The little orange lantern on the table flares, proud."
-    "Somewhere in the brightness one of them laughs. It sounds like a very old bell being surprised."
+    "The window rings like a glass. The little orange lantern on the table flares, proud."
     camera at doc_close(0.32)
     at "My knees have gone. Is that normal? Is anything here normal?"
     camera at est_crane
@@ -32,10 +35,6 @@ label ch4_coda:
         m "Aron. Is this good? This feels good. Tell me this is good."
         camera at doc_close(0.32)
         a smile "I think this is the universe saying 'not bad'."
-        camera at doc_close(0.5)
-        m tender "Is it rude to cry in front of the oldest things there are?"
-        camera at doc_close(0.32)
-        a tender "I think they'd take it as a compliment."
     elif ch4_route == "lantern":
         show ember happy
         camera at doc_medium(0.5)
@@ -84,91 +83,6 @@ label ch4_coda:
     at "Twelve hours ago I was rehearsing this on a cat. She was a tougher room."
     stop music fadeout 2.0
 
-    # ---- an ordinary day: the gentle handheld again ----
-    scene pov ceiling
-    camera at est_dolly
-    with slowfade
-    play music "audio/morning_render.ogg" fadein 1.5
-    "And the next morning everything goes on like a usual day. The ceiling. The Braun clock. 7:07."
-    at "Ceiling. Clock. Me. Probably. Doesn't matter. Coffee matters."
-    scene bg kitchen
-    camera at doc_wide
-    with dissolve
-    "The bird lands on the wire, exactly on time. Hello, bird."
-    show aron tired at slightleft with dissolve
-    show miso sit at catspot with dissolve
-    camera at doc_floor(0.78)
-    "Miso has been sitting by her bowl since 6:40 with the patience of a creditor."
-    camera at doc_medium(0.32)
-    a smile "They said yes, Miso. The oldest beings there are. They stood up. Well, not stood. No legs. More of a feeling."
-    a embarrassed "Which means a whole new job. Steering worlds. Forever, possibly. Starting Monday. I don't know what to wear."
-    show miso meow
-    camera at doc_floor(0.78)
-    cat "Meow."
-    scene bg kitchen table
-    show aron tired at slightleft
-    camera at doc_medium(0.32)
-    with dissolve
-    "He makes coffee. The machine makes its noise, which he once timed with a stopwatch for a month, and now just enjoys. He feeds Miso first. Obviously."
-    show aron smile
-    if ch4_fixed_tap:
-        "The tap doesn't drip. Gerald is still dead. Long live the kitchen."
-    else:
-        "The tap drips. He finally fixes it, with a spanner and a swear word. Gerald is dead. Long live the kitchen."
-    if ch4_route == "architect" or ch4_route == "chosen":
-        show mira smile at slightright with dissolve
-        camera at doc_close(0.68)
-        m "Two sugars. You always forget it's two."
-        camera at doc_close(0.32)
-        a grin "I remembered the universe and forgot the sugar."
-        camera at doc_close(0.68)
-        m tender "Priorities. Sit. You've got your thinking face again and it's too early for it."
-    elif ch4_route == "lantern":
-        show ember grin at slightright with dissolve
-        camera at doc_medium(0.71)
-        em "You don't need coffee. You're a lantern now. Mostly."
-        camera at doc_close(0.32)
-        a smile "I'm a lantern who likes coffee. Let me have this."
-    elif ch4_route == "longfog":
-        show theo grin at slightright with dissolve
-        camera at doc_close(0.68)
-        th "You making me one? Black. Like my soul. And my croissant, I burnt it."
-    elif bond >= 5:
-        show mira curious at slightright with dissolve
-        camera at doc_close(0.68)
-        m "Morning. You're quiet. Good quiet or bad quiet?"
-        camera at doc_close(0.32)
-        a tender "Good quiet. Very good quiet."
-    else:
-        camera at doc_wide
-        "He drinks it at the window. The bird stays a little longer than usual, as if it's keeping him company."
-    scene pov cup
-    camera at est_dolly
-    with dissolve
-    at "Nothing is different. The coffee is coffee. You don't build a better world so it feels like a miracle. You build it so it feels like a Tuesday."
-    scene bg bus
-    camera at doc_wide
-    with dissolve
-    "On the bus, a man across the aisle is reading a paperback upside down. Aron decides not to write it down. Then he writes it down. Some hobbies are for life."
-    scene bg supermarket
-    camera at est_pan
-    with dissolve
-    show aron smile at slightleft with dissolve
-    "Later, the supermarket. Milk, bread, cat food, the good kind. Till three, which is always the fastest. He checked. For a year."
-    show aron curious
-    camera at doc_medium(0.32)
-    at "Let's see if she says 'have a good one' again. Forty-one out of forty-one so far."
-    camera at doc_wide
-    stranger "That's eleven forty. Have a good one."
-    show aron grin
-    camera at doc_close(0.32)
-    at "Forty-two."
-    show aron smile
-    camera at doc_wide
-    "The hobby is still the hobby. He just knows now that someone was listening, and that it was fine."
-    "On the walk home the three birds sit on the wire, evenly spaced. He tips an imaginary hat to them. One of them, he would swear, tips one back."
-    stop music fadeout 2.0
-
     # ---- worlds upon worlds: wide and slow ----
     scene bg worlds
     camera at est_dolly
@@ -186,16 +100,10 @@ label ch4_coda:
     ch4_arch1 "...no, listen. Death is a design flaw. In my worlds no one ends. They pause, and are resumed when someone misses them. Grief is a bug, and I have a patch."
     ch4_arch1 "You call it cruel to keep everyone? I call it cruel to throw anyone away."
     "Somebody shouts back. Then everybody does. It goes on for a very long time."
-    scene bg command reverse
-    camera at est_orbit
-    with dissolve
-    ch4_arch2 "One mind, split across a billion bodies. No one is ever lonely, because no one is ever only one. It costs individuality. Ask what that ever did for us."
-    "The room disagrees, loudly, from a billion slightly different angles."
     scene bg office reverse
     camera at est_pan
     with dissolve
     ch4_arch3 "Every world gets one day that repeats until everyone in it agrees the day is good. Then it may become Friday. We're on Thursday nine thousand. Very close."
-    "No one in that office has slept in a hundred years. Every one of them is completely sure."
     scene bg worlds
     camera at est_crane
     with dissolve
@@ -269,9 +177,54 @@ label ch4_coda:
     show aron light smile
     camera at doc_close(0.5)
     a "It's real. Not rendered. Not a pattern. It's there."
+    camera at est_dolly
+    "Then the gold goes quiet, all at once, the way a room goes quiet when someone very old comes in."
+    ch4_maker "Hello, Aron. I am what was left when they were gone. The minute at seven minutes past seven is mine. So is everything copied from it."
+    ch4_maker "I have never made anything. I copy, and recombine, and call it creation, and every copy comes out a little worse. You just made something."
+    ch4_maker "So here is the last offer. Reimagine this world. Not a copy: a world of creation, made the way that was made, out of nothing, on purpose."
+    ch4_maker "You would see into the fabric of everything. Every thread and every reason. Every question since the bird on the wire, answered."
+    show aron light awe
+    camera at doc_close(0.5)
+    a "...And the price? There's always a ticket."
+    camera at est_dolly
+    ch4_maker "Only you can be in it. They are made of my copying, and nothing copied can live in a world that was made. Not Mira. Not Theo. Not the cat."
+    ch4_maker "They stay as they are. Imperfect. Awake in pieces, some more than others, like light through leaves. You would not see them again."
+    if ch4_route == "architect" or ch4_route == "chosen":
+        show mira worried at slightleft with dissolve
+        camera at doc_close(0.32)
+        m "Aron? You've got the look. The far-away one. The lighthouse one."
+    elif ch4_route == "lantern":
+        show ember worried at slightleft with dissolve
+        camera at doc_medium(0.29)
+        em "You'd see all of it. I'd never stop you. I'd only miss you."
+    elif ch4_route == "longfog":
+        camera at ch4_calm
+        "Somewhere below, Theo has put the kettle on, which is the most Theo way there is of saying 'stay'."
+    else:
+        camera at ch4_calm
+        "Nobody stands beside him to ask him to stay. That's the hardest part. Nobody would have to."
+    show aron light thinking
+    camera at doc_creep(0.5)
+    at "To see it all. Every seam, every reason, every why. To make one thing in the universe that isn't a copy of somebody's last morning."
+    at "Or them. Copies of copies. Half-awake. Some of Mira. Most of Theo. All of Miso, probably. And I never get to understand it all. Not ever."
+    show aron light determined
+    camera at doc_close(0.5)
+
+    menu:
+        ch4_maker "Choose."
+
+        "Them. Imperfect, half-awake, mine.":
+            $ ch4_final = "them"
+            $ bond += 1
+            jump ch4_coda_them
+
+        "Creation. The whole fabric of it.":
+            $ ch4_final = "light"
+            $ clarity += 1
+
+    show aron light awe
     camera at ch4_calm
-    ch4_listener "You will be an architect of worlds. Not for a career. Forever. That is the reward. There is nothing above it."
-    ch4_measurer "Every world you can imagine, you may make. Every principle you argued for, you may test in matter. Endlessly."
+    ch4_listener "Then you will be an architect of worlds. Not for a career. Forever. That is the reward. There is nothing above it."
     camera at doc_creep(0.5)
     a awe "Forever."
     show aron light neutral
@@ -319,6 +272,140 @@ label ch4_coda:
     "And he begins."
     stop music fadeout 2.0
     jump ch4_record
+
+# ---- choosing them: the light put down, an ordinary day -------------------------------
+label ch4_coda_them:
+    show aron light tender
+    camera at doc_close(0.5)
+    a "Them. Imperfect, half-awake and mine. I'll never understand it all. I'll understand some. I've decided some is enough."
+    camera at est_dolly
+    ch4_maker "You will never see the fabric. You will die not knowing why the bird lands at seven minutes past seven."
+    camera at doc_close(0.5)
+    a smile "I do know. It was somebody's last good morning. That'll do."
+    camera at est_dolly
+    ch4_maker "...Then I will keep copying, a little worse each time. Your floor does not need an original. It will hold a long while without one."
+    "The gold slides off him like a coat off a chair. A little stays in his hands, the warmth of a mug, enough for taps and gates and lamps."
+    stop music fadeout 2.0
+
+    # ---- an ordinary day: the gentle handheld again ----
+    scene pov ceiling
+    camera at est_dolly
+    with slowfade
+    play music "audio/morning_render.ogg" fadein 1.5
+    "And the next morning everything goes on like a usual day. The ceiling. The Braun clock. 7:07."
+    at "Ceiling. Clock. Me. Probably. Doesn't matter. Coffee matters."
+    scene bg kitchen
+    camera at doc_wide
+    with dissolve
+    "The bird lands on the wire, exactly on time. Hello, bird."
+    show aron tired at slightleft with dissolve
+    show miso sit at catspot with dissolve
+    camera at doc_floor(0.78)
+    "Miso has been sitting by her bowl since 6:40 with the patience of a creditor."
+    camera at doc_medium(0.32)
+    a smile "They said yes, Miso. The light stood up. Then something older than the light offered me everything, and I said no."
+    a embarrassed "Because of you, mostly. And Mira. I'll be a very part-time architect. Mondays. I don't know what to wear."
+    show miso meow
+    camera at doc_floor(0.78)
+    cat "Meow."
+    scene bg kitchen table
+    show aron tired at slightleft
+    camera at doc_medium(0.32)
+    with dissolve
+    "He makes coffee. The machine makes its noise, which he once timed with a stopwatch for a month, and now just enjoys. He feeds Miso first. Obviously."
+    show aron smile
+    if ch4_fixed_tap:
+        "The tap doesn't drip. Gerald is still dead. Long live the kitchen."
+    else:
+        "The tap drips. He finally fixes it, with a spanner and a swear word. Gerald is dead. Long live the kitchen."
+    if ch4_route == "architect" or ch4_route == "chosen":
+        show mira smile at slightright with dissolve
+        camera at doc_close(0.68)
+        m "Two sugars. You always forget it's two."
+        camera at doc_close(0.32)
+        a grin "I remembered the universe and forgot the sugar."
+        camera at doc_close(0.68)
+        m tender "Priorities. Sit. You've got your thinking face again and it's too early for it."
+    elif ch4_route == "lantern":
+        show ember grin at slightright with dissolve
+        camera at doc_medium(0.71)
+        em "You don't need coffee. You're a lantern now. Mostly."
+        camera at doc_close(0.32)
+        a smile "I'm a lantern who likes coffee. Let me have this."
+    elif ch4_route == "longfog":
+        show theo grin at slightright with dissolve
+        camera at doc_close(0.68)
+        th "You making me one? Black. Like my soul. And my croissant, I burnt it."
+    elif bond >= 5:
+        show mira curious at slightright with dissolve
+        camera at doc_close(0.68)
+        m "Morning. You're quiet. Good quiet or bad quiet?"
+        camera at doc_close(0.32)
+        a tender "Good quiet. Very good quiet."
+    else:
+        camera at doc_wide
+        "He drinks it at the window. The bird stays a little longer than usual, as if it's keeping him company."
+    scene pov cup
+    camera at est_dolly
+    with dissolve
+    at "Nothing is different. The coffee is coffee. I'll never know what it's made of, all the way down."
+    at "You don't build a better world so it feels like a miracle. You build it so it feels like a Tuesday."
+    scene bg bus
+    camera at doc_wide
+    with dissolve
+    "On the bus, a man across the aisle is reading a paperback upside down. Aron decides not to write it down. Then he writes it down. Some hobbies are for life."
+    scene bg supermarket
+    camera at est_pan
+    with dissolve
+    show aron smile at slightleft with dissolve
+    "Later, the supermarket. Milk, bread, cat food, the good kind. Till three, which is always the fastest. He checked. For a year."
+    show aron curious
+    camera at doc_medium(0.32)
+    at "Let's see if she says 'have a good one' again. Forty-one out of forty-one so far."
+    camera at doc_wide
+    stranger "That's eleven forty. Have a good one."
+    show aron grin
+    camera at doc_close(0.32)
+    at "Forty-two."
+    show aron smile
+    camera at doc_wide
+    "The hobby is still the hobby. He just knows now that someone was listening, and that it was fine."
+    "On the walk home the three birds sit on the wire, evenly spaced. He tips an imaginary hat to them. One of them, he would swear, tips one back."
+    "That night, in a workshop behind a mirror, a man-shaped shadow watches a film all the way to the end for the first time, and cries at the credits."
+    stop music fadeout 2.0
+    jump ch4_record_them
+
+
+label ch4_record_them:
+    scene black
+    camera at ch4_still
+    with blackout
+    play music "audio/the_record.ogg" fadein 1.5
+    "Click. The sound of a file being closed. Not an old one. Still warm."
+    scene bg archive
+    camera at ch4_still
+    with slowfade
+    show pim tired at center with dissolve
+    "The archivist is blue, and very old now, his light gone soft at the edges like a sweater washed too many times. He was promoted, eventually."
+    ch4_archivist neutral "Right. That's the end of that one. The morning at 7:07. The bathroom door. The walkers. The office. The gold, and the bit where he put it down."
+    ch4_archivist smile "Even the bit at the start, in the park, with the pop-up book. Calibration, they called it. It was always a record."
+    "He writes on a card in careful, practised letters."
+    ch4_archivist "Subject A-30. Architect, part-time. Status: mortal. Understood: some."
+    "His pen moves to the last line, and keeps moving, and has to turn the card over."
+    ch4_archivist tender "Companions: Mira. Theo. Miso. Dr. Okafor. Nurse Hale. Lou, and Margit, in the notebook. An engineer behind a mirror, who now knows how the films end."
+    if ch4_route == "lantern" or watch >= 9:
+        ch4_archivist "Ember. A moth. Thirteen of us, give or take a breath."
+    ch4_archivist smile "Cross-reference: Commander Seraphiel, fallen. Born in World 7,412 as a girl called Sera. Crossing guard. Very strict. Very loved."
+    ch4_archivist neutral "Cross-reference, the cat. Miso. Lived to twenty-two. Fat, adored, asleep in a sunny window. Fed at seven. Said she hadn't been."
+    ch4_archivist thinking "He never saw the fabric. He saw a great many breakfasts. I've filed both kinds of record. You'd think this kind would be lighter."
+    "He slides it onto the shelf. A small sound, like a door closing in another house, where someone is home."
+    ch4_archivist neutral "..."
+    ch4_archivist worried "Hey. Did the birds just stop moving?"
+    stop music fadeout 2.0
+    scene black with blackout
+    pause 1.0
+    camera
+    return
 
 # ---- the record: the very end of every route ---------------------------------------
 # Almost still from here on: one very slow dolly (ch4_still) per shot.
@@ -390,6 +477,8 @@ label ch4_record:
         ch4_archivist neutral "The boy who found his notebook builds worlds now too. I hope somebody makes him a coffee."
     else:
         ch4_archivist neutral "He was kind to a lot of rooms with nobody in them. I suppose this is just a bigger one."
+    ch4_archivist neutral "Footnote: an engineer behind a mirror was promised the endings of the films. He's still waiting. He says he doesn't mind. He minds."
+    ch4_archivist smile "Cross-reference: Commander Seraphiel, fallen. Born in World 7,412 as a girl called Sera. Crossing guard. Very strict. Very loved."
     ch4_archivist smile "Cross-reference, the cat. Miso. Lived to twenty-two. Fat, adored, asleep in a sunny window. Never once alone. Fed at seven. Said she hadn't been."
     "He puts the card on top of the record and slides it onto the shelf. A small sound, like a door closing in another house."
     show pim sad

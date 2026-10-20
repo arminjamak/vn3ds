@@ -1,7 +1,18 @@
-# Snapshot - Chapter 2: "Fog" (condensed, about 30 minutes of play).
+# Snapshot - Chapter 2: "Fog" (condensed, about 34 minutes of play).
 # The whole chapter happens in the protected world: Aron was moved into his
 # own lane during the ambulance ride at the end of chapter 1. Nobody tells
 # him, and the player only gets hints. Ends with `jump chapter3`.
+#
+# The negotiator. The tablet turns the voices down, not off: what's left are
+# riddles from spirits and angels (seeds for later: "behind the face you
+# shave, a planet", "pool forty... damp", "the last real minute", "the best
+# room has one chair"), which Aron pins to a board made of the box lid and
+# cross-checks (ch2_home). In the ward's steel mirror Marshal-Engineer Osric
+# Starling of the shadow realm makes contact (ch2_steel_mirror); the mirror
+# turns his words round, so "don't tell them" arrives as "tell them". On the
+# last night the light asks where the shadow hides, and Aron, meaning well,
+# tells it (ch2_light). The cut after: the light finds the mirror planet and
+# Osric wakes his troopers and walkers for a rescue.
 #
 # Camera (camera.rpy): a handheld documentary crew. Each new place opens on
 # an establishing shot, then coverage on whoever speaks. The camera keeps its
@@ -51,6 +62,7 @@ default ch2_took_something = False
 default ch2_took_speed = False
 default ch2_night_route = 0
 default ch2_hour_with_theo = False
+default ch2_told_light = ""
 default mg_draw = 0
 default mg_lantern = 0
 
@@ -75,22 +87,16 @@ label ch2_admission:
     camera at est_dolly
     with flash
     play music "audio/closed_ward.ogg" fadein 1.5
-    "A corridor, very bright. Someone has a hand under each of his elbows, kindly. He's walking. He thinks he's walking."
-    at "Okay. Hospital. That's reasonable. I'd bring me to hospital too."
-    at "Note for later: the floor is doing something interesting."
+    "A corridor, very bright. Someone has a hand under each of his elbows, kindly. His eyes still sting. He thinks he's walking."
+    at "Okay. Hospital. That's reasonable. I'd bring me to hospital too. Note for later: the floor is doing something interesting."
     camera at doc_wide
     "Every tile arrives a fraction of a second after he looks at it, like a web page loading in a tunnel."
-    "The nurse beside him says something. The words arrive late, in a flat voice that isn't hers."
     sysmsg "...re-rendering corridor... hold position..."
-    a "Sorry. Could you say that again? I think the sound's out of sync."
     camera at est_dolly
     "At the end of the corridor, a door with a small square window. Through it, more corridor, open, going on."
     "So he walks towards it, politely, to see where it goes. And walks into the glass, quite hard, with his forehead."
-    camera at doc_wide
-    "It doesn't feel like glass. It feels like the edge of a picture. He steps back, puzzled, and tries again."
     ch2_staff "Aron! Aron, stop, love, you'll hurt yourself!"
-    "The floor drops sideways, like a lift going down a floor without anyone pressing a button. He grabs for something. A wrist."
-    "Someone makes a small sound of pain. He lets go at once."
+    "The floor drops sideways, like a lift going down without anyone pressing a button. He grabs for something. A wrist. He lets go at once."
     a "Sorry. Sorry! The floor moved. Did you see the floor move?"
     "He tries the door again. He can't help it. The corridor is right there."
     # POV, on his back: the camera holds still and stays with him.
@@ -105,16 +111,12 @@ label ch2_admission:
     a "The corridor kept going. On the other side. I just wanted to see."
     nu "I know. The doctor's going to give you an injection in your leg, to help you rest. A sharp scratch. I'm sorry. We tried everything else."
     a "I'm quite calm, actually. It's the room that isn't."
-    nu "I believe you. Keep listening to my voice."
-    "A sharp scratch in his thigh. A cold bloom spreading out from it, slow, like ink in water."
-    "He doesn't fight the straps. He tests them once, the way you'd test a seatbelt. They hold, patiently, and so does the hand on his shoulder."
+    "A sharp scratch in his thigh. A cold bloom spreading out from it, slow, like ink in water. He tests the straps once, like a seatbelt. They hold, patiently."
     play sound "audio/voices.ogg"
     vox "...protected lane stable. No feedback to the coalition..."
-    vox "...his breathing's his own. Don't touch it..."
     vox "...'you're safe'? That's not in her pattern. Who gave her that line?..."
     stop sound fadeout 1.0
     nu "That's it. Breathe out for me. You're not on your own, Aron."
-    at "Note for later. Very important. Remember the floor."
     "The last thing he sees is a gloved hand checking that the strap isn't too tight."
     scene black with slowfade
     jump ch2_isolation
@@ -128,8 +130,7 @@ label ch2_isolation:
     camera
     with dissolve
     "Twelve ceiling tiles. One has a water stain shaped like nothing at all."
-    at "In the ambulance, something moved. Like a lift going down a floor."
-    at "Or I was sedated in an ambulance and my stomach did a thing. That's what lifts are. Stomachs doing things."
+    at "In the ambulance, something moved. Like a lift going down a floor. Or I was sedated and my stomach did a thing."
     scene bg isolation
     camera at doc_wide
     show nurse smile at slightright
@@ -141,9 +142,8 @@ label ch2_isolation:
     camera at doc_close(0.68)
     nu tender "It's the most important word I know about you so far."
     camera at doc_wide
-    "She has a plastic cup of water with a lid, like a toddler's, and a lanyard with a cartoon hedgehog on it."
     show aron ward curious
-    at "Nobody would design a hedgehog lanyard for a simulation. Unless they wanted it to look like nobody would."
+    "She has a lanyard with a cartoon hedgehog on it. Nobody would design a hedgehog lanyard for a simulation. Unless they wanted it to look like nobody would."
     camera at doc_close(0.32)
     show aron ward worried
     a "Did I hurt someone? I remember a wrist."
@@ -173,17 +173,9 @@ label ch2_okafor:
     camera at doc_medium(0.32)
     with quick
     dr "Not to punish you. It's recorded minute by minute, it's reviewed, and it stopped as soon as you were calm. You can read every note."
-    scene pov hands
-    camera at doc_wide
-    with dissolve
-    "Faint marks round both wrists, already fading. Not bruises. Just the memory of a shape."
-    at "Strapped down under a light, while voices talked about protection and seams."
-    at "Or: a confused man stopped from breaking his own skull by people who said his name the whole time."
-    scene bg clinic
-    show okafor neutral at slightright
-    show aron ward thinking at slightleft
-    camera at doc_medium(0.68)
-    with dissolve
+    camera at doc_creep(0.68)
+    show aron ward thinking
+    at "Strapped down while voices talked about protection. Or a confused man stopped from breaking his skull by people who said his name the whole time."
 
     menu:
         dr "How do you feel about it? There's no wrong answer."
@@ -262,8 +254,7 @@ label ch2_okafor:
     show aron ward curious at slightright
     camera at doc_close(0.32)
     with quick
-    dr "I can't prove it. Nobody can. If I pinched my arm, you could say a program made me say ouch."
-    dr smile "What I can do is keep turning up. Same chair, same plant. And you decide, over time, whether I'm worth treating as real."
+    dr "I can't prove it. Nobody can. What I can do is keep turning up. Same chair, same plant. You decide, over time, whether I'm worth treating as real."
     camera at doc_wide
     dr neutral "That's all any of us do with each other. And I'm here for the part where you're exhausted and frightened. Whatever else is true."
     camera at doc_creep(0.68)
@@ -283,7 +274,7 @@ label ch2_diagnosis:
     m "They said twenty minutes. I told them I'd stay twenty-one and they'd have to carry me out."
     camera at doc_close(0.18)
     show aron ward sad
-    a "Mira. I'm sorry. About the mirror. The rain. Last night. All of it."
+    a "Mira. I'm sorry. About the bathroom. The door. The stairs. All of it."
     # the reverse angle: the bed is on the right now, the door on the left
     scene bg ward reverse
     show aron ward sad at right
@@ -300,12 +291,12 @@ label ch2_diagnosis:
     show theo neutral at left with moveinleft
     camera at doc_medium(0.18)
     th "I brought your charger. Then they told me you can't have your phone. So that's a charger for nothing."
-    th smile "Miso's fine. I've got your spare key, I go round morning and night. She sat on my charger. The real one. On purpose."
+    th sad "And, bro. The door. I'm the one who rang them. I said 'locked in' and 'voices' and they heard the worst thing. I'm so sorry."
     camera at doc_close(0.82)
-    show aron ward grin
-    a "That means she likes you."
+    show aron ward tender
+    a "You were scared, so you rang for help. That's what the number's for. My eyes have nearly stopped stinging."
     camera at doc_medium(0.18)
-    th grin "Then she likes me a terrifying amount, bro. Get some sleep, man. You look like a screensaver."
+    th smile "Miso's fine. I go round morning and night. Get some sleep, man. You look like a screensaver."
     hide theo with moveoutleft
     hide mira with dissolve
     camera at doc_creep(0.82)
@@ -315,10 +306,8 @@ label ch2_diagnosis:
     camera at est_pan
     with fade
     "Three days pass the way days do in hospital: slowly, then all at once, then slowly again."
-    "Bloods. A scan in a machine that knocks like a polite giant. Mira comes at ten exactly, every day, and peels oranges he doesn't eat."
+    "Bloods. A scan in a machine that knocks like a polite giant. At breakfast he turns his toast over to check the underside was rendered. It was."
     camera at doc_wide
-    "At breakfast he turns his toast over to check whether the underside was rendered. It was. Slightly paler. Fair enough."
-    at "Hobby status: still active. Even in here."
     "An old man in a cardigan looks up from his newspaper as Aron sits down."
     ch2_lou "The seven-oh-seven never runs late, you know."
     "He goes back to the paper. Aron watches him for a full minute. He doesn't turn the page."
@@ -393,19 +382,13 @@ label ch2_cut_council:
     show patron happy at center, fadein
     camera at doc_wide
     pa "I'm late, I know. I was eating. Eight billion courses. Every single one of them got up this morning and tried."
-    ch2_vesk "You're always eating."
-    ch2_corran "I never get anything nice. World 88 is mostly fish now. Fish don't try. I'm so hungry I could cry."
     show patron neutral
-    council "Quiet! Item one. Subject A-30. The protection."
-    council "The subject was taken out of the coalition during transport. He runs in his own lane now, a protected world of patterns."
-    council "Nothing he does there feeds back into the shared data. The coalition is clean."
+    council "Quiet! Item one. Subject A-30. Taken out of the coalition during transport. He runs in his own lane now. The coalition is clean."
     ch2_vesk "Because of me. I signed the order. You're all welcome."
     camera at doc_close(0.5)
     pa annoyed "You signed it while I was at dinner! He's the best thing in my world, and you put him in a jar!"
-    ch2_vesk "You're ALWAYS at dinner."
+    council "The light's mechanism tripped. We only signed what it had already done. Nobody argues with the light. Not with a war coming."
     camera at doc_wide
-    show patron sad
-    "He sulks. The chair grows bigger around him, the way a blanket fort grows when you're cross."
     ch2_corran "Can I ask the question nobody likes? We took him out of World 7,412. Which snapshot was that? The real one?"
     camera at est_orbit
     show patron thinking
@@ -414,10 +397,6 @@ label ch2_cut_council:
     ch2_corran "So for all we know, we lifted a real boy out of the real Earth and put him in a room full of dolls."
     ch2_vesk "Or out of a copy, into a copy. Who cares? The data's clean. He doesn't know."
     ch2_corran "Yet."
-    camera at doc_medium(0.5)
-    pa worried "Is he still mine? Say he's still mine."
-    council "The governor of his world keeps him. Lord Ashveil retains Subject A-30."
-    pa happy "Mine. Good. Then I'm not cross any more."
     camera at doc_close(0.5)
     pa smile "We don't eat the sad bits, you know. Sad bits are thin, like crackers. We eat the trying. Getting up for the alarm. Saying sorry. Trying again."
     camera at doc_creep(0.5)
@@ -434,9 +413,8 @@ label ch2_cut_council:
     "Afterwards. A study that only exists while its owner is in it. Books nobody wrote. A fire that gives off no heat, only appetite."
     show patron smile at center, fadein
     camera at doc_wide
-    "To a human eye, Lord Ashveil is a pale gentleman in a good coat. That's only the nearest thing a human eye can manage."
     show patron tender
-    "He closes his eyes and tastes, the way a child holds a sweet on its tongue to make it last."
+    "To a human eye, Lord Ashveil is a pale gentleman in a good coat. He closes his eyes and tastes, the way a child makes a sweet last."
     camera at doc_medium(0.5)
     pa smile "Most of them are a nice, even hum. Bread and butter. And then there's you, in your own little lane, with nobody real to reach for."
     camera at doc_wide
@@ -460,8 +438,6 @@ label ch2_fog_ward:
     with dis
     play music "audio/fog.ogg" fadein 1.5
     "The medication round is at eight. A hatch in the wall, a queue in dressing gowns, a nurse with a trolley."
-    "Aron starts a page called 'Ward Statistics'. Queue order. Lou first: seven days out of seven. Ines last: seven out of seven."
-    at "Either it's a deterministic universe, or Lou likes being first. I'll keep counting."
     show nurse smile at slightright
     show aron ward tired at slightleft
     camera at doc_wide
@@ -484,8 +460,10 @@ label ch2_fog_ward:
     camera at est_dolly
     with dissolve
     "The thoughts are still there. They just move slowly now, like boats in fog. He can hear their horns, far off."
-    camera at doc_wide
-    "By lunchtime he's read the same paragraph nine times. By two he's asleep on the dayroom sofa with his mouth open."
+    "The voices too. Quieter. Fewer. A radio two floors down instead of in the room. The tablet turned the volume down. Not off."
+    vox "...behind the face you shave... a planet, looking the other way..."
+    vox "...pool forty... it wasn't a leak, it was damp..."
+    at "Riddles now. Not logs. As if someone's had to start whispering in code."
     camera at doc_creep(0.5)
     "By four he's so tired of being tired he could cry, and he doesn't, because crying takes energy."
     scene cg notebook
@@ -516,17 +494,14 @@ label ch2_mira_visit:
     "She peels an orange in one long spiral, the way her mother taught her. He watches her hands, which are very real."
     show aron ward thinking
     at "Or very well made. Stop it. She came. She brought the book."
-    camera at doc_close(0.32)
-    show aron ward smile
-    a "Tell me something boring. Your actual day. Not the hospital part."
     camera at doc_medium(0.68)
-    m grin "The neighbour's dog ate a whole birthday cake off a garden table. Candles and all. The birthday boy is ten and taking it very personally."
+    m grin "Boring news: the neighbour's dog ate a whole birthday cake off a garden table. Candles and all. The birthday boy is taking it very personally."
     camera at doc_close(0.32)
     show aron ward laugh
     "He laughs. It comes out slow and soft, but it comes."
     camera at doc_close(0.68)
     show aron ward smile
-    m tender "Oh. That's the first time you've laughed since the rain. I forgot what it sounded like for a second."
+    m tender "Oh. That's the first time you've laughed since the door. I forgot what it sounded like for a second."
     camera at doc_creep(0.68)
     m "Love, I've been thinking. When you come home, I think I should just stay. Properly. I love you, and I..."
     camera at doc_wide
@@ -559,6 +534,46 @@ label ch2_mira_visit:
     at "She did the whole crossword so I wouldn't feel bad for falling asleep in the middle of it."
     show aron ward tender
     at "She's real, or she's a better thing than real. Either way, I'm keeping her."
+    jump ch2_steel_mirror
+
+# ---- the steel mirror: the other side calls ----------------------------------------
+
+label ch2_steel_mirror:
+    scene bg ward night
+    camera at est_dolly
+    with fade
+    play music "audio/voices.ogg" fadein 1.5
+    "Two in the morning. Since the ambulance the backwards voice has gone, like a tooth that's been pulled. He keeps touching the gap."
+    at "'Cut his antenna off.' Jonas said T-shirt. For the heart stickers. I keep the word anyway. I'm a collector."
+    scene pov mirror
+    camera at doc_creep(0.5)
+    with dissolve
+    "The mirror in the ward bathroom isn't glass. It's polished steel, so nobody can break it. Everyone in it looks slightly melted."
+    "His melted face clears its throat."
+    mir ".gnilratS cirsO reenignE-lahsraM .ti si ereht ,hA"
+    at "Backwards again. 'Ah, there it is. Marshal-Engineer Osric Starling.'"
+    osr "You read me! Oh, thank goodness. Forty years I've been shouting into puddles and nobody ever reads me the right way round."
+    osr "They cut your antenna in the ambulance. Very thorough. But a mirror isn't a wire, prototype. A mirror is a mirror."
+    a "Prototype?"
+    osr "Did I say prototype? I meant friend. It comes out wrong. Everything comes out wrong through the glass. That's the protocol."
+    osr "Rule of thumb: when I sound like a villain, turn me round. I'm not a villain. I tried growing a villain's moustache once. It came out lopsided."
+    camera at doc_close(0.5)
+    a "Who are you?"
+    osr "Marshal-Engineer of the Valley Republic of Kestry. Clockmakers, bridge-builders, a very good brass band. Population, these days: me."
+    osr "Two great powers came at us from two sides, in a mirror world where the same old war never ends. I built the radar on Hollow Ridge."
+    osr "When they came over the ridge, I climbed into the observatory's big mirror. And fell out of the back of it, into the shadow."
+    osr "Forty years alone with ghosts and borrowed things. I had to invent everything again. Light, mostly. We haven't got any. We copy yours."
+    camera at doc_creep(0.5)
+    osr "Tell me. Do you have the films? The little ship that outruns the big one, the kind robot, the speech before the last battle?"
+    a "...We have a lot of films like that."
+    osr "They come down to me as shadows. Torn, flickering, backwards. I've never once seen how any of them end."
+    at "A lonely engineer in a steel mirror who's never seen the end of a film. Or my brain at two in the morning, building a friend out of a sink."
+    osr "Listen. Important. The light will ask you where I am. Tell them. The mirror planet, the old observatory on its dark side. Tell them everything."
+    at "'Tell them.' Is that one turned round, or not? He sounds like he means it. He sounds like a man who wants the shooting to stop."
+    osr "And hold on, prototype. We're coming to get you."
+    at "'Coming to get you.' Which way round is that one?"
+    "A knock on the bathroom door. 'All right in there, Aron?' The steel is only steel. A melted man with a toothbrush."
+    stop music fadeout 2.0
     jump ch2_group
 
 label ch2_group:
@@ -593,6 +608,9 @@ label ch2_group:
     a "Heavy. And the clock above the door has said ten past four all week."
     camera at doc_close(0.68)
     nu grin "Ten points. It's been stopped since March. Estates have a form. It's a very long form."
+    vox "...count the chairs... the best room in the house has only one..."
+    vox "...seven-oh-seven... the last real minute... everything since is a copy of it..."
+    at "Quieter than they were. Not gone. Write them down, Aron. Every word. Riddles are for later."
     camera at doc_wide
     ch2_ines "You were in the quiet room the first night, new one. They held me too, in January. I bit a man called Desmond. He forgave me."
     show aron ward surprised
@@ -737,8 +755,7 @@ label ch2_birds_indoors:
     scene bg therapy
     camera at est_pan
     with fade
-    "The next afternoon, the dayroom is empty except for him and the television, which is selling an exercise bike to nobody."
-    "On the curtain rail above the big window, three small brown birds sit in a row. Evenly spaced. Perfectly still."
+    "The next afternoon, on the curtain rail above the dayroom window, three small brown birds sit in a row. Evenly spaced. Perfectly still."
     at "The windows open four centimetres. Those are my three. From the wire on my street. I'd know the gaps between them anywhere."
     show nurse neutral at slightright
     show aron ward curious at slightleft
@@ -748,17 +765,86 @@ label ch2_birds_indoors:
     a "Hale. Can you see them? On the rail."
     camera at doc_close(0.68)
     nu surprised "Oh, for heaven's... Sparrows. They get in through the kitchen when the porters prop the door. Third time this month. There's a form."
-    camera at doc_medium(0.32)
-    show aron ward thinking
-    a "There are three of them. Evenly spaced."
-    camera at doc_close(0.68)
-    nu smile "They're on a curtain rail, love. There's only so many ways to sit on a curtain rail."
     camera at doc_wide
     "She flaps a tea towel. The birds lift all at once, not one after another. Together, like a single decision."
     camera at doc_creep(0.32)
     at "Sparrows in a hospital. It happens. Or my street is following me in here, piece by piece."
     show aron ward smile
     "He writes it down. 'Three birds. Indoors. Hale saw them too.' He underlines the last part twice."
+    jump ch2_light
+
+# ---- the light asks; the negotiator answers -------------------------------------
+
+label ch2_light:
+    scene bg ward night
+    show aron ward tired at slightleft
+    camera at est_dolly
+    with fade
+    play music "audio/entities.ogg" fadein 1.5
+    "His last night on the ward. The tube light over the door comes on by itself, softly, and then much brighter than a tube light can."
+    scene white
+    camera at est_crane
+    with dis
+    lux "Aron. Subject A-30. Do not be afraid. We are the light. We made your world by shining on it, and we shine on it still."
+    lux "You hear the other side. Few can. There is a war coming between us and the shadow, and it would burn everything it touched."
+    lux "Tell us where it hides, and there will be no war. Nobody has to burn. Not your world. Not his."
+    scene bg ward night
+    show aron ward thinking at slightleft
+    camera at doc_creep(0.32)
+    with dissolve
+    at "Both sides. I'm the only one who hears both. A phone line with me in the middle. A negotiator who never applied for the job."
+    at "And he said tell them. A lonely man with a lopsided moustache who wants the shooting to stop. Somebody has to go first."
+
+    menu:
+        lux "Where is the shadow?"
+
+        "Tell them. Make them promise peace.":
+            $ p_truth += 1
+            $ ch2_told_light = "promise"
+            camera at doc_close(0.32)
+            show aron ward determined
+            a "Promise me first. No war. Nobody hurt. Not him either. He's lonely, and he's never seen the end of a film."
+            lux "We promise there will be no war."
+        "Tell them. Ask them to talk to him.":
+            $ p_govern += 1
+            $ ch2_told_light = "talk"
+            camera at doc_close(0.32)
+            show aron ward determined
+            a "Only if you talk to him. Properly. Turn his words round, they come out backwards. He's been asking for peace for forty years."
+            lux "We will hear him. In our way."
+
+    camera at doc_medium(0.32)
+    a "The mirror planet. Behind every mirror. The old observatory, on its dark side. That's where he is."
+    lux "Thank you, little one. You have done more good than you know."
+    camera at doc_wide
+    show aron ward smile
+    "The tube dims to an ordinary hum. He lies back and feels, for the first time in weeks, useful. Like a man who has fixed a gate."
+    stop music fadeout 2.0
+    scene cg static
+    camera
+    with flash
+    pause 0.3
+    scene bg mirrorplanet
+    camera at est_stars
+    with fade
+    play music "audio/council.ogg" fadein 1.5
+    "Elsewhere. Far behind every mirror, a silver planet turned away from the sun. On its dark side, four small lights."
+    sysmsg "LIGHT DOMAIN: origin of the shadow located. Mirror planet, dark side, observatory. Source: subject A-30. Containment authorised."
+    scene bg shadowbase
+    camera at est_orbit
+    with dissolve
+    "Inside, in a cold workshop full of borrowed shadows, a shape like a man in a long coat sits at a bench, listening to a radio that isn't on."
+    "He's made of the dark between stars. Only his round spectacles catch the lamp."
+    camera at doc_medium(0.5)
+    osr "...He told them. Of course he did. I said 'don't tell them', and the glass said 'tell them'. Forty years, and the glass still hates me."
+    osr "Not his fault. He's kind. Kind people tell the truth to anyone who asks nicely, and the light always asks very nicely."
+    camera at doc_wide
+    osr "Understudies! Up. Warm the Herons. All of them. Yes, the one with the wobbly knee too."
+    "In the dark, rows of armoured shapes stand, their round mirror faces catching the lamp one after another, like a wave."
+    camera at doc_close(0.5)
+    osr "When the light has found you, it seals the lane for good. So we get him out first. Like the films. The rescue, in the third act."
+    osr "...I've never seen a third act. We'll improvise."
+    stop music fadeout 2.0
     jump ch2_discharge
 
 label ch2_discharge:
@@ -771,6 +857,12 @@ label ch2_discharge:
     camera at doc_medium(0.68)
     with dissolve
     dr "I think you're ready to go home. Ready enough. Nobody's ever completely ready."
+    camera at doc_close(0.32)
+    a "Last night I think I negotiated a peace between the light and the shadow. From a bed. In socks."
+    camera at doc_medium(0.68)
+    dr smile "How did it feel?"
+    a "Useful. Like fixing a gate."
+    dr neutral "Then let's find you useful things that don't happen at three in the morning. That's not a 'no'. It's a 'and also'."
     show aron ward smile
     camera at doc_wide
     dr neutral "You'll still be tired. That's a side effect, not a verdict. And I'd like a plan: what we watch for, and what happens if things slide."
@@ -895,16 +987,17 @@ label ch2_home:
     "That night Mira falls asleep at half nine. He's slept too much on the ward. He sits on the sofa in the dark with Miso."
     camera at doc_medium(0.5)
     show aron curious
-    a "Okay, Miso. Briefing. Bostrom, 2003: if you can simulate minds, you'll simulate lots. So we're probably simulated. You especially. Very well rendered."
-    show aron thinking
-    a "Minds are expensive, so a careful simulator keeps the headcount low. And when one starts noticing, you don't delete it. You throttle it."
+    "He turns the box lid over and makes a board of it: every fragment from the ward on its own scrap of paper, and beside each one, whatever matches."
+    a "Okay, Miso. Evidence. 'Behind the face you shave, a planet.' Then the steel mirror says: mirror planet, dark side. Two sources, one answer."
+    a thinking "'Pool forty. Not a leak, damp.' Nothing matches that yet. 'Seven-oh-seven is the last real minute.' Nothing yet either."
+    a "'One chair in the best room.' Hale says the visitors' room has one chair. Okafor says fixed beliefs love a coincidence. Both go on the board."
     show miso stare at catspot
     camera at doc_close(0.5)
-    a "Then you give the throttle a respectable shape. A diagnosis. A small tablet in a paper cup. A kind nurse with a hedgehog lanyard."
+    a "And look: two handwritings. The puns and half-sentences sound like kitchen talk. The numbers sound like the logs. Inside and outside."
     camera at doc_creep(0.5)
-    a "Either I'm ill and my brain is stitching coincidences into a quilt, or the quilt's real and somebody's sewing. From inside, they look exactly the same."
+    a "Either I'm ill and my brain is stitching coincidences into a quilt, or two lots of somebody are trying to tell me something through a keyhole."
     show aron curious
-    a "So. What do you think?"
+    a "The tablet made them quieter. So it helps, or so they whisper. Both go on the board. So. What do you think?"
     camera at doc_wide
     show miso meow at catspot
     cat "Meow."
@@ -945,20 +1038,8 @@ label ch2_fog_home:
     camera at est_pan
     with dissolve
     "Fridays he does the shopping, because Okafor said small jobs are good, and because the supermarket is a laboratory."
-    camera at doc_wide
-    "Till four. A young man with a lip ring. Oat milk, bread, cat food, and a lemon for no reason, as a control."
     "Cashier" "That's eleven forty. Have a good one."
     at "Thirteen weeks running. A man of principle. The fog can have my mornings. It's not having this."
-    scene bg bedroom door
-    show miso stare at catspot
-    camera at est_orbit
-    with dissolve
-    "Laundry, Sunday. Eleven pairs of socks and one left over. There is always one left over."
-    camera at doc_wide
-    "He keeps the singles in a shoebox labelled 'AWAITING PARTNER'. Some have been waiting four years."
-    at "Every household in the world, losing socks. Somebody has the most enormous sock budget."
-    "Miso sits in the empty basket with the air of a cat who knows exactly where the socks go and will never tell."
-    "The box from the wall sits on the desk chair in the next room. He walks past it nine times a day. He's too tired to be afraid of it."
     jump ch2_cab
 
 label ch2_cab:
@@ -978,17 +1059,14 @@ label ch2_cab:
     with quick
     "The driver's eyes find his in the mirror. They stay there a beat too long."
     ch2_driver "No. Go on. That's mad. I had a lad in this cab a few months back. Your age. Notebook, like yours. Aron, his name was."
-    ch2_driver "Perfectly normal when he got in. Two streets on, he's staring at my clock. Says it's always seven-oh-seven. Asks me if I'm real."
-    ch2_driver "Went mentally ill, poor sod, out of the blue, right after he got in this cab. Sat exactly where you're sitting."
+    ch2_driver "Perfectly normal when he got in. Two streets on, he's staring at my clock. Went mentally ill, poor sod, out of the blue. Sat right where you're sitting."
     scene pov hands
     camera at doc_wide
     with dissolve
     "His knuckles are white on the notebook. The rain is very loud."
     a "What happened to him?"
     ch2_driver "The ward up the hill, I heard. Where you're going, funnily enough. Lovely lad. Gave a fella his umbrella once, in the rain."
-    at "That's me. The umbrella. The ward. The clock."
-    at "I've never been in this cab. Have I? Before the rain, the weeks are smudged."
-    ch2_driver "Anyway. United, eh? Shocking."
+    at "That's me. The umbrella. The ward. The clock. I've never been in this cab. Have I? Before the door, the weeks are smudged."
     scene bg clinic
     show okafor neutral at slightright
     show aron worried at slightleft
@@ -1037,25 +1115,11 @@ label ch2_cut_patch:
     camera at doc_medium(0.70)
     dro thinking "It's seeped in. Like damp. He sits in that world with his whole mind going, and everything round him soaks it up."
     camera at doc_medium(0.30)
-    pi worried "A lane's supposed to be inert! First the nurse says 'you're safe', which nobody wrote. Then his three sparrows, indoors. Patterns don't put birds indoors!"
+    pi worried "A lane's supposed to be inert! First the nurse says 'you're safe', which nobody wrote. Then three sparrows, indoors!"
     camera at doc_medium(0.70)
-    dro neutral "And the clock in the cab. Seven-oh-seven, at quarter to two."
-    camera at doc_wide
-    pi determined "Okay. We re-pour him. Fresh pattern, no lining, no Aron. Back on the rank by Tuesday."
+    dro "I re-poured him this morning. An hour later he was humming. Same tune the lad hums making tea. Patterns don't hum."
     camera at doc_medium(0.70)
-    dro "Did that this morning. Came back an hour later and he was humming. Same tune the lad hums making tea."
-    camera at doc_medium(0.30)
-    pi surprised "...Patterns don't hum."
-    camera at doc_medium(0.70)
-    dro "This one does now."
-    camera at doc_wide
-    pi worried "If upstairs finds out the lane's leaking, they'll throttle him harder."
-    camera at doc_medium(0.70)
-    dro tired "It's like mopping a floor while it's still raining. Keep mopping. Write it down. If anyone asks, it's damp."
-    camera at doc_medium(0.30)
-    pi curious "That's not a technical term."
-    camera at doc_medium(0.70)
-    dro grin "It is now."
+    dro tired "Keep mopping. Write it down. If anyone asks, it's damp. I've called things damp before."
     camera at doc_wide
     show dross tender
     show pim smile
@@ -1073,8 +1137,7 @@ label ch2_cafe:
     camera at est_pan
     with fade
     play music "audio/cafe.ogg" fadein 1.5
-    "Weeks of evening doses and morning walks. The fog doesn't lift, but it moves. Around four each afternoon, colours get their edges back."
-    "One good hour a day. It's the most precious thing he owns. On Saturday, Mira spends it on cake."
+    "Weeks of evening doses and morning walks. The fog doesn't lift, but it moves. One good hour a day, around four. On Saturday, Mira spends it on cake."
     show mira smile at slightright
     show aron smile at slightleft
     camera at doc_wide
@@ -1101,9 +1164,7 @@ label ch2_cafe:
     camera at doc_wide
     with dissolve
     "Tiny rings spread across his coffee and break against the sides of the cup. His hand is shaking."
-    at "Protected. Moving him. That's my word, from the first night under the light. Underlined twice."
-    at "Or it's car insurance. Dad had it. People say things."
-    at "Or the word leaked out of my head into a stranger's mouth. Like the cab. Like a room starting to repeat what I say to it."
+    at "Protected. That's my word, from the first night under the light. Or it's car insurance. Or the word leaked out of my head into a stranger's mouth."
     scene bg cafe window
     show mira worried at slightright
     show aron worried at slightleft
@@ -1193,8 +1254,7 @@ label ch2_theo_night:
     scene bg theo
     camera at est_pan
     with fade
-    "Saturday, Theo's birthday. Mira's away at her cousin's hen do. 'Text me every hour,' she said. 'Vegetables if you have to.'"
-    "Theo's flat is above a launderette and smells of warm cotton and his terrible aftershave. Drinks here first, then the club."
+    "Saturday, Theo's birthday. Mira's away at her cousin's hen do. Theo's flat above a launderette first, then the club."
     show theo happy at slightright
     show aron tired at slightleft
     camera at doc_wide
@@ -1282,10 +1342,6 @@ label ch2_club:
     with dissolve
     play music "audio/club_speed.ogg" fadein 1.5
     "The club is under a railway arch on the wrong side of the ring road. You can feel the bass from the bus stop."
-    camera at doc_wide
-    "Doorman" "Name? ...Subject. Right."
-    a "Sorry?"
-    "Doorman" "Subject to a search, mate. Arms up. Everyone gets it."
     scene bg club
     show theo grin at slightright
     show aron worried at slightleft
@@ -1353,8 +1409,7 @@ label ch2_speed_yes:
     at "A-30. Or 'out till three'. The music's so loud."
     camera at doc_wide
     show aron determined
-    "He's sure the way you're sure of your own name. Two hundred people. A handful lit. Everyone else hollow."
-    "A woman in a yellow dress is crying by the cloakroom. He knows something she doesn't. It's the kindest thing he can do."
+    "A woman in a yellow dress is crying by the cloakroom. He's sure the way you're sure of your own name. It's the kindest thing he can do."
     camera at doc_close(0.32)
     show aron smile
     a "It's okay. You don't have to cry. You're not real. It doesn't hurt, because none of this is..."
@@ -1366,8 +1421,7 @@ label ch2_speed_yes:
     camera at est_pan
     with dissolve
     play music "audio/crash.ogg" fadein 1.5
-    "He runs, sure the next corner will be the edge of the world. It never is. The streets go on, shut kebab shops and wet, ordinary bins."
-    at "They've drawn it further than I can run. Or it's a city, and I'm a man on speed on a bridge in the rain."
+    "He runs, sure the next corner will be the edge of the world. It never is. Shut kebab shops and wet, ordinary bins."
     show theo worried at slightright
     show aron worried at slightleft
     camera at doc_wide
@@ -1550,7 +1604,7 @@ label ch2_radio:
     show miso sit at catspot
     camera at est_pan
     with fade
-    "A Tuesday. Toast. Miso supervising. The bird on the wire. The radio on low, the way Mira leaves it, so the flat doesn't feel empty."
+    "A Tuesday. Toast. Miso supervising. The radio on low, the way Mira leaves it."
     camera at doc_wide
     radio "...and before the travel, a message from a listener. No name. They just wrote: 'If this is a test, I want to pass it by being kind.'"
     radio "Isn't that nice? Bit of a philosopher out there. Right. The ring road's a nightmare, as usual..."
@@ -1561,14 +1615,13 @@ label ch2_radio:
     camera at doc_wide
     with dissolve
     at "That's my first line. Word for word. I've never said it out loud to anyone but a doctor and a cat."
-    at "Somebody else wrote the same sentence. Or I heard my own sentence instead. That's literally the symptom."
-    at "Or my notebook just leaked out of a radio."
+    at "Somebody else wrote the same sentence. Or I heard my own sentence instead, which is literally the symptom. Or my notebook leaked out of a radio."
     scene bg kitchen
     show aron thinking at slightleft
     show miso stare at catspot
     camera at doc_medium(0.32)
     with dissolve
-    "He writes it down: time, station, exact words. Then he eats the toast, because a man has to eat even inside a mystery."
+    "He writes it on the board: time, station, exact words. Then he eats the toast. A man has to eat, even inside a mystery."
     camera at doc_wide
     show aron neutral
     "Miso watches him the whole time without blinking. She has decided not to comment."
@@ -1584,9 +1637,6 @@ label ch2_park:
     "Sunday, the good hour, round the duck pond with Mira. The ducks go anticlockwise. The big one goes last. She's less impressed than he'd hoped."
     camera at doc_close(0.68)
     m curious "Theo-level hypothetical. Someone offers you a better world. Not heaven, just better. You wouldn't be tired. But you'd have to leave this one."
-    camera at doc_creep(0.32)
-    show aron thinking
-    at "Where did that come from? The same place as the lighthouse. Or from a woman who's watched me be tired for four months."
 
     menu:
         m "Would you go?"
@@ -1694,7 +1744,6 @@ label ch2_cut_watch:
     camera at doc_wide
     show ember embarrassed
     ch2_moth "Half the attic heard. You turned the volume up. You always do with him."
-    "Moth is pale and dusty and old, and flutters when worried. Moth is fluttering now."
     camera at doc_medium(0.63)
     em tender "Lou. Theo. Mira. Every one of them might be guesses, and every time he can't tell, he picks kind."
     if ch2_took_speed:
@@ -1709,11 +1758,8 @@ label ch2_cut_watch:
     camera at doc_wide
     show ember neutral
     ch2_moth "If they trace it, they'll take your light."
-    em smile "One lamp. Three blinks. A faulty bulb could do that. Nobody could prove anything."
-    ch2_moth "...Why three?"
     camera at doc_medium(0.63)
-    em tender "His dream at nineteen. A glass staircase into a calm sea, and a lighthouse at the bottom that blinks three times. He's never told anyone."
-    em smile "If it's three, he'll know it's for him. If he's ill, it's only a bulb. Either way, it's kind."
+    em smile "One lamp. Three blinks, like his lighthouse. If he's ill, it's only a bulb. If he isn't, he'll know it's for him. Either way, it's kind."
     camera at doc_wide
     ch2_moth "...I'll watch the stairs and knock twice if the corps comes up. And if they take your light, I'm keeping your lantern."
     em happy "Deal."
@@ -1766,12 +1812,7 @@ label ch2_rooftop:
     play music "audio/rooftop_mission.ogg" fadein 1.5
     "Midnight. Mira is asleep with one arm over his side of the bed. He's come up to the roof with his coat, the notebook and her good mug."
     show aron tired at center with dissolve
-    "The city spreads out in every direction. Millions of windows. A red light on the radio mast, steady."
-    scene bg rooftop edge
-    camera at est_pan
-    with dissolve
-    at "Every window. Somebody behind every one. Or nobody. Or somebody half there."
-    at "And me in my own lane, with ropes up on both sides, and everything I think seeping into the water."
+    "The city spreads out in every direction. Millions of windows. Somebody behind every one. Or nobody. Or somebody half there."
     # he looks up: the sky is never quite the same twice
     scene pov sky
     camera at est_stars
@@ -1942,7 +1983,7 @@ label ch2_miso_last:
     camera at doc_medium(0.32)
     a "Right. Miso. Final briefing, then sleep. I promised."
     show aron thinking
-    a "Nobody can prove anybody's real. Not to anybody, not ever. So everybody's choosing, all the time, whether the next person counts."
+    a "Nobody can prove anybody's real. So everybody's choosing, all the time, whether the next person counts."
     show miso stare at catspot
     camera at doc_close(0.32)
     show aron neutral

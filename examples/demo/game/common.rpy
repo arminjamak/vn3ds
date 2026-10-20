@@ -21,6 +21,13 @@ define council = Character("The Council", color="#ff4f7a")
 define vox = Character("???", color="#c9a8ff")
 define sysmsg = Character("PROCESS", color="#7fffd4")
 
+# ---- the two sides above the Council -------------------------------------------
+# The shadow realm talks through reflections; the mirror's protocol turns its
+# words round, sometimes letter by letter, often meaning by meaning.
+define mir = Character("Reflection", color="#a9b4c8")        # before it has a name
+define osr = Character("Osric", color="#b9c6e0")             # Marshal-Engineer Osric Starling
+define lux = Character("The Light", color="#fff6d8")         # the light domain, speaking
+
 # ---- transitions -------------------------------------------------------------
 define flash = Fade(0.1, 0.0, 0.6, color="#fff")
 define blackout = Fade(0.8, 0.6, 0.8)

@@ -155,3 +155,110 @@ Most are played at rate 0.95-1.05 for variety.
 | invaders_boss_gulp | gulp/slurp (a shot into the open mouth), 0.25 s |
 | invaders_boss_defeat | big glowing release winding down, 2.0 s |
 | invaders_boss_sleep | tiny yawn into a soft snore, 1.5 s |
+
+# Round 2: redesigned minigames
+
+## The Big Questions, hosted by Adjutant Vael (quiz)
+| name | sound |
+|---|---|
+| quiz_angel_voice | soft bell-like sung syllable, ~80 ms, neutral pitch (played per syllable at 1.2-1.45x) |
+| quiz_read_skip | quick paper flick |
+| quiz_hourglass_flip | glassy turn plus short sand hiss |
+| quiz_quill_tap | light quill nib tap on parchment |
+| quiz_angel_pleased | warm happy "mm!" with a shimmer of small bells |
+| quiz_angel_sigh | soft sympathetic sigh ("aww") |
+| quiz_miso_popin | cartoon pop plus a chirpy "mrrp" |
+| quiz_angel_gasp | short scandalised gasp |
+| quiz_miso_popout | small reverse pop |
+
+## Lantern Rhythm with the angel and spirit band (lantern)
+| name | sound |
+|---|---|
+| lantern_stage_up | the band levels up: a bright rising flourish in E (played at x1, x1.12, x1.26) |
+| lantern_band_cheer | a small band/crowd whoop of angels and spirits |
+| lantern_band_gasp | a soft collective "oh!" |
+| lantern_whoosh_past | an island flying past: a breathy doppler whoosh, ~0.6 s |
+
+## Echo of a Shape, taught by Pim at a whiteboard (draw)
+| name | sound |
+|---|---|
+| draw_marker_uncap | marker cap popping off |
+| draw_marker_squeak | short whiteboard-marker squeak (repeated, varied pitch) |
+| draw_board_tap | marker tapping the board |
+| draw_board_flip | a board panel flipping over on its stand |
+| draw_board_wipe | eraser wiping a whiteboard |
+| draw_paper_hold | paper rustle |
+| draw_spirit_voice | Pim's short chatty voice blip (varied pitch) |
+| draw_spirit_delight | Pim's delighted squeal |
+| draw_spirit_hmm | Pim's encouraging "hmm!" |
+| draw_spirit_meh | Pim's unimpressed deadpan grunt |
+| draw_spirit_oops | Pim's "oops" (distracted by a moth) |
+
+## The Hungry Sky, a vertical scrolling shooter (invaders)
+| name | sound |
+|---|---|
+| invaders_spread | spread-shot volley: a soft fanning "fsh" |
+| invaders_beam | piercing beam hum, ~0.6 s loopable (pitched up per level) |
+| invaders_homing | homing-spark volley: twinkly seeking chirps |
+| invaders_rapid | one rapid-fire shot (very frequent; keep it tiny, ~40 ms) |
+| invaders_drop | a pickup falling out of a defeated enemy |
+| invaders_pickup_weapon | picked up a new weapon type |
+| invaders_weapon_up | same weapon again, level rises (pitched up per level) |
+| invaders_weapon_down | a hit costs a weapon level: a deflating descend |
+| invaders_pickup_heart | heart restored: warm two-note chime |
+| invaders_turret_shot | halo turret angel fires its spread |
+| invaders_ram_charge | rammer locks on: a rising tremble |
+| invaders_ram | rammer launches its charge: a short whoosh |
+| invaders_ram_hit | an enemy flies into the ship: a thud |
+| invaders_boss_warning | "Something hungry is coming..." ominous sting, ~2 s |
+| invaders_boss_tell | short chime at the start of each boss move's tell (pitched per move) |
+| invaders_boss_spiral | spiral of light begins: a swirling shimmer |
+| invaders_boss_sweep | cape-beam sweep fires: a long sizzling sweep |
+| invaders_boss_stars | starfield cape releases its stars: a sparkly cascade |
+| invaders_boss_dash_warn | the dash lane is marked: a sharp alarm blip |
+| invaders_boss_dash | Ashveil whooshes across the screen |
+| invaders_boss_tantrum | hungry tantrum starts: a comic wail/whine |
+
+## Miso's Hunt, cat-food packages and leaps (miso)
+| name | sound |
+|---|---|
+| miso_leap_side | take-off for a left/right leap: springy whoosh |
+| miso_leap_up | take-off leaping away from the camera: whoosh fading away |
+| miso_leap_down | take-off leaping toward the camera: whoosh rushing closer |
+| miso_land | soft paw thump on landing |
+| miso_bonk | a leap into furniture: comic thud |
+| miso_leap_multi | two or more packages in one leap: bright bonus jingle |
+| miso_pickup | grabbing a pouch or box: crinkle/munch (pitched per combo) |
+| miso_pickup_rare | grabbing a golden tin: shiny can clink |
+| miso_package_appear | a package shimmering out of the wall: glitchy shimmer |
+| miso_rare_appear | a golden tin appearing: distinct sparkly chime |
+| miso_package_land | a package plopping onto the floor |
+| miso_package_vanish | a package dissolving back into the leak: glitch fizzle |
+
+## Crown of the Worm, apples and the worm king (snake)
+| name | sound |
+|---|---|
+| snake_apple_crunch | crisp apple bite (random pitch); replaces snake_eat |
+| snake_golden_spawn | sparkly twinkle as a golden apple appears |
+| snake_golden_apple | rich chime plus crunch: eating a golden apple |
+| snake_golden_fade | soft dull downward blip: golden apple turns red |
+| snake_stage_next | short upbeat stage-clear jingle, next filter announced |
+| snake_leak_tires | glitchy wind-down sigh as a filter lifts on its own |
+| snake_crowd_cheer | a little crowd of squeaky worm cheers as the crown lands |
+
+## The Tower, an upward platformer around the tower (tower)
+| name | sound |
+|---|---|
+| tower_skid | sneakers skidding when turning around at speed |
+| tower_bounce | boing off a red mushroom |
+| tower_crack | stone cracking and grinding as a ledge starts to shake |
+| tower_crumble | the cracked ledge breaks and falls away |
+| tower_stomp | landing on a beetle or crow: squishy pop (pitch rises with combo) |
+| tower_hurt | losing a heart: short "oof" sting |
+| tower_heart | picking up a heart: warm sparkle |
+| tower_falling_warn | a falling acorn/tile/star is coming: whistle-down warning blip |
+| tower_falling_hit | a falling thing smashes (wood knock / tile clatter / star burst by pitch) |
+| tower_gust | the updraft cheat: a big rushing wind swell |
+| tower_fall | dropped off the screen: descending slide whistle |
+| tower_ko | out of hearts: deflated tumble |
+| tower_milestone | every 50 m: small bright two-note ding |

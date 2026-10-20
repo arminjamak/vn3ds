@@ -1,14 +1,28 @@
-# Snapshot - Chapter 1, "The Morning Render" (condensed, about 30 minutes).
-# Condensed from drafts/long/ch1_part1..4.rpy. Ten menus, all rejoining.
+# Snapshot - Chapter 1, "The Morning Render" (condensed, about 33 minutes).
+# Condensed from drafts/long/ch1_part1..4.rpy. Eleven menus, all rejoining.
+#
+# The shadow thread starts here. While the fog comes in, reflections (his
+# coffee, a bus window, the black TV, the bathroom mirror) play an
+# auto-running course, "A Field Guide to Burning Down the Gates of Heaven",
+# step by step: two drivers per humanoid (the negative mind, spirits, from
+# within; the creative side, angels, by remote), many worlds and mirror
+# worlds, light that makes and shadow that copies, the shadow swarming the
+# humanoids. At 4 a.m. step five never loads: the player edits the voice
+# (ch1_edit: speed, ping-pong, loop, melody; clips in audio/edit/) and the
+# script derails. Then the breakdown: everyone approaches at once, the
+# bathroom door, the police and paramedics who assume the worst, the carry
+# down the stairs, the pepper spray, and the ambulance ("cut his antenna
+# off" / "cut your T-shirt off"), which is the existing transfer into his
+# own lane.
 #
 # Score: morning_render (waking, the studio), kitchen_talk (kitchen, park),
 # angel_ops (ops room, throttle), theme (street and market tests),
 # questions (Bostrom with Theo, the index cards, the rooftop),
 # purgatorium_shift (Pim and Dross), miso (Bostrom for Miso, the leak and
-# LOOM), notebook (first line, tests, 7:07), umbrella_rain (the umbrella,
-# found in the rain, Ember), voices (the first voices, the mirror),
-# unraveling (the fog and the spiral), ambulance_transfer (the ride,
-# transfer complete, the end).
+# the steps), notebook (first line, tests, 7:07), umbrella_rain (the
+# umbrella, the bathroom door, Ember), voices (the first voices, the
+# mirror), unraveling (the fog, the spiral, the intervention),
+# ambulance_transfer (the ride, transfer complete, the end).
 #
 # Minigames: quiz (the index cards, ch1_notebook) and miso (the leak,
 # ch1_spiral). Cheat: asking the stranger's name (ch1_rain).
@@ -32,6 +46,9 @@ define ch1_albers = Character("Mr. Albers", color="#d6c7a8")
 define ch1_driver = Character("Tram driver", color="#cccccc")
 define ch1_moth = Character("Moth", color="#e8d9b0")
 define ch1_medic = Character("Paramedic", color="#9fd4e6")
+define ch1_kaz = Character("Kaz", color="#c8d8a8")
+define ch1_cop = Character("Police officer", color="#a8b8d8")
+define ch1_cop2 = Character("Second officer", color="#a8b8d8")
 
 default ch1_test = ""
 default ch1_asked_name = False
@@ -39,6 +56,12 @@ default ch1_told_dream = False
 default ch1_went_theo = False
 default mg_quiz = 0
 default mg_miso = 0
+default ch1_edits = 0
+default ch1_ed_fast = False
+default ch1_ed_pong = False
+default ch1_ed_loop = False
+default ch1_ed_tune = False
+default ch1_door = ""
 
 # three people in one shot, spaced so nobody overlaps
 transform ch1_l3:
@@ -46,6 +69,10 @@ transform ch1_l3:
 
 transform ch1_r3:
     xalign 0.92 yalign 1.0
+
+# the hall outside the bathroom (bg bathroom door): sitting against the wall
+transform ch1_hall:
+    xalign 0.12 yalign 1.0
 
 # the cafe seen from the end of the bar: both clear of the espresso machine
 transform ch1_bar_a:
@@ -299,8 +326,10 @@ label ch1_cut_ops:
     camera at doc_wide
     ch1_vael "Forty-one conscious souls in his city. Under a thousand in his world. The rest are spirit-run, or ours."
     se determined "Keep it lean. A young world doesn't get more minds until it proves stable."
+    ch1_vael "And the reflections, Commander. Shadow traffic in the east district again. Shop windows. Puddles. Something looking out."
     camera at doc_close(0.5)
-    se worried "And keep an eye on this one. He notices things."
+    se worried "Keep that off the Council's desk. They're frightened enough of a war without counting puddles."
+    se "And keep an eye on this one. He notices things."
     stop music fadeout 2.0
 
 # ---------------------------------------------------------------------------
@@ -1198,6 +1227,11 @@ label ch1_cut_throttle:
     camera at doc_close(0.5)
     se worried "So we lower his energy. Sleep that doesn't refresh. Limbs like wet sand. Thoughts that start and don't finish."
     se sad "And we turn the noise up. And when he can't tell which is which, they'll call it his mind."
+    camera at doc_wide
+    ch1_vael "There's worse. He isn't only hearing us. Something talks to him out of reflections. The other side."
+    camera at doc_close(0.5)
+    se worried "The shadow. Then the throttle has to hold. If a rogue mind gets close enough to see both sides, the light's own mechanism trips."
+    se sad "Automatic. We don't vote on it. The light doesn't throttle, Vael. It sends its hands."
     camera at doc_creep(0.5)
     scene cg umbrella with dissolve
     ch1_vael "One more incident, before the voices. He gave his umbrella to a pattern unit. It was idling. Pattern units don't get cold."
@@ -1225,14 +1259,30 @@ label ch1_fog:
     show aron tired at slightleft with dissolve
     camera at doc_medium(0.32)
     "The next day something has changed, and Aron can't say what. He stands holding the kettle and forgets, for a minute, why."
+    camera at est_dolly
+    scene pov cup with dissolve
+    "Black coffee. In it, a small dark face looks up at him. His. Then its mouth moves, and his doesn't."
+    mir ".eno petS ?no siht sI ?olleH"
+    at "Backwards. It came out backwards. 'Hello? Is this on? Step one.'"
+    mir "Step one, for agents in the field. You are not one driver. Nobody is. Every humanoid is two, sharing a seat."
+    mir "Inside, the negative mind. Spirits run it from within: breathing, blinking, the walk to the fridge, the kitchen talk."
+    mir "Outside, the creative side. Angels run it by remote: ideas, jokes, the sudden urge to ring your mother. Find the seam."
+    mir "This has been step one of A Field Guide to Burning Down the Gates of Heaven. Please do not burn anything yet."
+    camera at doc_medium(0.32)
+    scene bg kitchen with dissolve
+    show aron tired at slightleft with dissolve
+    show aron grin
+    at "Kitchen talk. My word for it, that first morning. And now my coffee's giving lectures. I'm not burning anything. I've got work at nine."
     camera at est_pan
     scene bg bus with dissolve
     show aron tired at center with dissolve
-    "On the bus the announcement says 'Linden Square' three times in exactly the same voice. Then the doors open on the stop before."
+    "On the bus the announcement says 'Linden Square' three times in exactly the same voice. Nobody else notices."
     camera at doc_medium(0.5)
-    "Nobody else notices. Nobody gets off."
+    "In the dark window, over the passing shops, his reflection keeps talking after he's stopped."
+    mir "Step two. There are many worlds, in many eras, each with its own spin. Yours is one. Not the first. Not the last."
+    mir "Some are mirrors. A mirror world does the opposite of another world, forever. It can't stop. It doesn't know it's doing it."
     show aron smile
-    at "The bus has a stutter. Hobby note. Old buses have glitchy speakers. A perfectly good explanation, and I'm keeping it."
+    at "Old buses have glitchy speakers. And glitchy windows, apparently. Hobby note. I'm keeping both explanations."
     camera at doc_wide
     scene bg studio with dissolve
     show aron tired at center with dissolve
@@ -1427,12 +1477,9 @@ label ch1_spiral:
     camera at doc_close(0.5)
     show aron surprised
     "On Tuesday Mira says 'I'm off, love, back at six' at the door. A minute later, from the same spot, she says it again. Same smile."
+    "And the street goes odd. Mr. Kessler hums a marching song over the rolls. Across the road someone has taped paper crosses on every window, like in an old war."
     show aron tired
     vox "...render queue, district east... shift seven, kitchen talk... LOOM sync at dawn..."
-    camera at est_dolly
-    scene pov hands with dissolve
-    "He writes LOOM in capitals at the top of the page, above 'upstairs', above everything, and can't think what to put in the box."
-    "At the top of every page, still, the first line. Written carefully every time, like a promise."
     # 3 a.m., the living room from its window: the sofa, Miso by the plant
     camera at est_orbit
     scene bg room night reverse with dissolve
@@ -1441,6 +1488,14 @@ label ch1_spiral:
     show miso loaf at catspot
     with dissolve
     "At three in the morning he's on the sofa, because the voices are louder in the bedroom. Miso is a warm loaf against his leg."
+    "The television is off. In its black glass there's a small dark room, and a man on a sofa who leans forward when he doesn't."
+    mir "Step three. Two sides. The light makes things by shining: worlds, weather, people. The shadow can't shine. It copies what the light makes."
+    mir "Its copies fall into the dark as shadows, always a little wrong, and it lives on them. And the ones in between, who eat and vote, fear the war."
+    camera at doc_medium(0.5)
+    mir "Step four. The shadow is already in your street. In the humanoids. Learning the breathing, learning the jokes. Learning to run the whole experiment."
+    mir "It copies badly. The only world it has ever seen clearly is a mirror, stuck in an old war. So it thinks that's what people are."
+    show aron thinking
+    at "Kessler's marching song. The taped windows. Something learning to be us from a war film with the sound off."
     camera at doc_wide
     show miso curious
     "Then something glitters along the skirting board. Tiny square specks of light, like dust in a sunbeam, except there's no sunbeam."
@@ -1475,9 +1530,9 @@ label ch1_spiral:
     camera at doc_wide
     "Then she comes back and curls up against his leg again, a warm loaf, as if nothing happened."
     camera at doc_creep(0.5)
-    a neutral "Miso. Can I tell you about LOOM? First thing: I don't know what it is. I want to be honest with you."
-    a thinking "But it's above the ones who say 'throttle'. Everything I hear is somebody reporting to somebody. And at the top, LOOM."
-    a "I think it's weaving all of it. The birds. The kitchen talk. The rain. Us. And I'm a thread that's started looking up."
+    a neutral "Miso. Briefing. I'm doing a correspondence course. Taught by my coffee, a bus window and the telly. I know."
+    a thinking "Everybody's two drivers. Spirits inside, doing the breathing. Angels outside, doing the ideas. Above them, light that makes and shadow that copies."
+    a "Somebody in between, frightened of a war. Somebody reporting to somebody. And at the very top, a word: LOOM. I'm a thread that's started looking up."
     camera at doc_close(0.5)
     a smile "Here's the funny bit. If I'm ill, it would feel exactly like this. If I'm right, it would also feel exactly like this."
     a tender "So I can't tell. But I'm still me. I still know how to feed a cat. That's something. What's the verdict, your honour?"
@@ -1488,7 +1543,7 @@ label ch1_spiral:
     cat "Meow."
 
 # ---------------------------------------------------------------------------
-# The mirror, and the rain.
+# Four in the morning. Step five, and the edit.
 # ---------------------------------------------------------------------------
 label ch1_mirror:
     camera at doc_peek(0.5)
@@ -1505,162 +1560,224 @@ label ch1_mirror:
     "At four he splashes cold water on his face. The bathroom light buzzes. Tonight the buzz has words in it."
     camera at doc_creep(0.5)
     scene pov mirror with dissolve
-    "In the mirror, a man with red eyes and three days of stubble. He raises a hand to rub his eyes. The man raises his too."
-    "A fraction later."
-    vox "...latency in the bathroom... subject A-30 awake at 04:12..."
-    at "It's my eyes. Eyes lag when you're this tired. That's... that's not my eyes, is it."
-    vox "...throttle holding... LOOM sync at dawn... log it as written..."
-    camera at doc_close(0.5)
-    "Not fragments anymore. A crowd, overlapping, close, like being inside a radio someone else is tuning."
-    "He puts his palm on the glass. Cold. Colder than glass should be. The reflection's palm arrives just after his."
-    camera at doc_punch(0.5)
+    "In the mirror, a man with red eyes and three days of stubble. He raises a hand to rub his eyes. The man raises his too. A fraction later."
+    vox "...latency in the bathroom... subject A-30 awake at 04:12... throttle holding..."
     at "If I'm the original, he's slow. If he's the original... then I'm the one who's lagging. I'm the copy."
-    camera
-    scene cg static with vpunch
-    vox "...subject A-30... subject A-30... subject..."
-    "He opens the bathroom door to go back to bed. It opens onto the bathroom. The same tiles. The same man, a quarter beat behind."
-    "He remembers his hand on the front door latch. He doesn't remember the stairs."
-    stop music fadeout 2.0
-    camera at doc_wide
-    scene bg street rain with fade
-    show aron worried at center with dissolve
-    "Rain. Hard, cold, flat rain. He's outside in a T-shirt and pyjama bottoms and one shoe."
-    camera at doc_medium(0.5)
-    "His feet walk him to the bus stop. No man in the rain. No umbrella. Just the timetable, and the orange light."
-    # he looks up into the rain: the crew tilts up with him
-    camera at est_crane
-    scene bg street rain reverse with dissolve
-    a "What do you want from me? I was only curious. I wasn't going to break anything."
-    a "Is she real? Is Theo? Am I? You could just tell me. That's all I ever wanted."
-    "Nobody answers. The voices are silent now, and their silence is worse."
-    camera at doc_wide
-    scene bg night with dissolve
-    show aron sad at center with dissolve
-    "He sits down on the wet kerb, because his legs have decided to. Not all of the water on his face is rain."
+    stop music fadeout 1.0
+    play sound "audio/edit/voice_raw.ogg"
+    mir "Step five. The last step. When you reach the gates, burn them down, and you will arrive. You will be..."
+    camera at doc_close(0.5)
+    "It doesn't wait for him. It plays by itself, like a tape in an empty room: steps one to four, round again, faster, louder, toward the gates."
+    at "It's a sound. Only a sound. Theo made a door out of a wardrobe by slowing it down. Sound is material. You can pick it up."
+    $ ch1_edits = 0
+
+label ch1_edit:
     camera at doc_creep(0.5)
+    menu:
+        at "So pick it up. What do I do to it?"
+
+        "Speed it up." if not ch1_ed_fast:
+            $ ch1_ed_fast = True
+            $ clarity += 1
+            play sound "audio/edit/voice_fast.ogg"
+            "He pinches the sound between two fingers that aren't fingers, and pulls. It shoots up like a balloon, small and squeaky."
+            mir "Stepfivestepfive thegatesthegates burnburnbu-"
+            sysmsg "ENLIGHTENMENT SCRIPT A-30: step 5 of 5. Step 5 of 5. Step 6 of 5. Step 11 of 5."
+            at "Ha. It can't count. A staircase to heaven that can't count its own steps."
+
+        "Ping-pong it, forwards and back." if not ch1_ed_pong:
+            $ ch1_ed_pong = True
+            $ clarity += 1
+            play sound "audio/edit/voice_pingpong.ogg"
+            "Forwards, then backwards, then forwards. The voice says its sentence, unsays it, and says it again, sheepishly."
+            mir "...burn the gates... setag eht nrub... burn the gates..."
+            sysmsg "STEP 5: loading. STEP 5: unloading. STEP 5: loading. STEP 5: please hold."
+            pi "...Dross? Why is my queue playing backwards? I didn't send that. Nobody sent that."
+            at "It doesn't know which way it's going. Neither do I, but I'm having more fun."
+
+        "Loop the last word." if not ch1_ed_loop:
+            $ ch1_ed_loop = True
+            $ clarity += 1
+            play sound "audio/edit/voice_loop.ogg"
+            "He catches the very last word before it finishes and lets it run round and round, like a record with a scratch."
+            mir "Arrive. Arrive. Arrive. Arrive. Arrive. Arrive."
+            sysmsg "STEP 5 COMPLETE. Subject has arrived. Subject has arrived. Subject has arr-"
+            vox "...who's touching the feed? Somebody's touching the feed from the inside..."
+            at "Arrive where? It's promised 'arrive' for five steps. There's nothing after it. Only the word, going round."
+
+        "Play it as a melody." if not ch1_ed_tune:
+            $ ch1_ed_tune = True
+            $ clarity += 1
+            play sound "audio/edit/voice_melody.ogg"
+            "He lays one syllable out like piano keys, up, up, and down again: the little tune Mira hums in the shower."
+            sysmsg "STEP 6: not found. STEP 6: not found. STEP 6: not f"
+            vox "...is he playing it? Commander, he's playing the voices like a piano..."
+            at "A voice is just a sound wearing a job. Take the job off and it's a tune. A silly one. Mine now."
+
+        "Leave it. Let it play to the end.":
+            $ p_rest += 1
+            $ ch1_edits = 9
+            play sound "audio/edit/voice_raw.ogg"
+            "He doesn't touch it. He lets it run all the way to the gates, to see what's there."
+            mir "...and you will arrive. You will be enlightened. You will..."
+            "Silence. The tap drips. The light buzzes. The same man, in the same bathroom, at 4:19 in the morning."
+
+    $ ch1_edits += 1
+    if ch1_edits < 2:
+        jump ch1_edit
+
+    scene bg mirror
+    show aron tired at center
+    camera at doc_close(0.5)
+    with dissolve
+    "However he plays it, the last step never comes. There's no step six. Nowhere to arrive. The course ends at a mirror and starts again."
+    at "That's the trick. It isn't a ladder, it's a loop. It promises you'll arrive somewhere enlightened, and you never do. You just keep climbing."
+    at "And from in here, I can edit it. Whatever it is. That ought to frighten me more than it does."
+    vox "...rogue proximity... he's editing the feed... protection mechanism armed..."
+    camera at doc_creep(0.5)
+    show aron sad
+    "He sits down on the edge of the bath, because his legs have decided to. Nobody answers anything."
     at "If this is a test, I want to pass it by being kind. I don't know how to be kind to myself. Nobody tested me on that."
-
-label ch1_found:
-    play music "audio/umbrella_rain.ogg" fadein 1.5
-    camera at doc_wide
-    "Footsteps, splashing. Someone running."
-    m "ARON!"
-    show aron sad at slightleft with move
-    show mira worried at slightright with moveinright
-    "Mira, in her coat over her nightdress, bare feet in trainers, drops to her knees in front of him."
-    camera at doc_close(0.68)
-    m "Aron. I'm here. Look at me. It's me."
-    camera at doc_close(0.32)
-    a "Are you real?"
-    camera at doc_creep(0.68)
-    show mira sad
-    "He sees the question land on her face. He sees it hurt. And he sees her decide, right there in the rain, not to let it."
-    m tender "I'm real enough to be freezing, you idiot. Come here."
-    camera at doc_wide
-    "Headlights. A car stops half on the kerb. A door slams."
-    show theo worried at center with moveinright
-    "Theo holds Mira's silly spotted umbrella, the one with the duck handle, over all three of them. The rain on it sounds like bacon frying."
-    camera at doc_medium(0.5)
-    th "Hey. Hey. We've got you."
-    camera at doc_close(0.32)
-    a tired "Theo. The voices stopped. When she came. They stopped."
-    camera at doc_medium(0.5)
-    th tender "That's good, man. That's really good. Up you get. On three."
-    camera at est_crane
-    "They walk him to the car between them. On the wire above the bus stop, three birds sit in the rain. Nobody looks up."
+    "He falls asleep sitting up, his cheek against the cold tiles."
 
 # ---------------------------------------------------------------------------
-# 7:07. Will you come with us?
+# Morning. Everyone at once. The bathroom door.
 # ---------------------------------------------------------------------------
-label ch1_home:
+label ch1_intervention:
     camera at est_orbit
     scene bg room with slowfade
-    "Back at the flat Mira talks to him through the shower door the whole time. Theo burns the toast. Miso supervises."
+    play music "audio/unraveling.ogg" fadein 1.5
+    "He wakes with the tiles printed on his cheek. 7:07. Voices in the living room. Low ones. The kind people use in hospitals."
     camera at doc_wide
-    show aron tired at ch1_l3
-    show theo worried at center
+    show theo worried at ch1_l3
+    show aron tired at center
     show mira worried at ch1_r3
     with dissolve
-    "The clock on the wall says 7:07. Aron laughs. It comes out cracked, half a sob."
-    camera at doc_close(0.23)
-    a sad "Of course it does."
+    "They're all there. Mira, in yesterday's clothes. Theo. Kaz from the rooftop, holding a mug nobody is drinking from."
+    "They stand up together when he comes in. All at once, like birds lifting off a wire."
     camera at doc_medium(0.77)
-    m "I called the crisis line while you were in the shower. They said bring you in this morning. I'll be with you the whole time."
-    camera at doc_medium(0.5)
-    th smile "Both of us. I told the studio. Bro, the door sounds can wait. The universe doesn't run on my schedule either."
-    camera at doc_close(0.23)
-    show aron thinking
-    at "If I'm ill, this is what you do. You let people help. If I'm right, the hospital is where they'd want me. Calm. Throttled."
-    camera at doc_creep(0.23)
-    show aron tender
-    at "Either way, her hand on my knee is shaking, and she's been up all night. That part is real. That part I get to decide."
-
-    camera at doc_close(0.77)
-    show mira tender
-    menu:
-        m "Will you come with us?"
-
-        "Yes. Take me.":
-            $ integrity += 1
-            $ bond += 1
-            camera at doc_close(0.23)
-            a determined "Yes. I don't know what's happening to me. I know I can't fix it on my own. I've been trying."
-            camera at doc_close(0.77)
-            show mira sad
-            "Mira's face crumples with relief, just for a second, then pulls itself together the way her mother taught her."
-            show mira tender
-            camera at doc_medium(0.5)
-            th smile "Proud of you, man. Seriously."
-            camera at doc_creep(0.23)
-            at "Not giving up. Choosing. If it's a test, at least I chose an answer."
-
-        "Ask what they think is happening":
-            $ p_govern += 1
-            $ bond += 1
-            camera at doc_close(0.23)
-            a neutral "Before I say yes: what do you two think is happening to me? Not the crisis line. You."
-            camera at doc_close(0.77)
-            m worried "I think you're ill. Your brain is exhausted and frightened and telling you things that aren't there. It can get better."
-            m sad "And I don't know how I knew about the lighthouse. I've thought about it every night."
-            camera at doc_close(0.5)
-            th tender "I think you're the smartest, weirdest guy I know, and you pushed too hard. Right now I just want you to sleep."
-            camera at doc_creep(0.23)
-            a tender "Thank you. I needed to hear it from you, not from the voices. Okay. Let's go."
-
-label ch1_leaving:
-    camera at doc_peek(0.5)
-    scene bg bedroom door with dissolve
-    show aron tired at center with dissolve
-    "Mira packs a bag. Pyjamas, toothbrush, his softest jumper. The grey notebook goes in too."
-    "Miso sits on the doormat between them and the door, as if she knows."
-    camera at doc_close(0.5)
-    "Then the hall light flickers. Once. And the world starts to slip."
+    m "Aron, love. Sit down a minute. We just want to talk."
+    camera at doc_medium(0.23)
+    th "Nobody's angry, bro. We're just worried. A normal amount. Okay, a lot."
+    ch1_kaz "My brother went through something like this. It got better. There are people who help."
+    camera at doc_punch(0.5)
     show aron surprised
-    vox "...LOOM sync at dawn... prepare protection... subject A-30, window opening..."
-    camera at doc_creep(0.5)
+    "They take a step towards him. Together. The same soft face on all three, the same careful lift in all three voices."
+    at "Same words. Same tune. Like the woman at the crossing. Like three lanes running in step."
+    camera at doc_close(0.77)
+    m "We rang someone this morning. They're just going to come and talk to you. That's all. I promise."
+    vox "...protection mechanism armed... dispatching..."
+    camera at doc_close(0.5)
     show aron worried
-    at "Protection. Window opening. That's about now. That's about me."
-    stop music fadeout 2.0
+    at "Someone. Coming. 'The light doesn't throttle. It sends its hands.' Where did I hear that?"
+    "Theo reaches out, very gently, the way you'd reach for a frightened dog. That's what does it."
+    a "Don't. Please. I need a minute. One minute on my own."
+    stop music fadeout 1.0
     camera
-    scene cg static with hpunch
-    "His legs go. Not weak: gone, like someone switched them off. He only knows he's on the floor when the tiles are cold under his cheek."
-    # from the floor, looking up at them
-    camera at doc_wide
-    scene bg bedroom door with dissolve
-    show theo worried at slightleft
-    show mira worried at slightright
+    scene bg mirror with hpunch
+    "The hall, the bathroom, the bolt across. His back against the door. His heart going like a bird at a window."
+    # filmed from the hall: the crew stays outside the door with her
+    camera at doc_peek(0.3)
+    scene bg bathroom door with dissolve
+    show mira worried at ch1_hall with dissolve
+    play music "audio/umbrella_rain.ogg" fadein 2.0
+    "Outside, Mira sits down on the hall floor with her back to the door, as close as the door will let her."
+    m "Okay. I'm here. I'm just sitting here. I'm not going anywhere."
+    camera at est_dolly
+    scene bg mirror with dissolve
+    show aron sad at center with dissolve
+    a "Mira. Are you real?"
+    camera at doc_close(0.28)
+    scene bg bathroom door with quick
+    show mira sad at ch1_hall with dissolve
+    "He hears the question land. He hears it hurt. And he hears her decide, right there on the hall floor, not to let it."
+    m tender "I'm real enough to be scared out of my mind, you idiot. Real enough to need you to open this door."
+    camera at doc_creep(0.5)
+    scene bg mirror with dissolve
+    show aron sad at center with dissolve
+
+    menu:
+        m "Talk to me. Please."
+
+        "Tell her I'm not going to hurt myself.":
+            $ p_truth += 1
+            $ bond += 1
+            $ ch1_door = "truth"
+            a "I'm not hurting myself. I'm not going to. I swear. I'm just frightened. There were three of you with the same face."
+            m "Okay. I believe you. I believe you. Then come out when you're ready. Just you and me."
+            show aron tired
+            "He gets up. He puts his hand on the bolt. He's going to open it. He is."
+
+        "Ask her to send the others away.":
+            $ p_govern += 1
+            $ integrity += 1
+            $ ch1_door = "ask"
+            a "Can it be just you? Please. Ask them to wait in the kitchen. I can't do three."
+            m "Theo. Kaz. Kitchen. ...They've gone, love. It's just me and the coats."
+            show aron tired
+            "It helps. It really helps. In for four. Out for six. He nearly laughs at the coats."
+
+        "Say nothing. Listen to the mirror.":
+            $ p_govern -= 1
+            $ clarity += 1
+            $ ch1_door = "quiet"
+            "He doesn't answer. Behind him the mirror is talking again, very softly, and he needs to hear it."
+            mir ".uoy rof gnimoc era yehT .tuo emoc t'noD"
+            at "'Don't come out. They're coming for you.' Or the other way round. I can't tell which way round anything goes any more."
+            "Out in the hall Mira says his name, and his name, and his name. He's too busy listening to answer."
+
+    camera at doc_peek(0.3)
+    scene bg bathroom door
+    show theo worried at ch1_hall
     with dissolve
-    a "There are two of you. One's a bit behind. Which one are you?"
-    camera at doc_close(0.68)
-    show mira determined
-    "Mira's face changes. The nurse's daughter takes over: calm, quick, very frightened underneath."
-    m "Theo, hold his hand. Keep talking to him. I'm calling an ambulance."
-    camera at doc_close(0.32)
-    th tender "Hey, bro. It's Theo. School trip. The pigeon with one leg. You called him Admiral. Remember Admiral?"
-    a "...Admiral."
-    camera at doc_creep(0.32)
-    th smile "Stay with me. Admiral's counting on you. I'll feed Miso and come straight after. Promise."
-    scene black with slowfade
+    "In the hall Theo has the phone to one ear and a hand over the other, the way people do when they're scared of what they'll hear."
+    th "...locked in the bathroom. He's hearing voices. He's gone quiet. I don't know what's in there with him. Please just come."
+    stop music fadeout 2.0
+    camera at est_dolly
+    scene bg bathroom door siren with slowfade
+    "Blue light on the hall ceiling. Boots on the stairs. More people in the little hall than it has ever held."
+    ch1_cop "Aron? My name's Dev, I'm with the police. There's paramedics here too. We're worried about your safety, mate."
+    ch1_cop "Is there anything in there you could hurt yourself with? Can you tell me you're safe?"
+    camera at doc_close(0.5)
+    scene bg mirror
+    show aron worried at center
+    with quick
+    if ch1_door == "truth":
+        a "I'm safe! I told her! I'm coming out, I'm just..."
+    elif ch1_door == "ask":
+        a "I'm safe. I needed it quiet, that's all. Can you give me one minute? One?"
+    else:
+        "He opens his mouth to answer and can't find the front of his own voice."
+    vox "...hands deployed... overlay holding... retrieve the subject..."
+    "Under the door, the blue light comes and goes. In the mirror it comes and goes a quarter beat later."
+    ch1_cop "We can't take that chance. Stand away from the door, Aron. We're coming in."
+    m "He said he's... Let me talk to him! He's not..."
+    camera
+    scene bg mirror with vpunch
+    "The door comes in on the third kick. The bolt goes with a sound like a snapped bone. Theo would know what makes that sound. Nobody should."
+    if ch1_door == "truth":
+        "His hand was on the bolt. He was opening it."
+    camera at doc_wide
+    "Then hands. A lot of hands. Bright jackets, gloves, faces he doesn't know, all with the same set look."
+    "For one second their eyes have the flat brightness of the woman at the crossing. Then they're only eyes, frightened, doing a job at eight in the morning."
+
+    # down the stairs: the crew backs down ahead of them
+    camera at est_crane
+    scene bg stairwell with dissolve
+    "They don't wait for him to walk. Two of them get under his arms and lift, his arms stretched out across their shoulders like a beam."
+    "His bare feet drag on the stairs. His head hangs. Down past the neighbours' doors, one floor, then another."
+    "On the landing Mrs. Varga in her dressing gown crosses herself, and looks at the floor."
+    at "Gran had a painting like this in her hall. A man taken down and carried, arms out, everyone looking at the floor. I hated walking past it."
+    m "Gently! He's not fighting you! He's not dangerous!"
+    "He twists, only to look back for her, and one arm comes free."
+    ch1_cop2 "Arm! Arm!"
+    camera
+    scene white with flash
+    "Then fire. Not heat: fire, poured straight into both eyes at once."
+    scene black with dissolve
+    "His eyes clamp shut and won't open. He can't breathe round it. Somewhere above him Mira is shouting at someone. He can't see who."
+    ch1_cop "...okay. Okay. Sorry, mate. Sorry. Keep them shut, it passes. Water! Somebody get him some water!"
+    "The voice shakes when it says it. He holds onto that, in the dark. Somebody's voice shook."
     pause 0.5
 
 # ---------------------------------------------------------------------------
@@ -1682,6 +1799,7 @@ label ch1_cut_ember:
     camera at doc_low(0.5)
     em smile "A kind fool. He looked at a pattern unit with nobody inside it and saw a man getting cold. Then he walked home wet."
     em worried "And they've put him in a fog for noticing. Now there's an order on the board. 'Protection.' I can feel it in the floor."
+    em sad "And the light sent its hands, Moth. Did you see how they carried him down the stairs?"
     camera at doc_wide
     ch1_moth "If you interfere, they'll decommission you. The Watch isn't supposed to exist."
     camera at doc_low(0.5)
@@ -1706,11 +1824,16 @@ label ch1_ambulance:
     camera at doc_wide
     scene pov ambulance with slowfade
     play music "audio/ambulance_transfer.ogg" fadein 1.5
-    "A ceiling. White. Very close. Blue light sliding across it, round and round."
-    ch1_medic "Aron? You're in an ambulance. My name's Jonas. You're safe. We're taking you to hospital."
-    m "I'm here. I'm right here."
+    "A ceiling. White. Very close, through eyes that won't stay open. Blue light sliding across it, round and round."
+    ch1_medic "Aron? You're in an ambulance. My name's Jonas. You're safe. I'm going to rinse your eyes. It'll sting, then it'll stop."
+    "Cool water, again and again. The fire goes down to a burn, then to an ache. Mira's hand finds his on the stretcher."
+    m "I'm here. I'm right here. I'm so sorry. I'm so sorry, love."
     scene black with dissolve
-    sysmsg "Protection order 7,412-A30. Executing. Window open."
+    "Above him the voices change. Same mouths. Different speakers: calm, bright, a very long way up."
+    lux "...cut his antenna off..."
+    lux "...it's still live. He's hearing both sides. Cut it at the root..."
+    ch1_medic "...we'll cut your T-shirt off, Aron, okay? For the heart stickers. Nice and still..."
+    sysmsg "Responder overlay: complete. Antenna severed. Shadow channel: closed. Protection order 7,412-A30. Executing."
     se "...not yet. He's not under. Hold the door, he's not asleep enough..."
     scene pov ambulance with dissolve
     a "...Mira... don't let them... the window..."

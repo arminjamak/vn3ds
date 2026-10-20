@@ -123,3 +123,49 @@ a baked sky). Most of them also keep a faint baked star layer behind for depth.
 
 When Aron looks up at the stars, use `scene pov sky` or `scene bg rooftop`
 with `camera at est_stars`. Each visit's sky is a little different.
+
+## 4. The light and the shadow (new places)
+
+Drawn in `examples/scenes3d.py` (section "the light and the shadow"), in the
+same flat, layered style as the rest. A full `python3
+examples/make_demo_assets.py` rebuilds them with everything else; to rebuild
+only these, run each scene function and `Scene.save` it, then add the result
+to `vn3ds.json` "layers" (what `build_all` does).
+
+| scene | what you see | blocking |
+|---|---|---|
+| `bg bathroom door` | The flat's hall facing the shut bathroom door: light under it, the lock's little red "engaged" window, coats on hooks at left, a red runner, a blurred door frame in front (the crew in the living-room doorway). | Sitting against the wall by the door: `ch1_hall` (xalign 0.12). |
+| `bg bathroom door siren` | The same, darker, with blue light pulsing from the stairwell. | as above |
+| `bg stairwell` | An old stairwell going down: two flat doors, the painted dado, a landing window and the banister, blue light coming up from the street. | Narration only (the carry). |
+| `bg ward yard` | Night through the ward's bars: the garden wall, the town, two **Herons** (Osric's walkers: four stilt legs bending back at the knee, a round riveted cabin like a diving bell, one great lamp, a periscope) and a searchlight; five **Understudies** (troopers: dark plates, a round mirror for a face) on the lawn. | Narration only. |
+| `bg shadowbase` | Osric's workshop inside the mirror planet: the great cracked telescope mirror he came through, shadows of borrowed things on wires (a bicycle missing a wheel, a film reel, an umbrella, a teapot with no spout), searchlights up at a light that's on the wrong side, a walker's leg, his bench with a radio set, one Understudy. | Aron at `slightleft`; Osric (no sprite yet) is narrated at about 0.6. |
+| `bg mirrorplanet` | The mirror planet from space: silver, a faint backwards Earth in its surface, the sun behind the camera, four base lights on the dark side. | Wide only. |
+
+## 5. Voice edits (audio)
+
+`game/audio/edit/` holds short clips cut from `audio/voices.ogg` (16 s in)
+for the voice-editing moments (`ch1_edit`, `ch3_voices_edit`):
+`voice_raw` (the clip), `voice_fast` (asetrate x1.9), `voice_pingpong`
+(forwards + areverse, twice, concat), `voice_loop` (one 0.38 s grain,
+aloop x10), `voice_melody` (one grain at six asetrate pitches, concat).
+`examples/make_voice_edits.sh` re-renders them with ffmpeg (native `vorbis`
+encoder, 32 kHz stereo, like the rest).
+
+## 6. Art requests
+
+1. **Osric Starling, sprite** (`osric`, 460 px wide like the humans, every
+   mood in section 1 plus `open` talking frames and a `talk` entry in
+   `talking.rpy`). A man-shaped shadow, the dark between stars, in a long
+   coat with too many pockets; round spectacles that catch the light (the
+   only bright part of him); a pencil behind an ear. Lonely, funny, kind
+   eyes behind the glasses; never menacing. Not a uniform, no insignia, no
+   real-world military or political symbols. Until it exists he is a voice
+   in mirrors and a narrated figure on `bg shadowbase` (ch2_light's cut,
+   ch3_cut_shadow, ch4_shadow): add `show osric ... at Transform(xalign=0.6,
+   yalign=1.0)` there.
+2. **Herons and Understudies, close.** A `cg heron` (one walker lowering its
+   cabin to the ward window, hatch open, red emergency light) for the
+   "hands on the bars" branch of ch3_breakout. The procedural drawing in
+   `bg ward yard` is the reference; keep the designs original.
+3. **The Maker** needs no sprite: keep it as the gold going quiet
+   (`bg goldlight`).

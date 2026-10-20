@@ -32,8 +32,8 @@ label ch4_sys_less_plus:
         call ch4_cut_ashveil
         a "Ashveil says it's like living on starters. He says he's never felt better. He says it like it's an insult."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
-    a "Left alone, every one of them, since any might be the one. The cage is gone, the gifts stay. The lightest touch on an Earth is none."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
+    a "Left alone, every one of them, as if each were the one. The cage is gone, the gifts stay. The lightest touch on an Earth is none."
     call ch4_cut_council
     ch4_measurer "We object. A light hand lets suffering run. You will watch a war you could stop in a second, and call it restraint."
     call ch4_cut_aron
@@ -72,7 +72,7 @@ label ch4_sys_less_minus:
         call ch4_cut_ashveil
         a "Ashveil feels where a world is cold now, instead of where it's ripe. He complains constantly. He's very good."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Tended at a distance, all of them, because they're free now. Medicine, ideas, comfort when they pray. Given when asked. Never invoiced."
     call ch4_cut_council
     ch4_measurer "We object. A close hand becomes a cage. Your Council also tended its worlds closely, every day, for ten thousand years."
@@ -153,8 +153,8 @@ label ch4_sys_truth_plus:
         call ch4_cut_ashveil
         a "Ashveil published his first. He said it was the most naked he's felt in a thousand years. He seemed to enjoy it."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
-    a "Told, slowly, in a way they can carry. Including that nobody knows which of them is the original. That's part of the truth too."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
+    a "Told, slowly, in a way they can carry. Including that the original is gone, and they are what's left of it. That's part of the truth too."
     call ch4_cut_council
     ch4_measurer "We object. Truth breaks minds. You heard the logs of the universe and it put you in a ward."
     call ch4_cut_aron
@@ -192,7 +192,7 @@ label ch4_sys_truth_minus:
     a "A pattern person never has to find out they're a pattern. A spirit can ask and be told. The hungry ones stay outside the veil. It's for dreamers, not eaters."
     a "The Lantern Watch audits every veil. If one is ever hiding harm, they tear it. Comfort, yes. Cover, never."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Every Earth keeps its God, the shape they know and the comfort when they pray. Underneath, now, it's honest. Nothing is taken back."
     call ch4_cut_council
     ch4_measurer "We object. A veil is a lie with good manners. Your Council's cage was invisible too, and called itself kind."
@@ -240,8 +240,8 @@ label ch4_sys_share_plus:
         call ch4_cut_ashveil
         a "Ashveil says it's the first time he's finished a plate and not wanted the next one. He thinks he's ill."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
-    a "One place each at the table. Nobody knows which came first, and here it doesn't matter. No throne for the original. No cage for any."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
+    a "One place each at the table. The first is gone, and here it doesn't matter. No throne for the original. No cage for any."
     call ch4_cut_council
     ch4_measurer "We object. Equal shares are very expensive. You will run far fewer worlds than your network can."
     call ch4_cut_aron
@@ -282,7 +282,7 @@ label ch4_sys_share_minus:
         call ch4_cut_ashveil
         a "Ashveil assesses terraces now. He says love tasted better than this. He says it with less conviction every year."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Every one is a first terrace, already earned. They were held for ten thousand years. They've paid."
     call ch4_cut_council
     ch4_measurer "We object. 'Stable worlds earn more minds' is exactly how your Council justified its farms."
@@ -328,7 +328,7 @@ label ch4_sys_rest_plus:
         call ch4_cut_ashveil
         a "Ashveil's done eleven fasts. He says the first was the worst night of his existence and the second merely awful."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "They rest. No new interventions for a generation. They've been leaned on for ten thousand years. Let them lie in the sun."
     call ch4_cut_council
     ch4_measurer "We object. Rest is slow. Your best minds will sleep through their brightest window."
@@ -369,7 +369,7 @@ label ch4_sys_rest_minus:
         call ch4_cut_ashveil
         a "Ashveil says it's like being a chef who mustn't taste. Then he admitted he's started enjoying watching people eat."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "They get the gifts fast. Machines, longer lives, ideas that came down only when the yield was good. Now they come because they're good."
     call ch4_cut_council
     ch4_measurer "We object. You chose speed and paid with your own body. You are recommending what nearly broke you."
@@ -413,7 +413,7 @@ label ch4_sys_spirits_plus:
         call ch4_cut_ashveil
         a "Ashveil read that clause three times and laughed. He said, 'You've made me vegetarian by grammar.'"
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Free, and their own spirits with them. Every Earth's breath gets a union. Nobody is left off a passenger list for being made of breath."
     call ch4_cut_council
     ch4_measurer "We object. If every spirit is a person, who runs the breathing? Your worlds will stop breathing by Tuesday."
@@ -453,7 +453,7 @@ label ch4_sys_spirits_minus:
         call ch4_cut_ashveil
         a "Ashveil sings bass. Badly. The Guild let him join anyway. He's never been so pleased about anything."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Free, and their breath kept by the Guild for nothing. They never have to know someone's very proud of their sighs."
     call ch4_cut_council
     ch4_measurer "We object. You keep a whole class of beings in service and call it honour. We have heard that from worse mouths than yours."
@@ -499,8 +499,8 @@ label ch4_sys_govern_plus:
         call ch4_cut_ashveil
         a "Ashveil filibustered nine hours on his first day. Pim filibustered back for ten, all kitchen talk. Ashveil conceded with real respect."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
-    a "Each gets its own seat, since any might be the original. And each may vote to stay out of all of this. They were captured without being asked. Never again."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
+    a "Each gets its own seat, as real as the original ever was. And each may vote to stay out of all of this. They were captured without being asked. Never again."
     call ch4_cut_council
     ch4_measurer "We object. Parliaments are slow and loud. Worlds will suffer while your beings debate."
     call ch4_cut_aron
@@ -536,7 +536,7 @@ label ch4_sys_govern_minus:
         call ch4_cut_ashveil
         a "Ashveil asked to be assigned to the moth. He says it's the only guardian he respects. The moth has not commented."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Each has its own lanterns, chosen from its own people. Nurses, mostly, I'd guess. People who already sit up with strangers at four in the morning."
     call ch4_cut_council
     ch4_measurer "We object. Small guardians become small tyrants. A thousand lanterns are a thousand chances to burn someone."
@@ -584,7 +584,7 @@ label ch4_sys_exit_plus:
         call ch4_cut_ashveil
         a "Ashveil's world gained four hundred residents last year. He says it's his charm. It's because he planted a very good orchard."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Each has a door too. Their people may visit the lanes that grew from the same past. No one has to."
     call ch4_cut_council
     ch4_measurer "We object. Worlds will empty. The cruel ones will collapse on everyone too poor or frightened to leave."
@@ -623,7 +623,7 @@ label ch4_sys_exit_minus:
         call ch4_cut_ashveil
         a "Ashveil's bound to my old world, 7,412. He visits the hospital. He isn't allowed to eat there. He brings grapes."
     call ch4_broll_earth
-    ch4_measurer "And the Earths? No one knows which is the original."
+    ch4_measurer "And the Earths? Each of them believes it is the original."
     a "Mended at home, every one. They were held ten thousand years. They don't need moving. They need to be left to heal, each in its own house."
     call ch4_cut_council
     ch4_measurer "We object. You will trap minds in bad worlds. Somewhere someone is in a house that cannot be mended."

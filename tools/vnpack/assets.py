@@ -610,24 +610,24 @@ def convert_audio(data, name, out_path, warn, profile="sd"):
             f.write(data)
         if profile == "wifi":
             mono = ["-af", "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1", "-ar", "22050"]
-            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *mono, "-c:a", "vorbis",
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *mono, "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis",
                    "-strict", "-2", "-q:a", "1.5", out_path]
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode != 0:   # mono sources: pan needs two channels
                 cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "22050",
-                       "-c:a", "vorbis", "-strict", "-2", "-q:a", "1.5", out_path]
+                       "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis", "-strict", "-2", "-q:a", "1.5", out_path]
                 r = subprocess.run(cmd, capture_output=True)
             if r.returncode != 0:
                 warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
                 return False
             return True
         cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-               "-c:a", "libvorbis", "-q:a", "3", out_path]
+               "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "libvorbis", "-q:a", "3", out_path]
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             # Builds without libvorbis only have ffmpeg's experimental encoder.
             cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-                   "-c:a", "vorbis", "-strict", "-2", "-b:a", "112k", out_path]
+                   "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis", "-strict", "-2", "-b:a", "112k", out_path]
             r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")

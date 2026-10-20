@@ -197,6 +197,88 @@ static void apply_staged_update(const char *id)
     move_tree(staged, live);
 }
 
+static int cmp_str(const void *a, const void *b)
+{
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/* After an update (see flag_prune in net.c), deletes packed files in img/
+ * and snd/ that game.bin no longer names: files are named by their contents,
+ * so changed ones arrive under new names and the old ones stay behind. */
+static void prune_game(const char *dir, const Game *g)
+{
+    char flag[400];
+    snprintf(flag, sizeof(flag), "%s/prune.flag", dir);
+    struct stat st;
+    if (stat(flag, &st) != 0)
+        return;
+    remove(flag);
+    enum { NAME = 64 };
+    /* every referenced path, plus the poster beside each .cvh video */
+    const char **keep = malloc(sizeof(char *) * (g->nres * 2 + 1));
+    char *posters = malloc((size_t)g->nres * NAME + 1);
+    char *doomed = NULL;
+    u32 n = 0, ndoomed = 0, cap = 0;
+    if (!keep || !posters)
+        goto out;
+    for (u32 i = 0, used = 0; i < g->nres; i++) {
+        const char *r = g->res[i];
+        if (!r)
+            continue;
+        size_t len = strlen(r);
+        if (len >= NAME - 2)
+            goto out;   /* not a name this scheme makes: leave the folder alone */
+        keep[n++] = r;
+        if (len > 4 && !strcmp(r + len - 4, ".cvh")) {
+            snprintf(posters + used, NAME, "%.*s.ctex", (int)(len - 4), r);
+            keep[n++] = posters + used;
+            used += NAME;
+        }
+    }
+    qsort(keep, n, sizeof(char *), cmp_str);
+    /* list first, delete after: removing while reading a folder can skip entries */
+    static const char *subs[] = {"img", "snd"};
+    for (int k = 0; k < 2; k++) {
+        char path[400];
+        snprintf(path, sizeof(path), "%s/%s", dir, subs[k]);
+        DIR *d = opendir(path);
+        if (!d)
+            continue;
+        struct dirent *e;
+        while ((e = readdir(d))) {
+            const char *ext = strrchr(e->d_name, '.');
+            if (!ext || (strcmp(ext, ".ctex") && strcmp(ext, ".ogg") && strcmp(ext, ".cvid") &&
+                         strcmp(ext, ".cvh")) || strlen(e->d_name) >= NAME - 5)
+                continue;
+            char rel[NAME];
+            snprintf(rel, sizeof(rel), "%s/%s", subs[k], e->d_name);
+            const char *key = rel;
+            if (bsearch(&key, keep, n, sizeof(char *), cmp_str))
+                continue;
+            if (ndoomed == cap) {
+                cap = cap ? cap * 2 : 64;
+                char *grown = realloc(doomed, (size_t)cap * NAME);
+                if (!grown)
+                    break;
+                doomed = grown;
+            }
+            memcpy(doomed + (size_t)ndoomed++ * NAME, rel, NAME);
+        }
+        closedir(d);
+    }
+    for (u32 i = 0; i < ndoomed; i++) {
+        char path[400];
+        snprintf(path, sizeof(path), "%s/%s", dir, doomed + (size_t)i * NAME);
+        remove(path);
+    }
+    if (ndoomed)
+        LOG("removed %u files the update replaced", (unsigned)ndoomed);
+out:
+    free(keep);
+    free(posters);
+    free(doomed);
+}
+
 static bool load_game_dir(const char *dir, const char *id)
 {
     unload_game();
@@ -207,6 +289,7 @@ static bool load_game_dir(const char *dir, const char *id)
         return false;
     }
     E.loaded = true;
+    prune_game(dir, &E.game);
     net_set_live_game(id);
     {
         SlotInfo info;

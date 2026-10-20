@@ -407,8 +407,36 @@ static void end_file(void)
     }
 }
 
+/* After a complete protocol-3 transfer, each game in the manifest gets a
+ * prune.flag: the next time it loads, files its game.bin no longer names are
+ * deleted (packed files are named by their contents, so an update leaves the
+ * old ones behind). For the game being played the flag is staged with the
+ * rest of the update. */
+static void flag_prune(void)
+{
+    if (proto != 3 || mf_failed || !mf_n)
+        return;
+    char last[64] = "", rel[128], full[400];
+    for (u32 i = 0; i < mf_n; i++) {
+        const char *p = mf_paths + mf_off[i];
+        if (strncmp(p, "games/", 6) != 0)
+            continue;
+        size_t n = strcspn(p + 6, "/");
+        if (!p[6 + n] || n >= sizeof(last) || (!strncmp(last, p + 6, n) && !last[n]))
+            continue;
+        snprintf(last, sizeof(last), "%.*s", (int)n, p + 6);
+        snprintf(rel, sizeof(rel), "games/%s/prune.flag", last);
+        target_path(rel, full, sizeof(full));
+        make_dirs(full);
+        FILE *f = fopen(full, "wb");
+        if (f)
+            fclose(f);
+    }
+}
+
 static void finish_transfer(void)
 {
+    flag_prune();
     send(conn_fd, "DONE", 4, 0);
     if (proto == 3)
         send(conn_fd, (const char *)&mf_failed, 4, 0);
@@ -456,6 +484,9 @@ static bool have_file(void)
     note_game(path);
     char full[400];
     live_path(path, full, sizeof(full));   /* compare with what the game uses */
+    struct stat st;
+    if (stat(full, &st) != 0 || (u64)st.st_size != file_size)
+        return false;   /* missing or a different size: no need to read it */
     FILE *f = fopen(full, "rb");
     if (!f)
         return false;
