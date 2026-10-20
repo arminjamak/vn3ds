@@ -645,6 +645,15 @@ static void send_logs(void)
     }
 }
 
+/* Has the computer hung up? (Checked during the long comparison, which
+ * otherwise only notices when its answer can't be sent.) */
+static bool sender_gone(void)
+{
+    char c;
+    ssize_t r = recv(conn_fd, &c, 1, MSG_PEEK | MSG_DONTWAIT);
+    return r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR);
+}
+
 static void feed(const u8 *p, size_t n)
 {
     while (n > 0) {
@@ -745,6 +754,13 @@ static void feed(const u8 *p, size_t n)
                     } else {
                         bits[i >> 3] |= (u8)(1u << (i & 7));
                         needed++;
+                    }
+                    if ((i & 15) == 15 && sender_gone()) {   /* nobody waits for the answer */
+                        free(bits);
+                        set_status("Connection lost while comparing", NULL);
+                        NET.receiving = false;
+                        close_conn();
+                        return;
                     }
                     if ((i & 63) == 0) {
                         char m[64];
