@@ -1,5 +1,6 @@
 #include "app.h"
 #include "minigame.h"
+#include "leaderboard.h"
 #include "net.h"
 #include "video.h"
 
@@ -178,6 +179,7 @@ void app_init(const char *game_dir)
     memset(&E, 0, sizeof(E));
     snprintf(E.root, sizeof(E.root), "%s", platform_root());
     settings_load();
+    lb_init();
     audio_set_volume(CH_MUSIC, E.set.music_vol);
     audio_set_volume(CH_SOUND, E.set.sound_vol);
     audio_set_volume(CH_VOICE, E.set.sound_vol);
@@ -222,6 +224,7 @@ void app_receive_close(void)
 
 void app_shutdown(void)
 {
+    lb_shutdown();
     settings_save();
     unload_game();
 }
@@ -234,6 +237,7 @@ void app_to_title(void)
     E.music_res = -1;
     stage_clear(&E.stage);
     stage_clear(&E.committed);
+    E.stage.has_camera = E.committed.has_camera = 0;
     E.tr.active = false;
     E.overlay = OV_NONE;
     E.screen = SCR_TITLE;
@@ -245,6 +249,7 @@ static void reset_presentation(void)
 {
     stage_clear(&E.stage);
     stage_clear(&E.committed);
+    E.stage.has_camera = E.committed.has_camera = 0;
     E.tr.active = false;
     E.window_mode = WIN_AUTO;
     E.hist_n = 0;
@@ -327,6 +332,10 @@ void eng_scene(const char *spec, const char *as_tag, s32 zorder, const char *beh
 void eng_show(const char *spec, const char *as_tag, s32 zorder, const char *behind,
               const s32 *atl, int natl, bool only_if_shown)
 {
+    if (as_tag && !strcmp(as_tag, "@camera")) {
+        stage_camera(&E.stage, &E.game, atl, natl);
+        return;
+    }
     stage_show(&E.stage, &E.game, spec, as_tag, zorder, behind, atl, natl, only_if_shown, false);
     char key[32];
     sprite_key(spec, as_tag, key, sizeof(key));
@@ -720,6 +729,7 @@ void app_update(const Input *in_real, float dt)
     if (E.toast_t > 0)
         E.toast_t -= dt;
     audio_update(dt);
+    lb_poll();
 
     Screen before = E.screen;
     Overlay ov_before = E.overlay;
@@ -788,15 +798,24 @@ void app_update(const Input *in_real, float dt)
         mg_update(in, dt);
         break;
     case SCR_MGMENU: {
-        int cnt = mg_count();
+        int cnt = mg_count(), was = E.mg_sel;
         if (in->down & KEY_UP_)
             E.mg_sel = (E.mg_sel + cnt - 1) % cnt;
         if (in->down & KEY_DOWN_)
             E.mg_sel = (E.mg_sel + 1) % cnt;
-        if (in->down & KEY_A_)
+        if (E.mg_board && E.mg_sel != was)
+            ui_mg_board();   /* follow the selection */
+        if (in->down & KEY_A_) {
+            E.mg_board = false;
             mg_begin(mg_at(E.mg_sel), false);
-        else if (in->down & KEY_B_)
-            E.screen = SCR_TITLE;
+        } else if (in->down & KEY_X_) {
+            ui_mg_board();
+        } else if (in->down & KEY_B_) {
+            if (E.mg_board)
+                E.mg_board = false;
+            else
+                E.screen = SCR_TITLE;
+        }
         break;
     }
     case SCR_ERROR:

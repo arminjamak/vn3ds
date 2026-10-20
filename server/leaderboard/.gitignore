@@ -1,0 +1,4 @@
+# local test databases
+*.db
+*.db-wal
+*.db-shm

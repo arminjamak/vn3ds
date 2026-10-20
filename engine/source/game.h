@@ -10,12 +10,14 @@ enum { DIR_LEFT, DIR_RIGHT, DIR_TOP, DIR_BOTTOM };
 enum { STEP_SET, STEP_INTERP, STEP_PAUSE, STEP_REPEAT };
 enum {
     P_XPOS, P_YPOS, P_XANCHOR, P_YANCHOR, P_XOFFSET, P_YOFFSET,
-    P_XZOOM, P_YZOOM, P_ZOOM, P_ALPHA, P_ROTATE, P_ZPOS, P_COUNT
+    P_XZOOM, P_YZOOM, P_ZOOM, P_ALPHA, P_ROTATE, P_ZPOS,
+    P_XROTATE, P_YROTATE, /* camera: tilt (pitch) and orbit (yaw), degrees */
+    P_COUNT
 };
 
 /* One depth layer of a layered illustration; x/y/w/h are in the image's
  * logical 3DS pixels, depth is absolute (positive = behind the screen). */
-enum { ANIM_NONE, ANIM_SWAY, ANIM_PULSE, ANIM_BREATHE, ANIM_FALL, ANIM_RISE };
+enum { ANIM_NONE, ANIM_SWAY, ANIM_PULSE, ANIM_BREATHE, ANIM_FALL, ANIM_RISE, ANIM_STARS };
 
 typedef struct {
     s32 res;

@@ -60,7 +60,7 @@ IGNORED_CALLS = {
 # ATL ------------------------------------------------------------------
 
 PROP = dict(xpos=0, ypos=1, xanchor=2, yanchor=3, xoffset=4, yoffset=5,
-            xzoom=6, yzoom=7, zoom=8, alpha=9, rotate=10, zpos=11)
+            xzoom=6, yzoom=7, zoom=8, alpha=9, rotate=10, zpos=11, xrotate=12, yrotate=13)
 WARPERS = {"linear": 0, "ease": 1, "easein": 2, "easeout": 3}
 STEP_SET, STEP_INTERP, STEP_PAUSE, STEP_REPEAT = 0, 1, 2, 3
 
@@ -879,7 +879,7 @@ class Compiler:
             as_tag = tag
         if n.onlayer not in (None, "master"):
             self.warn(n.line, f"layer '{n.onlayer}' is drawn on the master layer")
-        if spec:
+        if spec and spec != "@camera":
             self.used_specs.setdefault(spec, n.line)
         atl = []
         for e in n.at:
@@ -954,6 +954,11 @@ class Compiler:
         return []
 
     def instantiate_transform(self, name, args, kwargs, line):
+        return self.compile_atl(self.transform_nodes[name].block,
+                                self.transform_env(name, args, kwargs), line)
+
+    def transform_env(self, name, args, kwargs):
+        """Parameter values of a transform call (defaults filled in)."""
         node = self.transform_nodes[name]
         env = {}
         if node.params:
@@ -973,7 +978,7 @@ class Compiler:
                 for pn, v in zip(pnames, args):
                     env[pn] = v
                 env.update(kwargs)
-        return self.compile_atl(node.block, env, line)
+        return env
 
     def add_program(self, steps):
         self.atl_programs.append(steps)
@@ -1024,9 +1029,9 @@ class Compiler:
                     self.warn(line, f"ATL '{w}:' is not supported")
                 continue
             for stmt in split_top_commas(text):
-                self.atl_statement(line, stmt, steps, env, block_start)
+                self.atl_statement(line, stmt, steps, env, block_start, extra)
 
-    def atl_statement(self, line, text, steps, env, block_start):
+    def atl_statement(self, line, text, steps, env, block_start, extra=None):
         lex = rpy.Lexer(line, text)
         if lex.eol():
             return
@@ -1094,10 +1099,22 @@ class Compiler:
                 steps.append((STEP_SET, 0, 0.0, 0, 0,
                               self.expand_props(BUILTIN_POSITIONS[name], line)))
                 return
+            call_args = None
+            if isinstance(expr, ast.Call) and dotted(expr.func) in self.transform_nodes:
+                name = dotted(expr.func)
+                try:
+                    call_args = ([self.eval_ast(a, env) for a in expr.args],
+                                 {k.arg: self.eval_ast(k.value, env) for k in expr.keywords if k.arg})
+                except Unsupported:
+                    self.warn(line, f"cannot evaluate the arguments of {name}")
+                    call_args = ([], {})
             if name in self.transform_nodes:
+                # Its steps run in sequence here; its parallel blocks become
+                # runners of their own, alongside this one.
                 node = self.transform_nodes[name]
-                start = len(steps)
-                self.atl_lines(node.block, steps, {}, start, [])
+                sub_env = self.transform_env(name, *(call_args or ([], {})))
+                self.atl_lines(node.block, steps, sub_env, len(steps),
+                               extra if extra is not None else [])
                 return
         self.warn(line, f"unsupported ATL: {text}")
 
@@ -1180,9 +1197,10 @@ class Compiler:
                     pos("ypos", pv[1])
                     out.append((PROP["xanchor"], 0, 0.5))
                     out.append((PROP["yanchor"], 0, 0.5))
-            elif p in ("zoom", "xzoom", "yzoom", "alpha", "rotate", "zpos"):
+            elif p in ("zoom", "xzoom", "yzoom", "alpha", "rotate", "zpos", "xrotate", "yrotate",
+                       "zrotate"):
                 try:
-                    out.append((PROP[p], 0, float(v)))
+                    out.append((PROP["rotate" if p == "zrotate" else p], 0, float(v)))
                 except (TypeError, ValueError):
                     self.warn(line, f"bad value for {p}")
             # everything else in ATL_PROPERTIES is accepted and ignored

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "leaderboard.h"
 #include "minigame.h"
 #include "net.h"
 
@@ -6,7 +7,7 @@
 
 enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
-    B_MG = 60, B_MG_BACK = 90,
+    B_MG = 60, B_MG_BACK = 90, B_MG_BOARD = 91,
     B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
     B_TO_TITLE = 30,
@@ -199,7 +200,9 @@ int ui_buttons(Button *b, int max)
             n = add(b, n, max, 12, 26 + i * 25, 296, 23, labels[i], B_MG + i);
             b[n - 1].hot = i == E.mg_sel;
         }
-        n = add(b, n, max, 12, 206, 120, 30, "B: Back", B_MG_BACK);
+        n = add(b, n, max, 12, 206, 120, 30, E.mg_board ? "B: Close" : "B: Back", B_MG_BACK);
+        n = add(b, n, max, 188, 206, 120, 30, E.mg_board ? "X: Refresh" : "X: Leaderboard",
+                B_MG_BOARD);
         break;
     }
     case SCR_RECEIVE:
@@ -323,7 +326,9 @@ void ui_activate(int id)
     char msg[64];
     if (id >= B_MG && id < B_MG + 16 && E.screen == SCR_MGMENU) {
         E.mg_sel = id - B_MG;
-        if (mg_at(E.mg_sel))
+        if (E.mg_board)
+            ui_mg_board();   /* with the leaderboard up, a tap just switches games */
+        else if (mg_at(E.mg_sel))
             mg_begin(mg_at(E.mg_sel), false);
         return;
     }
@@ -372,7 +377,13 @@ void ui_activate(int id)
         break;
     case B_TITLE_QUIT: E.quit = true; break;
     case B_TITLE_MINI: E.screen = SCR_MGMENU; break;
-    case B_MG_BACK: E.screen = SCR_TITLE; break;
+    case B_MG_BACK:
+        if (E.mg_board)
+            E.mg_board = false;
+        else
+            E.screen = SCR_TITLE;
+        break;
+    case B_MG_BOARD: ui_mg_board(); break;
     case B_LOG: E.overlay = OV_LOG; E.log_scroll = 0; break;
     case B_AUTO: E.auto_mode = !E.auto_mode; break;
     case B_SKIP: E.skip_toggle = !E.skip_toggle; break;
@@ -558,6 +569,80 @@ static void draw_dialogue(int eye)
     }
 }
 
+/* ---- minigame leaderboard ------------------------------------------------ */
+
+void ui_mg_board(void)
+{
+    const MiniGame *g = mg_at(E.mg_sel);
+    E.mg_board = true;
+    if (g)
+        lb_fetch_top(g->id);
+}
+
+/* The selected game's online top 10 on the left, the player's own name and
+ * local best on the right. */
+static void draw_board_top(int eye)
+{
+    const MiniGame *g = mg_at(E.mg_sel);
+    const u32 GOLD = RGBA(255, 210, 110, 255), DIM = RGBA(190, 190, 215, 255);
+    char buf[300];
+    if (!g)
+        return;
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(24, 20, 44, 255), RGBA(70, 40, 90, 255));
+    snprintf(buf, sizeof(buf), "%s: online top %d", g->title, LB_TOP_MAX);
+    float sc = fit_scale(buf, 0.62f, 380);
+    gfx_text(buf, 200 - gfx_text_width(buf, sc) / 2 + shift(eye, -0.3f), 10, sc, GOLD);
+
+    /* the list, or what is going on instead */
+    float dx = shift(eye, -0.15f);
+    const char *msg = NULL;
+    if (!lb_online())
+        msg = "The online leaderboard is off.\nTo turn it on, add the line\nurl = http://<server>\n"
+              "to leaderboard.cfg in the\nvn3ds folder.";
+    else if (!lb_top_is(g->id) || LB_TOP.state == LB_BUSY || LB_TOP.state == LB_IDLE)
+        msg = "Loading...";
+    else if (LB_TOP.state == LB_FAILED) {
+        char why[200];
+        ui_wrap(LB_TOP.error, 240, 0.45f, why, sizeof(why));
+        snprintf(buf, sizeof(buf), "Could not load the leaderboard.\n\n%s", why);
+        msg = buf;
+    } else if (LB_TOP.ntop == 0)
+        msg = "No scores yet.\nBe the first!";
+    if (msg) {
+        text_centered(msg, 145 + dx, 90, 0.45f, WHITE);
+    } else {
+        for (int i = 0; i < LB_TOP.ntop; i++) {
+            const LbEntry *e = &LB_TOP.top[i];
+            float y = 42 + i * 18;
+            u32 c = !strcmp(e->name, lb_name()) ? GOLD : WHITE;
+            if (i % 2 == 0)
+                gfx_rect(14 + dx, y - 1, 258, 18, RGBA(255, 255, 255, 18));
+            snprintf(buf, sizeof(buf), "%d", e->rank);
+            gfx_text(buf, 44 - gfx_text_width(buf, 0.5f) + dx, y, 0.5f, DIM);
+            gfx_text(e->name, 58 + dx, y, fit_scale(e->name, 0.5f, 160), c);
+            snprintf(buf, sizeof(buf), "%d%%", e->score);
+            gfx_text(buf, 264 - gfx_text_width(buf, 0.5f) + dx, y, 0.5f, c);
+        }
+    }
+
+    /* you */
+    float px = 284 + shift(eye, -0.25f);
+    gfx_rect(px, 42, 104, 150, RGBA(255, 255, 255, 30));
+    gfx_text("Playing as", px + 8, 50, 0.42f, DIM);
+    gfx_text(lb_name(), px + 8, 66, fit_scale(lb_name(), 0.52f, 90), WHITE);
+    gfx_text("Your best", px + 8, 104, 0.42f, DIM);
+    int best = mg_best(g->id);
+    if (best >= 0)
+        snprintf(buf, sizeof(buf), "%d%%", best);
+    else
+        snprintf(buf, sizeof(buf), "-");
+    gfx_text(buf, px + 8, 120, 0.9f, GOLD);
+    if (lb_online() && LB_POST.state == LB_DONE && !strcmp(LB_POST.game, g->id)) {
+        snprintf(buf, sizeof(buf), "Online #%d of %d", LB_POST.rank, LB_POST.total);
+        gfx_text(buf, px + 8, 166, fit_scale(buf, 0.42f, 90), DIM);
+    }
+}
+
 static void draw_title_top(int eye)
 {
     const Game *g = &E.game;
@@ -606,6 +691,10 @@ void ui_draw_top(int eye)
         mg_draw_top(eye);
         break;
     case SCR_MGMENU: {
+        if (E.mg_board) {
+            draw_board_top(eye);
+            break;
+        }
         gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(24, 20, 44, 255), RGBA(70, 40, 90, 255));
         const MiniGame *g = mg_at(E.mg_sel);
         text_centered("Minigames", 200 + shift(eye, -0.3f), 20, 0.8f, RGBA(255, 210, 110, 255));
@@ -856,7 +945,7 @@ void ui_draw_bottom(void)
         mg_draw_bottom();
         return;
     case SCR_MGMENU:
-        header("Minigames: best scores");
+        header(E.mg_board ? "Online leaderboard" : "Minigames: best scores");
         break;
     }
     n = ui_buttons(b, 48);

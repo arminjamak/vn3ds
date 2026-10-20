@@ -266,7 +266,8 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
 - **`depth`**: per-tag or per-image 3D depth (see "Tuning the 3D").
 - **`layers`**: draw an image as several depth planes, each with its own 3D
   offset and an optional motion (`sway`, `pulse`, `breathe`, `fall`,
-  `rise`). Snapshot's scenes are drawn this way by `examples/scenes3d.py`;
+  `rise`, or `stars`: a procedural, twinkling starfield that comes out a
+  little different every time the picture is shown). Snapshot's scenes are drawn this way by `examples/scenes3d.py`;
   the flat image in `images/` stays for Ren'Py on a PC.
 - **`camera`**: a slow camera drift and zoom "breath" with true parallax
   (`{"drift": 4.5, "period": 19, "zoom": 0.015}`).
@@ -274,6 +275,17 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   played as text appears, pitched per character variable, with the music
   ducked underneath (`{"bank": [...], "pitch": {"a": 1.0}, "volume": 0.32,
   "duck": 0.8}`).
+- **Ren'Py's `camera` statement** (standard Ren'Py) moves the whole scene with
+  ATL: `xoffset`, `yoffset`, `zoom`, `rotate` and `zpos`, plus `xrotate` and
+  `yrotate`, which on the 3DS tilt and orbit around the screen plane so a
+  scene's layers slide past each other. Snapshot's `camera.rpy` builds a
+  handheld-documentary grammar from it (establishing loops, mediums,
+  close-ups, punch-ins).
+- **Minigames**: `$ score = vn3ds_minigame("snake")` plays one of vn3ds's
+  native minigames and returns its 0-100 score; the title screen gets a
+  Minigames menu with best scores. Define `vn3ds_minigame()` in your game
+  for PC (Snapshot's `minigames.rpy` shows a stand-in). Music and sounds come
+  from `game/audio/minigame/`.
 - **`config.speaking_attribute`** (standard Ren'Py) is honoured: while a
   character speaks, the engine flaps between their image and the image with
   that attribute, e.g. `aron tired` and `aron tired talk`.

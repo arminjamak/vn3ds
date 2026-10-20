@@ -36,6 +36,12 @@ void audio_stop(int ch, float fadeout)
 }
 
 bool audio_playing(int ch) { return playing[ch]; }
+
+void audio_pause(int ch, bool paused)
+{
+    if (host_audio_log)
+        fprintf(host_audio_log, "%.4f %s %d\n", host_now, paused ? "pause" : "resume", ch);
+}
 void audio_set_volume(int ch, float v)
 {
     if (host_audio_log && ch >= 0 && ch < CH_COUNT && v != last_vol[ch])
@@ -76,4 +82,21 @@ void audio_music_duck(float gain)
         fprintf(host_audio_log, "%.4f duck %.4f\n", host_now, gain);
         last_duck = gain;
     }
+}
+
+static int sfx_loaded;
+
+void audio_sfx_load(const char **paths, int n)
+{
+    sfx_loaded = n;
+    for (int i = 0; i < n && host_audio_log; i++)
+        fprintf(host_audio_log, "%.4f sfxbank %d %s\n", host_now, i, paths[i]);
+}
+
+void audio_sfx_free(void) { sfx_loaded = 0; }
+
+void audio_sfx_play(int index, float volume, float rate)
+{
+    if (host_audio_log && index >= 0 && index < sfx_loaded)
+        fprintf(host_audio_log, "%.4f sfx %d %.3f %.3f\n", host_now, index, volume, rate);
 }

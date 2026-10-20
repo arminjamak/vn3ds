@@ -70,6 +70,7 @@ bool save_write(int slot)
     ok &= wr(f, &n, 4) && wr(f, &st->next_order, 4) && wr(f, st->s, sizeof(Sprite) * n);
     u8 loop = E.music_loop, win = E.window_mode;
     ok &= wr(f, &E.music_res, 4) && wr(f, &loop, 1) && wr(f, &win, 1);
+    ok &= wr(f, &st->has_camera, 1) && wr(f, &st->camera, sizeof(Sprite));
     ok &= fclose(f) == 0;
     return ok;
 }
@@ -157,6 +158,8 @@ bool save_read(int slot)
     s32 music = -1;
     u8 loop = 0, win = 0;
     ok = ok && rdf(f, &music, 4) && rdf(f, &loop, 1) && rdf(f, &win, 1);
+    if (ok && rdf(f, &st.has_camera, 1) && !rdf(f, &st.camera, sizeof(Sprite)))
+        st.has_camera = 0;   /* (older saves end before the camera) */
     fclose(f);
     if (!ok || pc >= E.game.code_size)
         return false;

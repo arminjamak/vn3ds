@@ -101,6 +101,7 @@ typedef struct {
     int prefs_sel;
     int title_sel;
     int mg_sel;
+    bool mg_board;   /* Minigames menu: the online leaderboard is showing */
     char toast[96];
     float toast_t;
     char error[300];
@@ -143,6 +144,8 @@ int ui_buttons(Button *out, int max);
 /* The title screen's entries (button ids) in order; returns how many. */
 int ui_title_items(int *ids);
 void ui_activate(int id);
+/* Minigames menu: show (or refresh) the selected game's online leaderboard. */
+void ui_mg_board(void);
 void ui_overlay_input(const Input *in);
 void ui_draw_top(int eye);
 void ui_draw_bottom(void);

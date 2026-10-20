@@ -2,6 +2,7 @@
  * scores. The games themselves live in mg_*.c; see minigame.h. */
 
 #include "minigame.h"
+#include "leaderboard.h"
 
 #include <stdio.h>
 
@@ -110,7 +111,49 @@ static void play_named(int ch, const char *name, bool loop)
     audio_play(ch, path, loop, ch == CH_MUSIC ? 0.4f : 0.0f, false);
 }
 
-void mg_sfx(const char *name) { play_named(CH_SOUND, name, false); }
+/* The run's sound bank: every "minigame/<game id>_*" clip plus the shared
+ * ones, decoded once by mg_begin() so rapid effects can overlap. */
+#define BANK_MAX 64
+static char bank_names[BANK_MAX][48];
+static int bank_n;
+
+static void bank_load(const MiniGame *g)
+{
+    static char paths[BANK_MAX][400];
+    const char *ptrs[BANK_MAX];
+    bank_n = 0;
+    if (!E.loaded || !E.game.audio_names)
+        return;
+    char prefix[48];
+    snprintf(prefix, sizeof(prefix), "minigame/%s_", g->id);
+    u32 n = rd_u32(E.game.audio_names);
+    for (u32 i = 0; i < n && bank_n < BANK_MAX; i++) {
+        const char *an = game_str(&E.game, rd_u32(E.game.audio_names + 4 + 8 * i));
+        s32 res = rd_s32(E.game.audio_names + 8 + 8 * i);
+        if (!an || strncmp(an, "minigame/", 9) != 0)
+            continue;
+        bool shared = !strcmp(an, "minigame/cheat") || !strcmp(an, "minigame/result");
+        if (!shared && strncmp(an, prefix, strlen(prefix)) != 0)
+            continue;
+        snprintf(bank_names[bank_n], sizeof(bank_names[0]), "%s", an + 9);
+        game_res_path(&E.game, res, paths[bank_n], sizeof(paths[0]));
+        ptrs[bank_n] = paths[bank_n];
+        bank_n++;
+    }
+    audio_sfx_load(ptrs, bank_n);
+}
+
+void mg_sfx_pitch(const char *name, float rate)
+{
+    for (int i = 0; i < bank_n; i++)
+        if (!strcmp(bank_names[i], name)) {
+            audio_sfx_play(i, E.set.sound_vol, rate);
+            return;
+        }
+    play_named(CH_SOUND, name, false);   /* not in the bank: stream it */
+}
+
+void mg_sfx(const char *name) { mg_sfx_pitch(name, 1.0f); }
 void mg_music(const char *name) { play_named(CH_MUSIC, name, true); }
 
 /* ---- drawing helpers ---------------------------------------------------------- */
@@ -173,14 +216,25 @@ void mg_sky(int eye, u32 top, u32 bottom)
 /* ---- the run ---------------------------------------------------------------------- */
 
 /* Touch areas on the bottom screen. */
-#define CHEAT_X 236
-#define CHEAT_Y 206
-#define CHEAT_W 78
-#define CHEAT_H 28
+#define CHEAT_X MG_CHEAT_X
+#define CHEAT_Y MG_CHEAT_Y
+#define CHEAT_W MG_CHEAT_W
+#define CHEAT_H MG_CHEAT_H
 
 static bool touched(const Input *in, float x, float y, float w, float h)
 {
     return (in->down & KEY_TOUCH_) && in->tx >= x && in->tx < x + w && in->ty >= y && in->ty < y + h;
+}
+
+/* The story's cheat pool: the script variable vn3ds_cheats, or NULL. */
+static Value *story_cheats(void)
+{
+    if (!E.loaded || !E.vm.vars)
+        return NULL;
+    for (u32 i = 0; i < E.game.nvars; i++)
+        if (E.game.var_names[i] && !strcmp(E.game.var_names[i], "vn3ds_cheats"))
+            return &E.vm.vars[i];
+    return NULL;
 }
 
 void mg_begin(const MiniGame *g, bool from_story)
@@ -188,12 +242,19 @@ void mg_begin(const MiniGame *g, bool from_story)
     memset(&MG, 0, sizeof(MG));
     MG.game = g;
     MG.from_story = from_story;
+    if (from_story) {
+        Value *v = story_cheats();
+        MG.cheats_left = v && (v->type == VAL_NUM || v->type == VAL_BOOL) ? (int)v->num : 0;
+    } else {
+        MG.cheats_left = 1;
+    }
     MG.phase = MG_INTRO;
     MG.best_before = mg_best(g->id);
     MG.music_before = E.music_res;
     MG.music_loop_before = E.music_loop;
     E.screen = SCR_MINIGAME;
     talk_end();
+    bank_load(g);
 }
 
 static void start_play(void)
@@ -217,6 +278,8 @@ static void finish(void)
     const char *v = MG.game->verdict ? MG.game->verdict() : NULL;
     snprintf(MG.verdict, sizeof(MG.verdict), "%s", v ? v : "");
     save_best(MG.game->id, MG.score);
+    /* Only free play posts online: story runs differ in how many cheats you hold. */
+    MG.posted = !MG.from_story && lb_post(MG.game->id, MG.score);
     MG.phase = MG_RESULT;
     mg_sfx("result");
 }
@@ -225,6 +288,8 @@ static void leave(void)
 {
     /* restore the story's music */
     audio_stop(CH_SOUND, 0);
+    audio_sfx_free();
+    bank_n = 0;
     if (MG.from_story) {
         if (MG.music_before >= 0) {
             char path[400];
@@ -255,12 +320,22 @@ void mg_update(const Input *in, float dt)
         if (in->down & KEY_START_) {
             MG.phase = MG_PAUSED;
             MG.pause_sel = 0;
+            audio_pause(CH_MUSIC, true);   /* rhythm games stay in sync */
             break;
         }
         bool cheat = false;
-        if (!MG.cheat_used && ((in->down & (KEY_L_ | KEY_R_ | KEY_SELECT_)) ||
-                               touched(in, CHEAT_X, CHEAT_Y, CHEAT_W, CHEAT_H))) {
+        if (!MG.cheat_used && MG.cheats_left > 0 && (!g->can_cheat || g->can_cheat()) &&
+            ((in->down & (KEY_L_ | KEY_R_ | KEY_SELECT_)) ||
+             touched(in, CHEAT_X, CHEAT_Y, CHEAT_W, CHEAT_H))) {
             cheat = MG.cheat_used = true;
+            MG.cheats_left--;
+            if (MG.from_story) {   /* spend it from the story's pool */
+                Value *v = story_cheats();
+                if (v) {
+                    v->type = VAL_NUM;
+                    v->num = MG.cheats_left;
+                }
+            }
             mg_sfx("cheat");
         }
         MG.t += dt;
@@ -280,6 +355,8 @@ void mg_update(const Input *in, float dt)
         for (int i = 0; i < n; i++)
             if (touched(in, 60, 50 + i * 50, 200, 40))
                 pick = i;
+        if (pick != -1 || (in->down & (KEY_START_ | KEY_B_)))
+            audio_pause(CH_MUSIC, false);
         if ((in->down & (KEY_START_ | KEY_B_)) || pick == 0)
             MG.phase = MG_PLAY;
         else if (pick == 1)
@@ -370,6 +447,38 @@ static void bottom_text(const char *s, float x, float y, float scale, u32 c)
     }
 }
 
+/* Result screen: how posting the score to the online leaderboard went. */
+static void draw_online_status(void)
+{
+    const u32 dim = RGBA(180, 180, 200, 255);
+    char buf[160];
+    gfx_text("Online leaderboard", 14, 86, 0.45f, dim);
+    if (MG.from_story) {
+        gfx_text("Story run: play it from the Minigames\nmenu to post a score online.", 14, 106, 0.45f,
+                 MG_WHITE);
+        return;
+    }
+    if (!MG.posted) {
+        gfx_text(lb_online() ? "Not posted (still busy)" : "Offline", 14, 106, 0.55f, MG_WHITE);
+        return;
+    }
+    switch (LB_POST.state) {
+    case LB_DONE:
+        snprintf(buf, sizeof(buf), "Posted: #%d of %d", LB_POST.rank, LB_POST.total);
+        gfx_text(buf, 14, 106, 0.55f, MG_GOLD);
+        break;
+    case LB_FAILED:
+        gfx_text("Offline", 14, 106, 0.55f, MG_WHITE);
+        gfx_text(LB_POST.error, 14, 128, 0.42f, dim);
+        break;
+    default:
+        gfx_text("Posting...", 14, 106, 0.55f, MG_WHITE);
+        break;
+    }
+    snprintf(buf, sizeof(buf), "as %s", lb_name());
+    gfx_text(buf, 14, 150, 0.42f, dim);
+}
+
 void mg_draw_bottom(void)
 {
     const MiniGame *g = MG.game;
@@ -379,7 +488,13 @@ void mg_draw_bottom(void)
     case MG_INTRO:
         gfx_text("Controls", 14, 10, 0.55f, MG_GOLD);
         bottom_text(g->controls, 14, 34, 0.45f, MG_WHITE);
-        snprintf(buf, sizeof(buf), "Cheat (once): %s\nL, R, SELECT or tap Cheat", g->cheat);
+        if (!MG.from_story)
+            snprintf(buf, sizeof(buf), "Cheat (once): %s\nL, R, SELECT or tap Cheat", g->cheat);
+        else if (MG.cheats_left > 0)
+            snprintf(buf, sizeof(buf), "Cheat: %s\nYou have %d (L, R, SELECT or tap Cheat)", g->cheat,
+                     MG.cheats_left);
+        else
+            snprintf(buf, sizeof(buf), "Cheat: %s\nNone left: they unlock at milestones.", g->cheat);
         bottom_text(buf, 14, 132, 0.45f, RGBA(255, 200, 150, 255));
         if (!MG.from_story)
             bottom_button(10, 196, 140, 36, "B: Back", false);
@@ -394,8 +509,14 @@ void mg_draw_bottom(void)
             gfx_text(buf, 14, 40, 0.5f, MG_WHITE);
             gfx_text("START: pause", 14, 180, 0.45f, RGBA(180, 180, 200, 255));
         }
-        if (!MG.cheat_used)
-            bottom_button(CHEAT_X, CHEAT_Y, CHEAT_W, CHEAT_H, "Cheat", false);
+        if (!MG.cheat_used && MG.cheats_left > 0) {
+            char lab[24];
+            if (MG.from_story)
+                snprintf(lab, sizeof(lab), "Cheat (%d)", MG.cheats_left);
+            else
+                snprintf(lab, sizeof(lab), "Cheat");
+            bottom_button(CHEAT_X, CHEAT_Y, CHEAT_W, CHEAT_H, lab, false);
+        }
         break;
     case MG_PAUSED: {
         static const char *items[] = {"Resume", "Restart", "Quit (score so far)"};
@@ -408,6 +529,7 @@ void mg_draw_bottom(void)
         gfx_text(g->title, 14, 12, 0.55f, MG_GOLD);
         snprintf(buf, sizeof(buf), "Score %d%%", MG.score);
         gfx_text(buf, 14, 44, 0.6f, MG_WHITE);
+        draw_online_status();
         bottom_button(90, 196, 140, 36, "A: Continue", true);
         break;
     }

@@ -4,6 +4,7 @@
  *              [--every N] [--test-save] [--root dir]
  *              [--record frames.rgb --audio-log audio.txt --pace --stop-label L]
  *              [--minigame id [--every N]]   (plays a minigame with its bot)
+ *              [--leaderboard id]   (renders the Minigames menu's online top 10)
  *
  * It presses A through dialogue, picks menu choices from --choices (0 when
  * the list runs out), prints a transcript, and writes one PNG per line of
@@ -16,6 +17,7 @@
  */
 
 #include "../source/app.h"
+#include "../source/leaderboard.h"
 #include "../source/minigame.h"
 #include "host.h"
 #include "../source/net.h"
@@ -180,6 +182,7 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
     for (int frame = 0; frame < 60 * 60 * 10; frame++) {
         Input in;
         memset(&in, 0, sizeof(in));
+        host_now = frame * (double)dt;
         if (MG.phase == MG_INTRO && frame == 90)
             in.down = KEY_A_;
         else if (MG.phase == MG_PLAY && g->bot)
@@ -187,15 +190,18 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
         else if (MG.phase == MG_PLAY && !g->bot && frame % 30 == 0)
             in.down = KEY_A_;
         else if (MG.phase == MG_RESULT && MG.t >= 0) {
-            static int result_frames;
-            if (++result_frames == 2 && out) {
+            static int result_frames, post_wait;
+            /* give the online post (up to 15 s) time to land before the screenshot */
+            if (MG.posted && LB_POST.state == LB_BUSY && post_wait++ < 1500) {
+                usleep(10000);
+            } else if (++result_frames == 2 && out) {
                 app_render();
                 dump(out, shots++, "result");
             }
             if (result_frames > 120)
                 in.down = KEY_A_;
         }
-        in.held = in.down;
+        in.held |= in.down;   /* the bot may also hold keys (e.g. a stylus) */
         app_update(&in, dt);
         app_render();
         if (rec && frame % 2 == 0)
@@ -205,10 +211,63 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
         if (E.screen != SCR_MINIGAME)
             break;
     }
+    if (host_audio_log) {
+        fprintf(host_audio_log, "%.4f end\n", host_now);
+        fclose(host_audio_log);
+        host_audio_log = NULL;
+    }
     printf("== minigame %s: score %d%%%s%s, %.1f s, cheat %s ==\n", id, MG.score,
            MG.verdict[0] ? " - " : "", MG.verdict, MG.t, MG.cheat_used ? "used" : "unused");
+    if (!MG.posted)
+        printf("== leaderboard: %s ==\n", lb_online() ? "not posted" : "offline");
+    else if (LB_POST.state == LB_DONE)
+        printf("== leaderboard: posted as %s: #%d of %d ==\n", lb_name(), LB_POST.rank, LB_POST.total);
+    else
+        printf("== leaderboard: post failed: %s ==\n",
+               LB_POST.state == LB_FAILED ? LB_POST.error : "timed out");
     if (rec)
         fclose(rec);
+    return 0;
+}
+
+/* Opens the Minigames menu's online leaderboard for one game (as the X button
+ * does), waits for the list and writes <out>/0000_leaderboard.png. */
+static int run_leaderboard(const char *id, const char *out)
+{
+    int idx = -1;
+    for (int i = 0; i < mg_count(); i++)
+        if (!strcmp(mg_at(i)->id, id))
+            idx = i;
+    if (idx < 0) {
+        printf("ERROR: no minigame '%s'\n", id);
+        return 1;
+    }
+    const float dt = 1.0f / 60.0f;
+    Input in;
+    memset(&in, 0, sizeof(in));
+    E.screen = SCR_MGMENU;
+    E.mg_sel = idx;
+    in.down = KEY_X_;
+    app_update(&in, dt);
+    memset(&in, 0, sizeof(in));
+    for (int i = 0; i < 1500 && lb_online() && (!lb_top_is(id) || LB_TOP.state == LB_BUSY); i++) {
+        app_update(&in, dt);
+        usleep(10000);
+    }
+    app_update(&in, dt);
+    app_render();
+    dump(out ? out : ".", 0, "leaderboard");
+    if (!lb_online()) {
+        printf("== leaderboard %s: offline ==\n", id);
+        return 0;
+    }
+    if (LB_TOP.state != LB_DONE) {
+        printf("== leaderboard %s: failed: %s ==\n", id, LB_TOP.error);
+        return 1;
+    }
+    printf("== leaderboard %s: %d entries ==\n", id, LB_TOP.ntop);
+    for (int i = 0; i < LB_TOP.ntop; i++)
+        printf("%d\t%s\t%d\n", LB_TOP.top[i].rank, LB_TOP.top[i].name, LB_TOP.top[i].score);
     return 0;
 }
 
@@ -224,7 +283,7 @@ int main(int argc, char **argv)
     setvbuf(stdout, NULL, _IOLBF, 0);
     bool test_save = false, pace = false;
     FILE *rec = NULL;
-    const char *stop_label = NULL, *minigame = NULL;
+    const char *stop_label = NULL, *minigame = NULL, *board = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--out") && i + 1 < argc)
             out = argv[++i];
@@ -248,6 +307,8 @@ int main(int argc, char **argv)
             test_save = true;
         else if (!strcmp(argv[i], "--minigame") && i + 1 < argc)
             minigame = argv[++i];
+        else if (!strcmp(argv[i], "--leaderboard") && i + 1 < argc)
+            board = argv[++i];
         else if (!strcmp(argv[i], "--pace"))
             pace = true;
         else if (!strcmp(argv[i], "--stop-label") && i + 1 < argc)
@@ -310,6 +371,8 @@ int main(int argc, char **argv)
         return 1;
     }
     printf("== %s ==\n", E.game.title);
+    if (board)
+        return run_leaderboard(board, out);
     if (minigame)
         return run_minigame(minigame, out, every > 0 ? every : 30, rec);
 

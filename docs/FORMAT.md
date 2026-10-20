@@ -118,7 +118,10 @@ over `dur`), 2 PAUSE (`dur` seconds), 3 REPEAT (go back to step `target`;
 Warpers: 0 linear, 1 ease, 2 easein, 3 easeout.
 
 Props: 0 xpos, 1 ypos, 2 xanchor, 3 yanchor, 4 xoffset, 5 yoffset,
-6 xzoom, 7 yzoom, 8 zoom, 9 alpha, 10 rotate, 11 zpos.
+6 xzoom, 7 yzoom, 8 zoom, 9 alpha, 10 rotate, 11 zpos, 12 xrotate, 13 yrotate
+(the last two only matter for the camera). The `camera` statement compiles to
+SHOW/SCENE operands with spec and tag `@camera`; its programs drive the
+stage's camera instead of a sprite.
 `abs` = 1 means the value is in virtual pixels (Ren'Py `int`), otherwise a
 fraction (Ren'Py `float`) for positions/anchors.
 
@@ -137,7 +140,8 @@ u32 count
   { i32 res                RES index of the layer's texture
     f32 depth              stereo depth (same scale as META depths)
     f32 x, y, w, h         box inside the image, in its logical px (IMGS w, h)
-    u32 anim               0 none, 1 sway, 2 pulse, 3 breathe, 4 fall, 5 rise
+    u32 anim               0 none, 1 sway, 2 pulse, 3 breathe, 4 fall, 5 rise,
+                           6 stars (a = count, b = largest size; picture unused)
     f32 a, b               sway: x/y amplitude in logical px;
                            pulse: minimum alpha; breathe: scale growth;
                            fall/rise: travel distance per loop in logical px
@@ -161,6 +165,18 @@ f32 drift      maximum sway in 3DS px (0 = off)
 f32 period     seconds per cycle
 f32 zoom       maximum extra zoom (e.g. 0.015 = 1.5 %)
 ```
+
+#### `MINI` minigames
+```
+u32 count;  str id[count]      ids passed to vn3ds_minigame() (enables the Minigames menu)
+```
+
+#### `AUDN` named audio
+```
+u32 count;  { str name; i32 res; } [count]   e.g. "minigame/tower_1" -> RES index
+```
+Everything in `game/audio/minigame/` is packed and listed here; minigames
+look up their music and sounds by name.
 
 #### `TALK` speaking attribute
 ```
@@ -220,6 +236,7 @@ The VM has a value stack (none / bool / number / string), a call stack and
 | 0x50 | PLAY | u8 channel, i32 res, u8 flags, f32 fadein, f32 fadeout | flags: 1 loop, 2 queue, 4 if_changed |
 | 0x51 | STOP | u8 channel, f32 fadeout | |
 | 0x52 | WINDOW | u8 mode | 0 auto, 1 show, 2 hide |
+| 0x53 | MINIGAME | (pops id string) | runs a native minigame; its 0-100 score is pushed when it ends |
 
 `showargs` = `str as_tag, i32 zorder (INT32_MIN = keep), str behind, u8 natl, i32 atl[natl]`.
 

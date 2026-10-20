@@ -84,6 +84,12 @@ def parse_log(path):
                 events.append((t, "vox", int(i), float(rate), float(vol)))
             elif kind == "duck":
                 events.append((t, "duck", float(rest)))
+            elif kind == "sfxbank":
+                i, p = rest.split(" ", 1)
+                bank[("sfx", int(i))] = p
+            elif kind == "sfx":
+                i, vol, rate = rest.split()
+                events.append((t, "sfx", int(i), float(vol), float(rate)))
             elif kind == "line":
                 events.append((t, "line", rest))
             elif kind == "end":
@@ -207,7 +213,8 @@ def mix(events, bank, duration):
     voice_vol = vol[CH_VOICE]
     for i, e in enumerate(vox):
         t, _, idx, rate, v = e
-        p = bank.get(idx % max(1, len(bank))) if bank else None
+        nvox = sum(1 for k in bank if isinstance(k, int))
+        p = bank.get(idx % max(1, nvox)) if nvox else None
         if not p:
             continue
         src = decode(p)
@@ -229,6 +236,23 @@ def mix(events, bank, duration):
         k = min(m, 96)
         tail[-k:] = np.linspace(1, 0, k)   # avoid clicks where a syllable is cut
         out[a:a + m] += sig[:m] * (g * tail)[:, None]
+    # minigame sound effects: polyphonic, each plays to its end
+    for e in events:
+        if e[1] != "sfx":
+            continue
+        t, _, idx, v, rate = e
+        p = bank.get(("sfx", idx))
+        if not p:
+            continue
+        src = decode(p)
+        m = int(len(src) / max(rate, 0.05))
+        if m < 2:
+            continue
+        sig = src[np.minimum(len(src) - 1, (np.arange(m) * rate).astype(int))]
+        a = int(t * RATE)
+        m = min(m, n - a)
+        if m > 0:
+            out[a:a + m] += sig[:m] * v
     return out[: int(duration * RATE)]
 
 
@@ -241,6 +265,7 @@ def main(argv=None):
     ap.add_argument("--reel", metavar="FILE", help="also write a 9:16 vertical video")
     ap.add_argument("--until", metavar="LABEL", help="stop when the script reaches this label")
     ap.add_argument("--label", help="start at this label instead of the title screen")
+    ap.add_argument("--minigame", metavar="ID", help="record one minigame played by its bot")
     ap.add_argument("--choices", default="", help="menu picks in order, e.g. 0,1,0 (0 after that)")
     ap.add_argument("--max-lines", type=int, default=0)
     ap.add_argument("--crf", type=int, default=16, help="x264 quality (lower = better)")
@@ -295,6 +320,8 @@ def main(argv=None):
         cmd += ["--label", args.label]
     if args.max_lines:
         cmd += ["--max-lines", str(args.max_lines)]
+    if args.minigame:
+        cmd += ["--minigame", args.minigame]
     say("playing the game (the transcript goes to transcript.txt)")
     with open(os.path.join(work, "transcript.txt"), "w") as tr:
         host = subprocess.run(cmd, stdout=tr, stderr=subprocess.STDOUT)

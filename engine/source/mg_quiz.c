@@ -108,7 +108,7 @@ static void answer(int slot, bool cheat)
         Q.points += weight * (0.6f + 0.4f * speed);
     }
     Q.feedback = 1.6f;
-    mg_sfx(ok ? "right" : "wrong");
+    mg_sfx(cheat ? "quiz_cheat_answer" : ok ? "quiz_right" : slot < 0 ? "quiz_timeout" : "quiz_wrong");
 }
 
 static bool update(const Input *in, float dt, bool cheat)
@@ -120,6 +120,7 @@ static bool update(const Input *in, float dt, bool cheat)
             if (++Q.level >= LEVELS)
                 return false;
             next_question();
+            mg_sfx("quiz_next");
         }
         return true;
     }
@@ -133,10 +134,13 @@ static bool update(const Input *in, float dt, bool cheat)
         answer(-1, false);
         return true;
     }
-    if (in->down & KEY_UP_)
-        Q.sel = (Q.sel + 3) % 4;
-    if (in->down & KEY_DOWN_)
-        Q.sel = (Q.sel + 1) % 4;
+    /* a soft tick through the last three seconds */
+    if ((int)(Q.left + dt) != (int)Q.left && Q.left < 3.0f)
+        mg_sfx("quiz_tick");
+    if (in->down & (KEY_UP_ | KEY_DOWN_)) {
+        Q.sel = (Q.sel + ((in->down & KEY_UP_) ? 3 : 1)) % 4;
+        mg_sfx("quiz_move");
+    }
     if (in->down & KEY_A_) {
         answer(Q.sel, false);
         return true;
@@ -272,6 +276,9 @@ static void bot(Input *in, float t)
     }
 }
 
+/* the cheat can't help once the run is wrapping up */
+static bool can_cheat(void) { return Q.level < LEVELS && Q.feedback <= 0; }
+
 const MiniGame MG_QUIZ = {
     .id = "quiz",
     .title = "The Big Questions",
@@ -288,5 +295,6 @@ const MiniGame MG_QUIZ = {
     .draw_bottom = draw_bottom,
     .score = score,
     .verdict = verdict,
+    .can_cheat = can_cheat,
     .bot = bot,
 };

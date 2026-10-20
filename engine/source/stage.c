@@ -322,6 +322,27 @@ bool stage_show(Stage *st, const Game *g, const char *spec, const char *as_tag, 
     return true;
 }
 
+void stage_camera(Stage *st, const Game *g, const s32 *atl, int natl)
+{
+    Sprite *c = &st->camera;
+    if (natl <= 0) {
+        st->has_camera = 0;
+        return;
+    }
+    memset(c, 0, sizeof(*c));
+    snprintf(c->tag, sizeof(c->tag), "@camera");
+    c->image = -1;
+    c->xf.v[P_XZOOM] = c->xf.v[P_YZOOM] = c->xf.v[P_ZOOM] = c->xf.v[P_ALPHA] = 1.0f;
+    if (natl > MAX_RUNNERS)
+        natl = MAX_RUNNERS;
+    c->natl = (u8)natl;
+    for (int i = 0; i < natl; i++) {
+        runner_reset(&c->atl[i], (s16)atl[i]);
+        runner_update(c, &c->atl[i], g, 0);
+    }
+    st->has_camera = 1;
+}
+
 void stage_hide(Stage *st, const char *tag)
 {
     int idx = stage_find(st, tag);
@@ -338,6 +359,9 @@ void stage_update(Stage *st, const Game *g, float dt)
         for (int k = 0; k < s->natl; k++)
             runner_update(s, &s->atl[k], g, dt);
     }
+    if (st->has_camera)
+        for (int k = 0; k < st->camera.natl; k++)
+            runner_update(&st->camera, &st->camera.atl[k], g, dt);
 }
 
 int stage_order(const Stage *st, const Sprite **out)

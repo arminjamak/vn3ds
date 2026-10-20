@@ -86,20 +86,54 @@ static void close_conn(void)
     conn_fd = -1;
 }
 
-bool net_start(int port)
+/* The 3DS socket service, shared by the receiver and the leaderboard: it is
+ * started by the first user and stopped when the last one lets go. Only
+ * called from the main thread. */
+static int soc_users;
+static bool rx_soc;   /* net_start() holds a reference */
+
+bool net_soc_acquire(void)
 {
-    memset(&NET, 0, sizeof(NET));
-    NET.port = port;
 #ifdef __3DS__
-    if (!soc_buf) {
+    if (soc_users == 0) {
         soc_buf = memalign(SOC_ALIGN, SOC_BUFFERSIZE);
         if (!soc_buf || R_FAILED(socInit(soc_buf, SOC_BUFFERSIZE))) {
             free(soc_buf);
             soc_buf = NULL;
-            set_status("Wi-Fi is not available (is it switched on?)", NULL);
             return false;
         }
     }
+#endif
+    soc_users++;
+    return true;
+}
+
+void net_soc_release(void)
+{
+    if (soc_users <= 0)
+        return;
+    soc_users--;
+#ifdef __3DS__
+    if (soc_users == 0 && soc_buf) {
+        socExit();
+        free(soc_buf);
+        soc_buf = NULL;
+    }
+#endif
+}
+
+bool net_start(int port)
+{
+    memset(&NET, 0, sizeof(NET));
+    NET.port = port;
+    if (!rx_soc) {
+        if (!net_soc_acquire()) {
+            set_status("Wi-Fi is not available (is it switched on?)", NULL);
+            return false;
+        }
+        rx_soc = true;
+    }
+#ifdef __3DS__
     struct in_addr a = {(in_addr_t)gethostid()};
     snprintf(NET.address, sizeof(NET.address), "%s", inet_ntoa(a));
 #else
@@ -146,13 +180,9 @@ void net_stop(void)
         close(listen_fd);
     listen_fd = -1;
     NET.listening = false;
-#ifdef __3DS__
-    if (soc_buf) {
-        socExit();
-        free(soc_buf);
-        soc_buf = NULL;
-    }
-#endif
+    if (rx_soc)
+        net_soc_release();
+    rx_soc = false;
 }
 
 static void reply(u8 code)

@@ -36,6 +36,11 @@ typedef struct {
     Sprite s[MAX_SPRITES];
     int n;
     u32 next_order;
+    /* Ren'Py's `camera` statement: its ATL moves the whole scene (offsets,
+     * zoom, rotate, plus xrotate/yrotate as tilt and orbit). It survives
+     * `scene`, like in Ren'Py. */
+    Sprite camera;
+    u8 has_camera;
 } Stage;
 
 /* A sprite's placement on the top screen, before any stereo shift. */
@@ -53,6 +58,8 @@ s32 stage_resolve(const Game *g, const char *spec, const Sprite *current);
 bool stage_show(Stage *st, const Game *g, const char *spec, const char *as_tag, s32 zorder,
                 const char *behind, const s32 *atl, int natl, bool only_if_shown, bool from_scene);
 void stage_hide(Stage *st, const char *tag);
+/* `camera` with transforms; natl == 0 resets the camera. */
+void stage_camera(Stage *st, const Game *g, const s32 *atl, int natl);
 void stage_update(Stage *st, const Game *g, float dt);
 /* Sprites in draw order (back to front). Returns count. */
 int stage_order(const Stage *st, const Sprite **out);

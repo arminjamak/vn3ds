@@ -1,0 +1,21 @@
+#pragma once
+
+/* Online leaderboard settings compiled into the engine (see leaderboard.h
+ * and server/leaderboard/README.md).
+ *
+ * LEADERBOARD_URL: the server, e.g. "http://203.0.113.7" (plain HTTP, an
+ *   optional :port and path prefix). Empty means offline. A player can
+ *   override it with `url = ...` in leaderboard.cfg in the vn3ds folder.
+ * LEADERBOARD_KEY: the shared HMAC-SHA256 key that signs submissions. It
+ *   must match the server's key. Anyone with the game file can dig it out, so
+ *   it only stops casual cheating. The default is the server's public
+ *   development key; make a real one with `openssl rand -hex 32` before
+ *   deploying. */
+
+#ifndef LEADERBOARD_URL
+#define LEADERBOARD_URL ""
+#endif
+
+#ifndef LEADERBOARD_KEY
+#define LEADERBOARD_KEY "vn3ds-dev-key-change-me"
+#endif

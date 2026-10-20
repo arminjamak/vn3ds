@@ -648,8 +648,30 @@ def parse_statement(line):
         lex.rest()
         return Window(line, mode={"auto": 0, "show": 1, "hide": 2}.get(mode, 0))
 
-    if w in ("nvl", "rpy", "camera"):
-        return Pass(line) if w != "camera" else Unsupported(line, what="camera")
+    if w in ("nvl", "rpy"):
+        return Pass(line)
+
+    if w == "camera":
+        # `camera [layer] [at t, ...] [:]` with an optional ATL block. It is
+        # compiled like a show of a special "@camera" sprite.
+        node = Show(line, spec="@camera", expression=None, at=[], as_="@camera", behind=[],
+                    zorder=None, with_=None, atl=None, onlayer=None)
+        save = lex.pos
+        if not lex.eol() and not lex.peek(":") and lex.word() == "at":
+            lex.pos = save   # no layer name given
+        # (otherwise the word was a layer name: vn3ds has one camera)
+        if lex.keyword("at"):
+            while True:
+                e = lex.simple_expression()
+                if e is None:
+                    raise line.error("expected transform after 'at'")
+                node.at.append(e)
+                if not lex.lit(","):
+                    break
+        if lex.lit(":"):
+            node.atl = line.block
+        lex.expect_eol()
+        return node
 
     if w == "define":
         priority = 0

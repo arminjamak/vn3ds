@@ -88,6 +88,7 @@ default told_theo = False
 default kept_journal = False
 default accepted_offer = False
 default chapter = 0
+default vn3ds_cheats = 0     # minigame cheats in hand (2-5 over the game; see MINIGAMES.md)
 
 # ---- the hidden design ------------------------------------------------------
 # Seven principles, quietly shaped by choices in every chapter. In the last

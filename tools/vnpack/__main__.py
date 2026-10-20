@@ -98,7 +98,7 @@ def _image_job(name):
         return name, None, warnings
 
 
-ANIM_KINDS = {"sway": 1, "pulse": 2, "breathe": 3, "fall": 4, "rise": 5}
+ANIM_KINDS = {"sway": 1, "pulse": 2, "breathe": 3, "fall": 4, "rise": 5, "stars": 6}
 
 
 def layer_anim(spec, scale):
@@ -106,7 +106,10 @@ def layer_anim(spec, scale):
     sway: a = x amplitude, b = y amplitude (virtual px)
     pulse: a = lowest alpha (0..1)
     breathe: a = extra scale (e.g. 0.01)
-    fall / rise: a = distance per loop (virtual px), looped seamlessly"""
+    fall / rise: a = distance per loop (virtual px), looped seamlessly
+    stars: a = how many, b = largest size (virtual px); the engine scatters
+           and twinkles them procedurally, differently every time the
+           image is shown (the layer's own picture is not drawn)"""
     if not spec:
         return (0, 0.0, 0.0, 1.0)
     kind = ANIM_KINDS.get(spec.get("type"), 0)
@@ -114,6 +117,8 @@ def layer_anim(spec, scale):
     b = float(spec.get("y", spec.get("b", 0.0)))
     if kind in (1, 4, 5):
         a *= scale
+        b *= scale
+    elif kind == 6:
         b *= scale
     return (kind, a, b, max(0.05, float(spec.get("period", 4.0))))
 

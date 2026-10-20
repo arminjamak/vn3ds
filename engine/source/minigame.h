@@ -11,9 +11,13 @@
  *
  * A game only implements the MiniGame callbacks. The framework (minigame.c)
  * shows the intro card (title, rules, controls, cheat), runs the game,
- * pauses with START, gives one cheat per run (L, R, SELECT or the Cheat
- * button on the touch screen), then shows the result and keeps the best
- * score. A game must not use L, R, SELECT or START itself.
+ * pauses with START, offers the cheat (L, R, SELECT or the Cheat button on
+ * the touch screen; at most one per run), then shows the result and keeps
+ * the best score. A game must not use L, R, SELECT or START itself.
+ *
+ * Cheats in the story come from a pool: the script variable `vn3ds_cheats`
+ * (the game hands them out at milestones, e.g. `$ vn3ds_cheats += 1`); using
+ * one spends it. Free play from the Minigames menu allows one per run.
  *
  * Coordinates: the top screen is 400x240, the bottom 320x240. Use the mg_*
  * drawing helpers on the top screen so everything gets stereo depth:
@@ -42,6 +46,9 @@ typedef struct {
     /* Optional: one line under the score, e.g. "Crowned in 112% of the
      * shortest route". NULL or "" for none. */
     const char *(*verdict)(void);
+    /* Optional: return false while the cheat can't help (e.g. during a
+     * death or victory animation) so it isn't spent for nothing. */
+    bool (*can_cheat)(void);
     /* Optional: plausible input for automated tests and recordings
      * (vn3ds-host --minigame <id>). `t` is seconds since the run started. */
     void (*bot)(Input *in, float t);
@@ -61,7 +68,8 @@ typedef struct {
     const MiniGame *game;
     MgPhase phase;
     bool from_story;      /* started by the script (score goes back to it) */
-    bool cheat_used;
+    bool cheat_used;      /* at most one cheat per run */
+    int cheats_left;      /* story: the script's vn3ds_cheats pool; free play: 1 */
     float t;              /* seconds in MG_PLAY */
     int score;
     int best_before;
@@ -69,6 +77,7 @@ typedef struct {
     s32 music_before;     /* story music to restore afterwards */
     bool music_loop_before;
     int pause_sel;
+    bool posted;          /* the score went to the online leaderboard (leaderboard.h) */
 } MgRun;
 
 extern MgRun MG;
@@ -101,8 +110,16 @@ float mg_randf(void);                 /* 0..1 */
 int mg_randi(int lo, int hi);         /* lo..hi inclusive */
 
 /* Sound: files in game/audio/minigame/ by name without extension. */
-void mg_sfx(const char *name);        /* one-shot on the sound channel */
+void mg_sfx(const char *name);        /* one-shot; several can overlap */
+void mg_sfx_pitch(const char *name, float rate);   /* rate 1 = as recorded */
 void mg_music(const char *name);      /* switch the music loop (e.g. per level) */
+
+/* The framework's Cheat button on the bottom screen: keep touch areas clear
+ * of it (taps there are the cheat, not your game's input). */
+#define MG_CHEAT_X 236
+#define MG_CHEAT_Y 206
+#define MG_CHEAT_W 78
+#define MG_CHEAT_H 28
 
 /* Common colours. */
 #define MG_WHITE RGBA(255, 255, 255, 255)

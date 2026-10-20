@@ -79,6 +79,7 @@ void audio_exit(void)
     if (!ndsp_ok)
         return;
     audio_vox_free();
+    audio_sfx_free();
     for (int ch = 0; ch < CH_COUNT; ch++) {
         close_stream(ch);
         for (int i = 0; i < NBUF; i++)
@@ -198,6 +199,16 @@ void audio_stop(int ch, float fadeout)
     }
 }
 
+void audio_pause(int ch, bool paused)
+{
+    if (!ndsp_ok || ch < 0 || ch >= CH_COUNT)
+        return;
+    ndspChnSetPaused(ch, paused);
+    if (ch == CH_MUSIC)
+        for (int v = 0; v < 6; v++)   /* the minigame sound voices (SFX_CH0..) */
+            ndspChnSetPaused(4 + v, paused);
+}
+
 bool audio_playing(int ch)
 {
     return ch >= 0 && ch < CH_COUNT && S[ch].active;
@@ -264,45 +275,58 @@ void audio_vox_free(void)
     nvox = 0;
 }
 
+/* Decodes a short Ogg into mono PCM16 in linear memory (at most `seconds`). */
+static s16 *decode_short(const char *path, float seconds, u32 *frames_out, long *rate_out)
+{
+    FILE *f = fopen(path, "rb");
+    OggVorbis_File vf;
+    if (!f)
+        return NULL;
+    if (ov_open(f, &vf, NULL, 0) < 0) {
+        fclose(f);
+        return NULL;
+    }
+    vorbis_info *vi = ov_info(&vf, -1);
+    int chans = vi ? vi->channels : 1;
+    long rate = vi ? vi->rate : 32000;
+    size_t cap = (size_t)(rate * seconds) * 2 * chans, got = 0;
+    s16 *tmp = malloc(cap);
+    while (tmp && got < cap) {
+        int section;
+        long r = ov_read(&vf, (char *)tmp + got, (int)(cap - got), &section);
+        if (r <= 0)
+            break;
+        got += (size_t)r;
+    }
+    ov_clear(&vf);
+    u32 frames = (u32)(got / (2 * chans));
+    s16 *pcm = frames ? linearAlloc(frames * 2) : NULL;
+    if (pcm) {
+        for (u32 k = 0; k < frames; k++)
+            pcm[k] = chans == 2 ? (s16)((tmp[2 * k] + tmp[2 * k + 1]) / 2) : tmp[k];
+        DSP_FlushDataCache(pcm, frames * 2);
+    }
+    free(tmp);
+    *frames_out = frames;
+    *rate_out = rate;
+    return pcm;
+}
+
 void audio_vox_load(const char **paths, int n)
 {
     audio_vox_free();
     if (!ndsp_ok)
         return;
     for (int i = 0; i < n && nvox < VOX_MAX; i++) {
-        FILE *f = fopen(paths[i], "rb");
-        OggVorbis_File vf;
-        if (!f)
-            continue;
-        if (ov_open(f, &vf, NULL, 0) < 0) {
-            fclose(f);
-            continue;
-        }
-        vorbis_info *vi = ov_info(&vf, -1);
-        int chans = vi ? vi->channels : 1;
-        long rate = vi ? vi->rate : 32000;
-        size_t cap = 32000 * 2 * chans, got = 0;   /* syllables are well under a second */
-        s16 *tmp = malloc(cap);
-        while (tmp && got < cap) {
-            int section;
-            long r = ov_read(&vf, (char *)tmp + got, (int)(cap - got), &section);
-            if (r <= 0)
-                break;
-            got += (size_t)r;
-        }
-        ov_clear(&vf);
-        u32 frames = (u32)(got / (2 * chans));
-        s16 *pcm = frames ? linearAlloc(frames * 2) : NULL;
+        u32 frames;
+        long rate;
+        s16 *pcm = decode_short(paths[i], 1.0f, &frames, &rate);   /* syllables are short */
         if (pcm) {
-            for (u32 k = 0; k < frames; k++)
-                pcm[k] = chans == 2 ? (s16)((tmp[2 * k] + tmp[2 * k + 1]) / 2) : tmp[k];
-            DSP_FlushDataCache(pcm, frames * 2);
             vox_pcm[nvox] = pcm;
             vox_len[nvox] = frames;
             vox_rate[nvox] = rate;
             nvox++;
         }
-        free(tmp);
     }
     ndspChnReset(VOX_CH);
     ndspChnSetInterp(VOX_CH, NDSP_INTERP_LINEAR);
@@ -324,6 +348,72 @@ void audio_vox_play(int index, float rate, float volume)
     vox_wb.data_vaddr = vox_pcm[index];
     vox_wb.nsamples = vox_len[index];
     ndspChnWaveBufAdd(VOX_CH, &vox_wb);
+}
+
+/* ---- minigame sound effects ---------------------------------------------- */
+
+#define SFX_CH0 4
+#define SFX_VOICES 6
+#define SFX_MAX 64
+static s16 *sfx_pcm[SFX_MAX];
+static u32 sfx_len[SFX_MAX];
+static long sfx_rate[SFX_MAX];
+static int nsfx, sfx_next;
+static ndspWaveBuf sfx_wb[SFX_VOICES];
+
+void audio_sfx_free(void)
+{
+    if (ndsp_ok)
+        for (int v = 0; v < SFX_VOICES; v++)
+            ndspChnWaveBufClear(SFX_CH0 + v);
+    for (int i = 0; i < nsfx; i++)
+        if (sfx_pcm[i])
+            linearFree(sfx_pcm[i]);
+    nsfx = 0;
+}
+
+void audio_sfx_load(const char **paths, int n)
+{
+    audio_sfx_free();
+    if (!ndsp_ok)
+        return;
+    for (int i = 0; i < n && nsfx < SFX_MAX; i++) {
+        /* keep indices aligned with `paths` even if one fails */
+        sfx_pcm[nsfx] = decode_short(paths[i], 3.0f, &sfx_len[nsfx], &sfx_rate[nsfx]);
+        nsfx++;
+    }
+    for (int v = 0; v < SFX_VOICES; v++) {
+        ndspChnReset(SFX_CH0 + v);
+        ndspChnSetInterp(SFX_CH0 + v, NDSP_INTERP_LINEAR);
+        ndspChnSetFormat(SFX_CH0 + v, NDSP_FORMAT_MONO_PCM16);
+    }
+    LOG("sfx bank: %d clips", nsfx);
+}
+
+void audio_sfx_play(int index, float volume, float rate)
+{
+    if (!ndsp_ok || index < 0 || index >= nsfx || !sfx_pcm[index])
+        return;
+    /* round-robin; prefer a voice that has finished */
+    int v = sfx_next;
+    for (int k = 0; k < SFX_VOICES; k++) {
+        int c = (sfx_next + k) % SFX_VOICES;
+        if (!ndspChnIsPlaying(SFX_CH0 + c)) {
+            v = c;
+            break;
+        }
+    }
+    sfx_next = (v + 1) % SFX_VOICES;
+    int ch = SFX_CH0 + v;
+    ndspChnWaveBufClear(ch);
+    ndspChnSetRate(ch, (float)sfx_rate[index] * (rate > 0 ? rate : 1.0f));
+    float mix[12] = {0};
+    mix[0] = mix[1] = volume * S[CH_SOUND].user_vol;
+    ndspChnSetMix(ch, mix);
+    memset(&sfx_wb[v], 0, sizeof(sfx_wb[v]));
+    sfx_wb[v].data_vaddr = sfx_pcm[index];
+    sfx_wb[v].nsamples = sfx_len[index];
+    ndspChnWaveBufAdd(ch, &sfx_wb[v]);
 }
 
 void audio_music_duck(float gain)
