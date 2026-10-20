@@ -286,6 +286,11 @@ def make_packs(out_dir, target=TARGET, quiet=True):
     groups = plan(files, target)
     if not groups:   # nothing to pack (a script-only build)
         write_game(gb, sections)
+        for sub in ("pk", "img", "snd"):
+            try:
+                os.rmdir(os.path.join(out_dir, sub))
+            except OSError:
+                pass
         return dict(packs=0, files=0, bytes=0, names=[])
 
     pk = os.path.join(out_dir, "pk")
