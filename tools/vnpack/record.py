@@ -92,6 +92,12 @@ def parse_log(path):
                 events.append((t, "sfx", int(i), float(vol), float(rate)))
             elif kind == "line":
                 events.append((t, "line", rest))
+            elif kind in ("pause", "resume"):
+                events.append((t, "pause", int(rest), kind == "pause"))
+            elif kind == "keys":
+                down, held, tx, ty, cx, cy = rest.split()
+                events.append((t, "keys", int(down), int(held), int(tx), int(ty),
+                               float(cx), float(cy)))
             elif kind == "end":
                 events.append((t, "end"))
     return events, bank
@@ -160,6 +166,11 @@ def mix(events, bank, duration):
                 continue
             if cur is not None and cur["stop"] is None:
                 cur["stop"], cur["fadeout"] = t, 0.0
+            elif cur is not None and cur["stop"] + cur["fadeout"] > t:
+                # still fading out: the 3DS (and Ren'Py) cuts it when the
+                # channel starts the next file, it does not keep playing
+                # under it (that layered two songs out of beat)
+                cur["cut"] = t
             queued[ch] = []
             it = dict(ch=ch, src=decode(p), t0=t, loop=loop, fadein=fadein, stop=None, fadeout=0.0)
             inst.append(it)
@@ -183,6 +194,8 @@ def mix(events, bank, duration):
             b = n if it["loop"] else a + len(src)
         else:
             b = int((stop + it["fadeout"]) * RATE)
+            if "cut" in it:
+                b = min(b, int(it["cut"] * RATE))
             if not it["loop"]:
                 b = min(b, a + len(src))
         b = min(b, n)
@@ -201,8 +214,12 @@ def mix(events, bank, duration):
         if stop is not None and it["fadeout"] > 0:
             s0 = int(stop * RATE) - a
             if 0 <= s0 < length:
-                m = length - s0
-                env[s0:] *= np.linspace(1, 0, m, dtype=np.float32)
+                # the slope of the fade, also when a cut ends it early
+                k = np.arange(length - s0, dtype=np.float32) / (it["fadeout"] * RATE)
+                env[s0:] *= np.clip(1 - k, 0, 1)
+        if stop is not None and (it["fadeout"] == 0 or "cut" in it):
+            k = min(length, 96)    # a 2 ms ramp where a file is cut, against clicks
+            env[length - k:] *= np.linspace(1, 0, k, dtype=np.float32)
         env *= curve(vol[it["ch"]], a, b)
         if it["ch"] == CH_MUSIC:
             env *= curve(duck, a, b)
@@ -256,6 +273,57 @@ def mix(events, bank, duration):
     return out[: int(duration * RATE)]
 
 
+# ---- input timeline ---------------------------------------------------------
+
+BUTTONS = [("A", 1 << 0), ("B", 1 << 1), ("X", 1 << 2), ("Y", 1 << 3), ("L", 1 << 4),
+           ("R", 1 << 5), ("start", 1 << 6), ("select", 1 << 7), ("up", 1 << 8),
+           ("down", 1 << 9), ("left", 1 << 10), ("right", 1 << 11), ("touch", 1 << 12),
+           ("ZL", 1 << 13), ("ZR", 1 << 14)]
+FRAME = 1 / 60
+
+
+def input_timeline(events):
+    """The auto-player's presses from the host's "keys" log: one entry per
+    press with its start time and how long it was held (a one-frame tap is
+    1/60 s), touches with their path, and circle-pad moves."""
+    presses, open_, pad, last_pad = [], {}, [], (0.0, 0.0)
+    for e in events:
+        if e[1] != "keys":
+            continue
+        t, _, down, held, tx, ty, cx, cy = e
+        active = down | held
+        for name, bit in BUTTONS:
+            if bit & active and name not in open_:
+                p = {"t": round(t, 4), "button": name, "duration": FRAME}
+                if name == "touch":
+                    p["x"], p["y"], p["path"] = tx, ty, [[round(t, 4), tx, ty]]
+                presses.append(p)
+                open_[name] = p
+            elif name in open_:
+                p = open_[name]
+                if bit & held:
+                    if name == "touch" and p["path"][-1][1:] != [tx, ty]:
+                        p["path"].append([round(t, 4), tx, ty])
+                else:
+                    p["duration"] = round(max(FRAME, t - p["t"]), 4)
+                    del open_[name]
+                    if bit & down:          # released and pressed again
+                        q = {"t": round(t, 4), "button": name, "duration": FRAME}
+                        presses.append(q)
+                        open_[name] = q
+            if name in open_ and not (bit & held) and open_[name]["t"] == round(t, 4):
+                del open_[name]             # a tap: down for this frame only
+        if (cx, cy) != last_pad:
+            pad.append({"t": round(t, 4), "x": cx, "y": cy})
+            last_pad = (cx, cy)
+    for p in presses:
+        p["duration"] = round(p["duration"], 4)
+        if p.get("path") is not None and len(p["path"]) < 2:
+            del p["path"]
+    return {"clock": "seconds from the first video frame (30 fps: frame n at n/30)",
+            "presses": presses, "circle_pad": pad}
+
+
 # ---- driver ---------------------------------------------------------------
 
 def main(argv=None):
@@ -263,6 +331,14 @@ def main(argv=None):
     ap.add_argument("game", help="a ported game folder (output of vn3ds-port / vnpack)")
     ap.add_argument("-o", "--output", default="playthrough.mp4", help="16:9 video (YouTube)")
     ap.add_argument("--reel", metavar="FILE", help="also write a 9:16 vertical video")
+    ap.add_argument("--screens", metavar="PREFIX",
+                    help="also write the plain screens in high quality: PREFIX-top.mp4 (400x240, "
+                         "left eye) and PREFIX-bottom.mp4 (320x240)")
+    ap.add_argument("--audio-out", metavar="FILE", help="also write the soundtrack (.wav or .m4a)")
+    ap.add_argument("--inputs", metavar="FILE",
+                    help="also write the auto-player's button presses as JSON")
+    ap.add_argument("--no-youtube", action="store_true",
+                    help="skip the 16:9 video (-o then only names the transcripts)")
     ap.add_argument("--until", metavar="LABEL", help="stop when the script reaches this label")
     ap.add_argument("--label", help="start at this label instead of the title screen")
     ap.add_argument("--minigame", metavar="ID", help="record one minigame played by its bot")
@@ -287,6 +363,25 @@ def main(argv=None):
           "pad=1920:1080:60:0:black,format=yuv420p[yt]")
     graph = yt
     outs = [("[yt]", silent, ["-preset", "slow", "-crf", str(args.crf), "-tune", "animation"])]
+    if args.screens or args.no_youtube:
+        # one split feeding every output; each branch crops what it needs
+        branches = []
+        if not args.no_youtube:
+            branches.append(f"crop={TOP_W}:{TOP_H}:0:0,scale=1800:1080:flags=lanczos,"
+                            "pad=1920:1080:60:0:black,format=yuv420p[yt]")
+        else:
+            outs = []
+        # RGB, no chroma subsampling, visually lossless (about 55 dB PSNR)
+        lossless = ["-c:v", "libx264rgb", "-preset", "medium", "-crf", "8", "-tune", "animation"]
+        if args.screens:
+            branches.append(f"crop={TOP_W}:{TOP_H}:0:0[stop]")
+            branches.append(f"crop={BOT_W}:{TOP_H}:{TOP_W}:0[sbot]")
+            outs += [("[stop]", os.path.abspath(args.screens + "-top.mp4"), lossless),
+                     ("[sbot]", os.path.abspath(args.screens + "-bottom.mp4"), lossless)]
+        graph = (f"[0:v]split={len(branches)}" + "".join(f"[s{i}]" for i in range(len(branches)))
+                 + ";" + ";".join(f"[s{i}]{b}" for i, b in enumerate(branches)))
+    if args.reel and (args.screens or args.no_youtube):
+        sys.exit("vn3ds-record: --reel cannot be combined with --screens / --no-youtube")
     if args.reel:
         reel_silent = os.path.join(work, "reel.mp4")
 
@@ -308,7 +403,8 @@ def main(argv=None):
     ff = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
           "-s", f"{REC_W}x{TOP_H}", "-r", "30", "-i", fifo, "-filter_complex", graph]
     for label, path, opts in outs:
-        ff += ["-map", label, "-c:v", "libx264", *opts, "-g", "60", "-bf", "2",
+        codec = [] if "-c:v" in opts else ["-c:v", "libx264"]
+        ff += ["-map", label, *codec, *opts, "-g", "60", "-bf", "2",
                "-movflags", "+faststart", path]
     enc = subprocess.Popen(ff)
 
@@ -340,7 +436,25 @@ def main(argv=None):
     audio.astype("<f4").tofile(wav)
 
     say("muxing")
-    targets = [(silent, args.output)] + ([(reel_silent, args.reel)] if args.reel else [])
+    targets = ([] if args.no_youtube else [(silent, args.output)]) + \
+        ([(reel_silent, args.reel)] if args.reel else [])
+    if args.audio_out:
+        aac = [] if args.audio_out.lower().endswith(".wav") else ["-c:a", "aac", "-b:a", "320k"]
+        r = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(RATE), "-ac", "2", "-i", wav,
+             "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", str(RATE), *aac,
+             os.path.abspath(args.audio_out)])
+        if r.returncode != 0:
+            sys.exit(f"vn3ds-record: writing {args.audio_out} failed")
+    if args.inputs:
+        import json
+        tl = input_timeline(events)
+        with open(args.inputs, "w") as f:   # one press per line
+            f.write('{"clock": %s,\n"presses": [\n' % json.dumps(tl["clock"]))
+            f.write(",\n".join(json.dumps(p) for p in tl["presses"]))
+            f.write('\n],\n"circle_pad": [\n')
+            f.write(",\n".join(json.dumps(p) for p in tl["circle_pad"]))
+            f.write("\n]}\n")
     for video, dest in targets:
         r = subprocess.run(
             ["ffmpeg", "-v", "error", "-y", "-i", video,
@@ -364,7 +478,9 @@ def main(argv=None):
             except OSError:
                 pass
         os.replace(os.path.join(work, "transcript.txt"), os.path.splitext(args.output)[0] + ".txt")
-    say("done: " + ", ".join(d for _, d in targets))
+    extra = [args.screens + "-top.mp4", args.screens + "-bottom.mp4"] if args.screens else []
+    say("done: " + ", ".join([d for _, d in targets] + extra +
+                             [x for x in (args.audio_out, args.inputs) if x]))
 
 
 if __name__ == "__main__":
