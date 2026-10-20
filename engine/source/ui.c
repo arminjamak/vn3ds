@@ -1,3 +1,6 @@
+/* The download page: the one-command converter for Mac and Windows. */
+#define VN3DS_SITE "arminjamak.github.io/vn3ds"
+
 #include "app.h"
 #include "leaderboard.h"
 #include "minigame.h"
@@ -969,9 +972,8 @@ void ui_draw_top(int eye)
         if (NET.listening) {   /* the command to type, in a card */
             float cd = shift(eye, -0.15f);
             ui_rrect(40 + cd, 56, 320, 52, 12, FILL1);
-            text_centered("On your computer", 200 + cd, 62, 0.42f, INK2);
-            snprintf(line, sizeof(line), "vn3ds-port <game> --3ds %s", NET.address);
-            text_centered(line, 200 + cd, 80, fit_scale(line, 0.55f, 300), WHITE);
+            text_centered("On your computer, open", 200 + cd, 62, 0.42f, INK2);
+            text_centered(VN3DS_SITE, 200 + cd, 80, fit_scale(VN3DS_SITE, 0.6f, 300), WHITE);
         }
         text_centered(NET.message, 200 + dx, 124, fit_scale(NET.message, 0.5f, 370), INK2);
         if (NET.bytes_total > 0) {
@@ -1143,8 +1145,10 @@ void ui_draw_bottom(void)
         header("Wi-Fi");
         {
             char msg[400], wrapped[500];
-            snprintf(msg, sizeof(msg), "Your computer and the 3DS must be on the same Wi-Fi network.\n\n"
-                     "Games also arrive while you play: you don't need to stay here.\n\nPort %d", NET.port);
+            snprintf(msg, sizeof(msg), "Copy the one command from " VN3DS_SITE ", drag your game into "
+                     "the terminal and press Enter. It finds this 3DS by itself.\n\n"
+                     "Same Wi-Fi network needed. Games also arrive while you play.\n\n"
+                     "This 3DS: %s  (port %d)", NET.address, NET.port);
             ui_rrect(8, 32, 304, 132, 12, FILL1);
             ui_wrap(msg, 280, 0.45f, wrapped, sizeof(wrapped));
             gfx_text(wrapped, 20, 42, 0.45f, INK2);
