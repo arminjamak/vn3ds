@@ -394,15 +394,16 @@ def main(argv=None, progress=None):
     comp.collect(files)
     # Custom screens rebuilt as native minigames (ported.py): the adapter is
     # chosen by the game's id, worked out as below.
-    from .ported import Ported, load_spec
+    from .ported import Ported, load_overlays, load_spec
     _base = os.path.abspath(args.project)
     if os.path.basename(_base) == "game":
         _base = os.path.dirname(_base)
     _title = args.title or cfg.get("title") or comp.meta["title"] or \
         os.path.splitext(os.path.basename(_base))[0]
-    ported_spec = load_spec(args.id or cfg.get("id") or slug(_title), cfg)
-    if ported_spec:
-        comp.ported = Ported(ported_spec, files, warn)
+    _gid = args.id or cfg.get("id") or slug(_title)
+    # every game gets one: adapted screens, overlays, and outcome cards for
+    # custom minigames nothing can play
+    comp.ported = Ported(load_spec(_gid, cfg), files, warn, load_overlays(_gid, cfg))
     try:
         comp.compile(files)
     except (CompileError, rpy.ParseError) as e:
@@ -900,6 +901,7 @@ def main(argv=None, progress=None):
                 packs=packs["packs"] if packs else 0,
                 music_grids=[(name, (r or {}).get("confidence", 0.0), e, why)
                              for name, r, e, why in music_auto],
+                outcomes=list(comp.ported.outcomes) if comp.ported else [],
                 audio_refs=len(comp.resources), screen=(gw, gh))
 
 

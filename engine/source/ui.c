@@ -12,7 +12,7 @@ enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
     B_TITLE_CONTINUE = 6, B_HOME_PLAY = 50, B_HOME_PREV, B_HOME_NEXT, B_HOME_TITLE,
     B_MG = 60, B_MG_BACK = 90, B_MG_BOARD = 91,
-    B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU,
+    B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU, B_HUD,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
     B_TO_TITLE = 30,
     B_RECEIVE = 40, B_RECEIVE_DONE,
@@ -369,6 +369,12 @@ int ui_buttons(Button *b, int max)
                     if (i == 3)
                         b[n - 1].disabled = !can_save;
                 }
+                /* a game's own persistent button (an overlay, see minigame.h) */
+                if (mg_hud_entry() >= 0) {
+                    const char *label = mg_hud_label();
+                    float w = gfx_text_width(label, 0.45f) + 28;
+                    n = add(b, n, max, BOT_W - 6 - w, 28, w, 28, label, B_HUD);
+                }
             }
             break;
         case OV_LOG:
@@ -506,6 +512,7 @@ void ui_activate(int id)
     case B_SAVE: open_slots(OV_SAVE); break;
     case B_LOAD: open_slots(OV_LOAD); break;
     case B_MENU: E.overlay = OV_PREFS; E.prefs_sel = 0; break;
+    case B_HUD: mg_hud_open(); break;
     case B_BACK:
         if (E.screen == SCR_ERROR)
             E.screen = E.loaded ? SCR_TITLE : SCR_GAMELIST;

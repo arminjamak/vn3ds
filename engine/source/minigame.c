@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 extern const MiniGame MG_QUIZ, MG_DRAW, MG_INVADERS, MG_TOWER, MG_SNAKE, MG_MISO, MG_LANTERN;
-extern const MiniGame MG_LOCKPICK, MG_SWING, MG_INSTRUMENT, MG_CAPTIONS;
+extern const MiniGame MG_LOCKPICK, MG_SWING, MG_INSTRUMENT, MG_CAPTIONS, MG_OUTCOME, MG_LOGLIST;
 
 /* Menu order. */
 static const MiniGame *const GAMES[] = {
@@ -16,7 +16,7 @@ static const MiniGame *const GAMES[] = {
 
 /* Mechanics for ported games (see minigame.h): never in the menu. */
 static const MiniGame *const PORTED[] = {
-    &MG_LOCKPICK, &MG_SWING, &MG_INSTRUMENT, &MG_CAPTIONS,
+    &MG_LOCKPICK, &MG_SWING, &MG_INSTRUMENT, &MG_CAPTIONS, &MG_OUTCOME, &MG_LOGLIST,
 };
 
 MgRun MG;
@@ -67,11 +67,19 @@ const MiniGame *mg_find(const char *id)
     return NULL;
 }
 
-int mg_param_all(const char *key, const char **out, int max)
+static const MiniGame *port_game(int index)
+{
+    char id[16];
+    snprintf(id, sizeof(id), "@%d", index);
+    return index >= 0 ? mg_find(id) : NULL;
+}
+
+/* Every value of `key` in PORT entry `index`. */
+static int entry_params(int index, const char *key, const char **out, int max)
 {
     const char *mech;
     u32 n;
-    const u8 *kv = port_entry(MG.port, &mech, &n);
+    const u8 *kv = port_entry(index, &mech, &n);
     int k = 0;
     for (u32 i = 0; kv && i < n && k < max; i++) {
         const char *name = game_str(&E.game, rd_u32(kv + 8 * i));
@@ -81,6 +89,103 @@ int mg_param_all(const char *key, const char **out, int max)
         }
     }
     return k;
+}
+
+int mg_param_all(const char *key, const char **out, int max)
+{
+    return entry_params(MG.port, key, out, max);
+}
+
+/* ---- overlays (see minigame.h) ------------------------------------------- */
+
+int mg_hud_entry(void)
+{
+    const char *v = E.loaded ? mg_var_str("_vn3ds_hud") : NULL;
+    int i = port_index(v);
+    const MiniGame *g = port_game(i);
+    return g == &MG_LOGLIST ? i : -1;
+}
+
+const char *mg_hud_label(void)
+{
+    const char *v = NULL;
+    entry_params(mg_hud_entry(), "button", &v, 1);
+    return v && *v ? v : "Extras";
+}
+
+void mg_hud_open(void)
+{
+    int i = mg_hud_entry();
+    if (i >= 0)
+        mg_begin_port(i);
+}
+
+static void hud_done(int port, int score);
+
+static void bank_load(const MiniGame *g);
+static void start_play(void);
+
+bool mg_begin_port(int index)
+{
+    const MiniGame *g = port_game(index);
+    if (!g)
+        return false;
+    memset(&MG, 0, sizeof(MG));
+    MG.game = g;
+    MG.from_story = true;   /* the story's music plays on; no scores or cards */
+    MG.port = index;
+    MG.hud = true;
+    MG.music_before = E.music_res;
+    MG.music_loop_before = E.music_loop;
+    E.screen = SCR_MINIGAME;
+    talk_end();
+    bank_load(g);
+    start_play();
+    return true;
+}
+
+/* An overlay's game ended: a list choice starts its item; an item played
+ * to the end sets what its original screen set. */
+static void hud_done(int port, int score)
+{
+    E.screen = SCR_GAME;
+    const MiniGame *g = port_game(port);
+    if (g == &MG_LOGLIST) {
+        const char *items[32];
+        int n = entry_params(port, "item", items, 32);
+        if (score < 1 || score > n)
+            return;
+        int entry = atoi(items[score - 1]);
+        char name[48];
+        snprintf(name, sizeof(name), "minigame/@%d_loop_recording", entry);
+        s32 res = game_audio_named(&E.game, name);
+        if (res >= 0) {
+            char path[400];
+            game_res_path(&E.game, res, path, sizeof(path));
+            audio_play(CH_SOUND, path, false, 0, false);
+        }
+        mg_begin_port(entry);
+        return;
+    }
+    if (score < 100)
+        return;   /* skipped: as if the original screen were left early */
+    const char *sets[16];
+    int n = entry_params(port, "set", sets, 16);
+    for (int i = 0; i < n; i++) {
+        char var[64];
+        const char *eq = strchr(sets[i], '=');
+        if (!eq || (size_t)(eq - sets[i]) >= sizeof(var))
+            continue;
+        memcpy(var, sets[i], (size_t)(eq - sets[i]));
+        var[eq - sets[i]] = 0;
+        const char *v = eq + 1;
+        if (!strcmp(v, "True") || !strcmp(v, "False"))
+            mg_var_set_bool(var, v[0] == 'T');
+        else if ((v[0] >= '0' && v[0] <= '9') || v[0] == '-' || v[0] == '.')
+            mg_var_set_num(var, atof(v));
+        else
+            mg_var_set_str(var, v);
+    }
 }
 
 const char *mg_param(const char *key)
@@ -581,7 +686,10 @@ static void leave(void)
          * under the original screen. */
         audio_sfx_free();
         bank_n = 0;
-        app_minigame_done(MG.score);
+        if (MG.hud)
+            hud_done(MG.port, MG.score);
+        else
+            app_minigame_done(MG.score);
         return;
     }
     /* restore the story's music */

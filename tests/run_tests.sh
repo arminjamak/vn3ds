@@ -68,7 +68,7 @@ echo "CG patches (--cg-patches)"
 python3 tests/test_cg_patches.py > "$OUT/cgp.txt" 2>&1 || { grep -v "  ok:" "$OUT/cgp.txt"; fail=1; }
 tail -1 "$OUT/cgp.txt"
 
-echo "ported minigames (call screen -> native lockpick, instrument, timing, captions)"
+echo "ported minigames (call screen -> native lockpick, instrument, timing, captions; overlays; outcome cards)"
 mkdir -p "$OUT/ported"
 cp -R tests/ported/game "$OUT/ported/game"
 python3 tests/ported/make_assets.py "$OUT/ported"
@@ -79,6 +79,14 @@ check "$OUT/tp1.txt" "A rising tune."
 check "$OUT/tp1.txt" "You plucked 8 strings: lhlhlhlh."
 check "$OUT/tp1.txt" "Points: 1."
 check "$OUT/tp1.txt" "The tape ended."
+check "$OUT/tp1.txt" "[hud] overlay @"
+check "$OUT/tp1.txt" "Log one heard: False."
+check "$OUT/tp1.txt" "You caught a fish."
+check "$OUT/tp1.txt" "You won the dice."
+engine/build-host/vn3ds-host "$OUT/build/ported-test" --root "$OUT/root_ported3" --mg-seed 1 \
+    --hud-at 7 > "$OUT/tp3.txt" 2>&1
+check "$OUT/tp3.txt" "[hud] pressed the overlay button"
+check "$OUT/tp3.txt" "Log one heard: True."
 engine/build-host/vn3ds-host "$OUT/build/ported-test" --root "$OUT/root_ported2" --mg-seed 1 \
     --mg-input "0.5:a:2,3:right:1.3,4.5:a:2,7:b:1,7.5:a" > "$OUT/tp2.txt" 2>&1
 check "$OUT/tp2.txt" "The vault stayed shut."

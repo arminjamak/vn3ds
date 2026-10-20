@@ -436,6 +436,7 @@ class Init(Node): pass           # priority, block
 class Unsupported(Node): pass    # what
 class Screen(Node): pass         # name, items (see screen_items), background, body (lines)
 class CallScreen(Node): pass     # name, with_, args (source of "(...)" or None)
+class ShowScreen(Node): pass     # name, hide (show screen / hide screen)
 
 
 # --------------------------------------------------------------------------
@@ -556,14 +557,20 @@ def parse_statement(line):
 
     if w in ("scene", "show"):
         if w == "show" and (lex.keyword("screen")):
-            return Unsupported(line, what="show screen")
+            name = lex.word()
+            lex.rest()
+            return ShowScreen(line, name=name, hide=False) if name else \
+                Unsupported(line, what="show screen")
         if w == "show" and lex.keyword("layer"):
             return Unsupported(line, what="show layer")
         return parse_show(line, lex, scene=(w == "scene"))
 
     if w == "hide":
         if lex.keyword("screen"):
-            return Unsupported(line, what="hide screen")
+            name = lex.word()
+            lex.rest()
+            return ShowScreen(line, name=name, hide=True) if name else \
+                Unsupported(line, what="hide screen")
         words = []
         while True:
             iw = lex.image_word()

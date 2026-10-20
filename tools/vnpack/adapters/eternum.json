@@ -35,5 +35,13 @@
     "audiologlast": {
       "mechanic": "captions"
     }
+  },
+  "overlays": {
+    "audiologs": {
+      "kind": "loglist",
+      "button": "Audio logs",
+      "list": "audiologs2",
+      "item_label": "Log"
+    }
   }
 }

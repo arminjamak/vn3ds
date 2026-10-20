@@ -709,6 +709,15 @@ class Compiler:
         if t is rpy.CallScreen:
             self.c_call_screen(n)
             return
+        if t is rpy.ShowScreen:
+            what = "hide screen" if n.hide else "show screen"
+            if self.ported is not None and self.ported.handles_overlay(n.name):
+                try:   # a persistent on-screen button (ported.py, overlays)
+                    self.ported.compile_overlay(self, n, not n.hide)
+                except ValueError as e:
+                    raise Unsupported(str(e))
+                return
+            raise Unsupported(f"{what} is not supported and was skipped")
         if t is rpy.Unsupported:
             if n.what.startswith("unparseable"):
                 raise Unsupported(f"{n.what}; skipped")
@@ -812,6 +821,10 @@ class Compiler:
                 raise Unsupported(str(e))
             return
         items = self.screens.get(n.name)
+        if not items and self.ported is not None:
+            # a custom minigame nothing can play: the player picks the outcome
+            self.ported.compile_outcome(self, n)
+            return
         if not items:
             raise Unsupported(f"call screen {n.name} has no Jump/Call buttons vn3ds can turn "
                               "into choices; skipped")

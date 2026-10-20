@@ -48,18 +48,30 @@ import re
 from . import rpy
 
 ADAPTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adapters")
-MECHANICS = ("lockpick", "swing_timing", "instrument", "captions")
+MECHANICS = ("lockpick", "swing_timing", "instrument", "captions", "outcome", "loglist")
+_SETVAR = re.compile(r"SetVariable\(\s*[\"'](\w+)[\"']\s*,\s*([^),]+)\)")
+
+
+def _adapter(game_id):
+    path = os.path.join(ADAPTER_DIR, f"{game_id}.json")
+    if game_id and os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    return {}
 
 
 def load_spec(game_id, cfg):
     """The screen -> entry map for a game: its adapter, then vn3ds.json."""
-    spec = {}
-    path = os.path.join(ADAPTER_DIR, f"{game_id}.json")
-    if game_id and os.path.isfile(path):
-        with open(path) as f:
-            spec.update(json.load(f).get("minigames", {}))
+    spec = dict(_adapter(game_id).get("minigames", {}))
     spec.update(cfg.get("minigames", {}) or {})
     return {k: v for k, v in spec.items() if isinstance(v, dict) and v.get("mechanic")}
+
+
+def load_overlays(game_id, cfg):
+    """The screen -> overlay map (`show screen` launchers): adapter, then vn3ds.json."""
+    spec = dict(_adapter(game_id).get("overlays", {}))
+    spec.update(cfg.get("overlays", {}) or {})
+    return {k: v for k, v in spec.items() if isinstance(v, dict)}
 
 
 def _strip_str(src):
@@ -142,8 +154,12 @@ def _jump(text):
 
 
 class Ported:
-    def __init__(self, spec, files, warn):
+    def __init__(self, spec, files, warn, overlays=None):
         self.spec = spec
+        self.overlays = overlays or {}
+        self.overlay_entry = {}    # overlay screen -> its loglist entry
+        self.outcomes = []         # (screen, how the options were found, [labels]) for the report
+        self.after_call = _results_tested_after_calls(files)
         self.warn = warn
         self.entries = []          # [(mechanic, [(key, value)])]
         self.deferred = []         # callables(fs) run by prepare_assets
@@ -170,9 +186,10 @@ class Ported:
 
     # -- compiling ------------------------------------------------------
 
-    def compile_call(self, comp, n):
-        cfg = self.spec[n.name]
-        mech = cfg["mechanic"]
+    def build_entry(self, comp, n, cfg, mech=None):
+        """Builds the PORT entry for screen n.name as mechanic `mech` (default
+        the adapter's) and returns its context (ctx["idx"]: the entry)."""
+        mech = mech or cfg["mechanic"]
         if mech not in MECHANICS:
             raise ValueError(f"adapter for screen {n.name}: unknown mechanic '{mech}'")
         body = comp.screen_bodies.get(n.name)
@@ -181,14 +198,20 @@ class Ported:
         idx = len(self.entries)
         params = []
         ctx = dict(comp=comp, n=n, cfg=cfg, body=body, idx=idx, params=params,
-                   ev=_Eval(comp.constants), jump=None)
+                   ev=_Eval(comp.constants), jump=None, sets=[])
+        self.entries.append((mech, params))   # reserved now: builders may add entries
         getattr(self, "c_" + mech)(ctx)
-        if n.with_:   # the screen's own transition: the game fades in over it
+        if getattr(n, "with_", None):   # the screen's own transition: the game fades in over it
             tid = comp.transition(n.with_, n.line)
             if tid >= 0:
                 typ, _, _, ta, tb, tc, _ = comp.transitions[tid]
                 self.add(ctx, "fade_in", ta + tb + tc if typ == 2 else ta)
-        self.entries.append((mech, params))
+        return ctx
+
+    def compile_call(self, comp, n):
+        cfg = self.spec[n.name]
+        ctx = self.build_entry(comp, n, cfg)
+        idx, mech = ctx["idx"], cfg["mechanic"]
         comp.warn_once(f"ported:{n.name}", n.line,
                        f"call screen {n.name} plays as vn3ds's native {mech} minigame")
         code = comp.code
@@ -477,6 +500,8 @@ class Ported:
             if m:
                 self.add(ctx, "duration", float(m.group(1)))
                 ctx["jump"] = _jump(m.group(2))
+                for var, val in _SETVAR.findall(m.group(2)):   # set when it plays to the end
+                    self.add(ctx, "set", f"{var}={val.strip()}")
                 continue
             if not t.startswith("frame"):
                 continue
@@ -555,6 +580,150 @@ class Ported:
                 alpha = a
         return tuple(out)
 
+    # -- outcome cards: minigames nothing can play ---------------------------
+
+    def compile_outcome(self, comp, n):
+        """`call screen X` of a custom screen with no adapter and no buttons
+        to turn into choices: a card says the minigame can't be played on the
+        3DS and the player picks how it went. The options are the results the
+        screen can produce, as far as they can be read from the scripts:
+          - values it returns (`Return(True)`, `Return("won")`) and labels it
+            jumps to (`Jump("win")`, also from timers);
+          - what the script tests `_return` against right after the call
+            (`if _return:`, `if _return == "won":`, `if _return >= 3:`);
+          - with neither, one "Continue" (the story goes on as the original
+            would after the screen closes).
+        The chosen option sets _return or takes the jump; the card's score
+        is the option's index."""
+        body = comp.screen_bodies.get(n.name) or []
+        text = "\n".join(l.text for l in _lines(body))
+        values, jumps = [], []
+        for m in re.finditer(r"\bReturn\(\s*([^()]*?)\s*\)", text):
+            try:
+                v = ast.literal_eval(m.group(1)) if m.group(1) else None
+            except (ValueError, SyntaxError):
+                continue
+            if isinstance(v, (bool, int, float, str)) and v not in values:
+                values.append(v)
+        for m in _JUMP.finditer(text):
+            t = m.group(1) or m.group(2)
+            if t not in jumps:
+                jumps.append(t)
+        how = []
+        if values or jumps:
+            how.append("the screen's Return/Jump actions")
+        tested = self.after_call.get(n.name, [])
+        for v in tested:
+            if v not in values:
+                values.append(v)
+        if tested:
+            how.append("the tests of _return after the call")
+        opts = _outcome_options(values, jumps)
+        if not opts:
+            opts = [("Continue", None, None)]
+            how.append("nothing to choose: one Continue")
+        opts = opts[:6]
+        idx = len(self.entries)
+        title = re.sub(r"[_]+", " ", n.name).strip()
+        title = title[:1].upper() + title[1:]
+        params = [("title", title),
+                  ("text", "This minigame can't be played on the 3DS." +
+                   (" How did it go?" if len(opts) > 1 else ""))]
+        params += [("option", label) for label, _, _ in opts]
+        self.entries.append(("outcome", params))
+        self.outcomes.append((n.name, ", ".join(how), [o[0] for o in opts]))
+        comp.warn_once(f"outcome:{n.name}", n.line,
+                       f"call screen {n.name} is a minigame vn3ds can't play: a card lets the "
+                       f"player choose the outcome ({' / '.join(o[0] for o in opts)})")
+        from .compiler import Ref
+        code = comp.code
+        code.op("PUSH_STR")
+        code.u32(comp.s(f"@{idx}"))
+        code.op("MINIGAME")
+        code.op("STORE")
+        code.u32(comp.var("_vn3ds_outcome"))
+        end = Ref()
+        for k, (label, kind, val) in enumerate(opts):
+            nxt = Ref()
+            code.op("LOAD")
+            code.u32(comp.var("_vn3ds_outcome"))
+            code.op("PUSH_NUM")
+            code.f64(float(k))
+            code.op("EQ")
+            code.op("JZ")
+            code.ref(nxt)
+            if kind == "return":
+                comp.c_expr(repr(val), n.line)
+                code.op("STORE")
+                code.u32(comp.var("_return"))
+            elif kind == "jump":
+                code.op("JMP")
+                code.ref(comp.label_ref(comp.qualify(val, n.line)))
+            code.op("JMP")
+            code.ref(end)
+            code.mark(nxt)
+        code.mark(end)
+
+    def c_outcome(self, ctx):   # (built by compile_outcome)
+        pass
+
+    # -- overlays: persistent buttons from `show screen` -----------------------
+
+    def handles_overlay(self, screen):
+        return screen in self.overlays
+
+    def compile_overlay(self, comp, n, show):
+        """`show screen X` / `hide screen X` of an overlay the adapter names:
+        the story variable _vn3ds_hud holds the shown overlay's entry (the
+        engine draws its button on the bottom screen while it is set)."""
+        code = comp.code
+        if show:
+            idx = self.overlay_entry.get(n.name)
+            if idx is None:
+                idx = self.overlay_entry[n.name] = self.build_overlay(comp, n)
+            code.op("PUSH_STR")
+            code.u32(comp.s(f"@{idx}"))
+        else:
+            code.op("PUSH_STR")
+            code.u32(comp.s(""))
+        code.op("STORE")
+        code.u32(comp.var("_vn3ds_hud"))
+
+    def build_overlay(self, comp, n):
+        cfg = self.overlays[n.name]
+        kind = cfg.get("kind", "loglist")
+        if kind != "loglist":
+            raise ValueError(f"overlay {n.name}: unknown kind '{kind}'")
+        list_screen = cfg.get("list")
+        body = comp.screen_bodies.get(list_screen)
+        if body is None:
+            raise ValueError(f"overlay {n.name}: no list screen '{list_screen}' in the scripts")
+        idx = len(self.entries)
+        params = [("button", cfg.get("button", "Extras")),
+                  ("title", cfg.get("title", cfg.get("button", "Extras")))]
+        self.entries.append(("loglist", params))
+        base = cfg.get("item_label", "Log")
+        k = 0
+        for cond, action in _buttons(body):
+            shown = [x for x in re.findall(r"Show\(\s*[\"'](\w+)[\"']", action) if x != n.name]
+            if not shown or shown[0] not in comp.screen_bodies:
+                continue
+            k += 1
+            target = shown[0]
+            sub = type(n)(n.line, name=target, with_=None, args=None)
+            ctx = self.build_entry(comp, sub, {"mechanic": "captions"}, "captions")
+            play = re.search(r"Play\(\s*[\"']\w+[\"']\s*,\s*[\"']([^\"']+)[\"']", action)
+            if play:
+                self.sound(ctx, "loop_recording", play.group(1))
+            num = re.search(r"(\d+|last)$", target)
+            label = f"{base} {num.group(1)}" if num and num.group(1) != "last" else \
+                f"Last {base.lower()}" if num else f"{base} {k}"
+            params.append(("item", f"{ctx['idx']}\t{cond}\t{label}"))
+        comp.warn_once(f"overlay:{n.name}", n.line,
+                       f"show screen {n.name} becomes a \"{cfg.get('button', 'Extras')}\" button "
+                       f"on the bottom screen ({k} items)")
+        return idx
+
     # -- after compiling --------------------------------------------------
 
     def prepare_assets(self, fs):
@@ -572,6 +741,120 @@ class Ported:
             for k, v in params:
                 out += struct.pack("<II", s(k), s(v))
         return bytes(out)
+
+
+def _buttons(body, cond=""):
+    """(condition, action source) of each button in a screen, with the
+    condition of an enclosing `if name:` (a plain variable) or ""."""
+    for l in body:
+        t = l.text.strip()
+        m = re.match(r"if\s+(\w+)\s*:$", t)
+        if m:
+            yield from _buttons(l.block, m.group(1))
+            continue
+        if re.match(r"(imagebutton|textbutton|button|hotspot)\b", t):
+            src = " ".join(x.text.strip() for x in [l] + list(_lines(l.block)))
+            m = re.search(r"\baction\s+(.+)$", src)
+            if m:
+                yield cond, m.group(1)
+            continue
+        yield from _buttons(l.block, cond)
+
+
+def _results_tested_after_calls(files):
+    """screen -> values the script compares _return with in the statements
+    right after `call screen <screen>` (True/False for a plain test)."""
+    out = {}
+
+    def tested(src):
+        try:
+            tree = ast.parse(src, mode="eval")
+        except SyntaxError:
+            return []
+        vals = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare) and isinstance(node.left, ast.Name) and \
+                    node.left.id == "_return":
+                for op, c in zip(node.ops, node.comparators):
+                    if isinstance(c, ast.Constant) and isinstance(c.value, (bool, int, float, str)):
+                        if isinstance(op, (ast.Eq, ast.NotEq, ast.Is, ast.IsNot)):
+                            vals.append(c.value)
+                        elif isinstance(c.value, (int, float)) and not isinstance(c.value, bool):
+                            # a threshold: one value on each side of it
+                            lo = c.value - 1 if isinstance(op, (ast.GtE, ast.Lt)) else c.value
+                            hi = c.value if isinstance(op, (ast.GtE, ast.Lt)) else c.value + 1
+                            vals += [hi, lo]
+        if not vals and re.search(r"\b_return\b", src):
+            vals = [True, False]
+        return vals
+
+    def walk(block):
+        for i, n in enumerate(block):
+            if isinstance(n, rpy.CallScreen):
+                for after in block[i + 1:i + 4]:
+                    if isinstance(after, rpy.If):
+                        for cond, _ in after.branches:
+                            for v in tested(cond):
+                                if v not in out.setdefault(n.name, []):
+                                    out[n.name].append(v)
+                        break
+                    if isinstance(after, (rpy.Say, rpy.Menu, rpy.CallScreen, rpy.Jump)):
+                        break
+            for attr in ("block", "else_"):
+                sub = getattr(n, attr, None)
+                if isinstance(sub, list):
+                    walk(sub)
+            for br in getattr(n, "branches", None) or ():
+                walk(br[1])
+            for item in getattr(n, "items", None) or ():
+                if isinstance(item, tuple) and len(item) == 3 and isinstance(item[2], list):
+                    walk(item[2])
+    for nodes in files:
+        walk(nodes)
+    return out
+
+
+_GOOD = re.compile(r"win|won|succe|pass|good|right|correct|clear|open|unlock", re.I)
+_BAD = re.compile(r"lose|lost|fail|bad|wrong|dead|death|over|miss", re.I)
+
+
+def _outcome_options(values, jumps):
+    """[(label, "return"|"jump", value)], the good outcome first."""
+    opts = []
+    bools = [v for v in values if isinstance(v, bool)]
+    nums = sorted({v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)},
+                  reverse=True)
+    strs = [v for v in values if isinstance(v, str)]
+    for v in sorted(set(bools), reverse=True):
+        opts.append(("It went well" if v else "It didn't go well", "return", v))
+    for v in nums:
+        opts.append((f"Score {v:g}", "return", v))
+    for v in strs:
+        opts.append((_human(v), "return", v))
+    for t in jumps:
+        opts.append((_human(t), "jump", t))
+    good = [o for o in opts if o[2] is True or (isinstance(o[2], str) and _GOOD.search(o[2]))]
+    rest = [o for o in opts if o not in good]
+    seen, out = set(), []
+    for label, kind, v in good + rest:
+        if label in seen and isinstance(v, str):   # two good jumps: name them
+            label = _human(v, plain=True)
+        if label in seen:
+            continue
+        seen.add(label)
+        out.append((label, kind, v))
+    return out
+
+
+def _human(name, plain=False):
+    """'lock_won2' -> 'Lock won 2'; a win/lose name reads as the outcome."""
+    if not plain and _GOOD.search(name) and not _BAD.search(name):
+        return "It went well"
+    if not plain and _BAD.search(name) and not _GOOD.search(name):
+        return "It didn't go well"
+    t = re.sub(r"[_.]+", " ", name)
+    t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t).strip()
+    return t[:1].upper() + t[1:]
 
 
 def rpy_dotted(node):

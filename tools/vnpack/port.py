@@ -225,6 +225,9 @@ def report(summary, path):
                 lines.append(f"    {by_cat[name]:6d}  {name}   e.g. {examples[name][:110]}")
     else:
         lines.append("  Everything converted.")
+    if summary.get("outcomes"):
+        lines.append(f"  {len(summary['outcomes'])} custom minigame screens vn3ds can't play "
+                     f"show a card where the player chooses the outcome.")
     grids = summary.get("music_grids") or []
     if grids:
         ok = sum(1 for g in grids if g[2])
@@ -233,6 +236,11 @@ def report(summary, path):
     text = "\n".join(lines)
     with open(path, "w") as f:
         f.write(text + "\n")
+        outs = summary.get("outcomes") or []
+        if outs:
+            f.write("\nMinigames vn3ds can't play (a card lets the player choose the outcome):\n")
+            for screen, how, labels in outs:
+                f.write(f"  {screen}: {' / '.join(labels)}  (from {how})\n")
         if grids:
             f.write("\nMeasured music grids (confidence 0-1):\n")
             for name, conf, e, why in grids:

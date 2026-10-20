@@ -15,5 +15,8 @@
       "rotation_var": "swing_pos", "clockwise_var": "swing_cw"
     },
     "tape_play": {"mechanic": "captions"}
+  },
+  "overlays": {
+    "log_button": {"kind": "loglist", "button": "Logs", "list": "log_list"}
   }
 }

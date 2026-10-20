@@ -86,6 +86,46 @@ screen tape_play:
         xpos 0.2 yalign 0.04
     timer 4 action [Hide("tape_play"), Jump("after_tape")]
 
+# An overlay (vn3ds.json "overlays"): a persistent button that opens a list
+# of recordings; playing one to the end sets a flag.
+default heard1 = False
+screen log_button():
+    imagebutton:
+        xalign 0.99 yalign 0.0
+        idle "disc"
+        action [Show("log_list"), Hide("log_button")]
+screen log_list:
+    modal True
+    imagebutton:
+        xalign 0.9 yalign 0.1
+        idle "disc"
+        action [Play("sound", "audio/tape.ogg"), Show("log_one", transition=dissolve), Hide("log_list")]
+    if heard1:
+        imagebutton:
+            xalign 0.9 yalign 0.3
+            idle "disc"
+            action [Show("log_two"), Hide("log_list")]
+screen log_one:
+    frame:
+        at cap_one
+        text _("Log one.")
+        xpos 0.2 yalign 0.04
+    timer 3 action [Hide("log_one"), Show("log_button"), SetVariable("heard1", True)]
+screen log_two:
+    frame:
+        at cap_one
+        text _("Log two.")
+        xpos 0.2 yalign 0.04
+    timer 2 action [Hide("log_two"), Show("log_button")]
+
+# Minigames nothing can play: an outcome card picks the result.
+screen fishing_game():
+    add "disc"
+screen dice_game():
+    add "disc"
+    timer 5 action Jump("dice_lost")
+    key "K_SPACE" action Jump("dice_won")
+
 label start:
     "Ported minigames test."
     $ lk = TumblerLock(sweet_angle=5, attempts=2)
@@ -106,4 +146,20 @@ label after_swing:
     call screen tape_play
 label after_tape:
     "The tape ended."
+    show screen log_button
+    "The log button is up."
+    "Still up."
+    hide screen log_button
+    "Log one heard: [heard1]."
+    call screen fishing_game
+    if _return:
+        "You caught a fish."
+    else:
+        "The fish got away."
+    call screen dice_game
+label dice_won:
+    "You won the dice."
+    return
+label dice_lost:
+    "You lost the dice."
     return

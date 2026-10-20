@@ -84,6 +84,7 @@ typedef struct {
     int pause_sel;
     bool posted;          /* the score went to the online leaderboard (leaderboard.h) */
     int port;             /* PORT entry of a ported game (see below), -1 for the others */
+    bool hud;             /* started from the story's on-screen overlay button, not the script */
 } MgRun;
 
 extern MgRun MG;
@@ -142,6 +143,21 @@ void mg_music(const char *name);      /* switch the music loop (e.g. per level) 
  * Sounds: the entry's sounds are its named audio "minigame/@i_<name>", so
  * mg_sfx("<name>") plays them like any minigame's own clips; clips named
  * "loop_<name>" are streamed instead (mg_sound_loop). */
+
+/* Overlays: a game's persistent on-screen button (Ren'Py `show screen X`
+ * where X is a launcher an adapter names, e.g. Eternum's audio logs). The
+ * script keeps the shown overlay's PORT entry in the story variable
+ * _vn3ds_hud ("@i", "" when hidden), so it is saved with the game. Its
+ * entry (mechanic "loglist") gives the button's label and the list it
+ * opens: each item a ported entry (e.g. captions over a recording) played
+ * on demand, which sets the variables its original screen set when it is
+ * played to the end ("set" parameters, "var=value"). The story waits on its
+ * current line meanwhile and carries on from there afterwards. */
+int mg_hud_entry(void);            /* the shown overlay's entry, or -1 */
+const char *mg_hud_label(void);    /* its button's label */
+void mg_hud_open(void);            /* the button was pressed */
+/* Starts PORT entry `index` from the overlay (not the script). */
+bool mg_begin_port(int index);
 
 /* The entry's parameters: the first value of `key`, or NULL / `def`. */
 const char *mg_param(const char *key);

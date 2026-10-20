@@ -9,6 +9,7 @@
  *              [--mg-seed N]   (minigames' random numbers from a fixed seed)
  *              [--leaderboard id]   (renders the Minigames menu's online top 10)
  *              [--perf]   (prints the engine's timing lines, "[perf] ...")
+ *              [--hud-at N]   (presses a game's overlay button at line N, see minigame.h)
  *              [--no-draw]   (draws only for screenshots: fast)
  *              [--music-wav out.wav]   (writes the music channel's mix)
  *   vn3ds-host --decode-audio in.ogg [out.wav] [--loops N]
@@ -442,7 +443,7 @@ int main(int argc, char **argv)
 {
     const char *game = NULL, *out = NULL, *choices = "", *label = NULL;
     bool receive = false;
-    int every = 0, max_lines = 0;
+    int every = 0, max_lines = 0, hud_at = 0;
     bool talk_frames = false;
     u32 talk_serial = 0;
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -492,6 +493,8 @@ int main(int argc, char **argv)
             home = true;
         else if (!strcmp(argv[i], "--ui-tour"))
             ui_tour = true;
+        else if (!strcmp(argv[i], "--hud-at") && i + 1 < argc)
+            hud_at = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--perf"))
             host_perf = true;
         else if (!strcmp(argv[i], "--no-draw"))
@@ -687,11 +690,28 @@ int main(int argc, char **argv)
                 app_render();
                 dump(out, shots++, "talking");
             }
+            {   /* a game's overlay button (minigame.h): report it coming and going */
+                static int hud_seen = -1;
+                int h = mg_hud_entry();
+                if (h != hud_seen) {
+                    if (h >= 0)
+                        printf("    [hud] overlay @%d shown: \"%s\"\n", h, mg_hud_label());
+                    else if (hud_seen >= 0)
+                        printf("    [hud] overlay hidden\n");
+                    hud_seen = h;
+                }
+            }
             if (vm->state == VM_SAY && E.text_done) {
                 if (wait == 0) {
                     lines++;
                     if (max_lines && lines > max_lines)
                         break;
+                    if (hud_at && lines >= hud_at && mg_hud_entry() >= 0) {
+                        hud_at = 0;
+                        printf("    [hud] pressed the overlay button\n");
+                        mg_hud_open();
+                        continue;
+                    }
                     if (E.say_serial != last_serial) {
                         printf("%s%s%s\n", vm->say_who[0] ? vm->say_who : "",
                                vm->say_who[0] ? ": " : "", vm->say_text);
