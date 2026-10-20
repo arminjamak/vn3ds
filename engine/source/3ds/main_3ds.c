@@ -99,6 +99,8 @@ static aptHookCookie apt_cookie;
 static void on_apt(APT_HookType type, void *param)
 {
     (void)param;
+    static const char *names[] = {"suspend", "restore", "sleep", "wakeup", "exit"};
+    LOG("apt: %s", type < 5 ? names[type] : "?");
     if (type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP || type == APTHOOK_ONEXIT)
         app_autosave();
 }
