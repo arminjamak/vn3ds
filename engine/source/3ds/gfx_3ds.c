@@ -11,6 +11,7 @@
 #include <zlib.h>
 
 #include "../gfx.h"
+#include "../jpeg.h"
 
 #define DRAW_DEPTH 0.5f
 
@@ -122,7 +123,15 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
         return NULL;
     }
     bool ok = t->tex.size == raw;
-    if (ok && (flags & 1)) {
+    if (ok && (flags & 2)) {
+        /* baseline JPEG, decoded straight into the tiled RGB565 texture */
+        u8 *jpg = fmt == 2 ? malloc(stored) : NULL;
+        ok = jpg && fread(jpg, 1, stored, f) == stored;
+        int w = 0, h = 0;
+        ok = ok && jpeg_decode_tiled565(jpg, stored, t->tex.data, tw, th, &w, &h) == JPEG_OK &&
+             w == iw && h == ih;
+        free(jpg);
+    } else if (ok && (flags & 1)) {
         u8 *packed = malloc(stored);
         ok = packed && fread(packed, 1, stored, f) == stored;
         if (ok) {

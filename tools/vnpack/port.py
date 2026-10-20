@@ -226,9 +226,27 @@ def deliver(args, game_dirs):
             sys.exit(f"vn3ds-port: nothing is listening on {host}:{send.VN3DS_PORT}. Is vn3ds on "
                      "the receive screen, and is the 3DS on the same Wi-Fi?")
     say(f"sending {len(files)} files ({total:.1f} MB) to {host}")
-    sent, refused = send.send_vn3ds(host, files)
+    sent, refused = send.send_vn3ds(host, files, forever=True)   # retries until done (Ctrl+C stops)
     say(f"sent {sent} files" + (f", {refused} refused" if refused else "") +
         (". vn3ds updated: restart it." if engine else ". The game is in vn3ds's list."))
+
+
+# What each quality mode asks of the packager. Options the packager doesn't
+# know yet are left out, so this works while features are being added.
+QUALITY = {
+    "wifi": [("--audio-profile", "wifi"), ("--jpeg", "80"), ("--rgb565", None),
+             ("--video-codec", "h264"), ("--video-kbps", "220"), ("--video-fps", "24")],
+    "sd": [("--video-codec", "h264"), ("--video-kbps", "900"), ("--video-fps", "30")],
+}
+
+
+def quality_args(mode):
+    src = open(os.path.join(os.path.dirname(__file__), "__main__.py"), encoding="utf-8").read()
+    out = []
+    for flag, val in QUALITY.get(mode, []):
+        if f'"{flag}"' in src:
+            out += [flag] + ([val] if val is not None else [])
+    return out
 
 
 def main(argv=None):
@@ -249,11 +267,48 @@ def main(argv=None):
     ap.add_argument("--title", help="override the game title")
     ap.add_argument("--rgb565", action="store_true",
                     help="16-bit textures for opaque images: about 60%% smaller, slight banding")
+    ap.add_argument("--jpeg", type=int, metavar="Q",
+                    help="JPEG quality for opaque images (e.g. 80; 0 = off; default: 80 for "
+                         "Wi-Fi, off for the SD card)")
     ap.add_argument("--no-audio", action="store_true")
     ap.add_argument("--no-video", action="store_true", help="skip Movie() animations")
+    ap.add_argument("--video-codec", choices=("h264", "cvid"),
+                    help="movie format (default h264: smooth on a New 3DS, a still elsewhere)")
+    ap.add_argument("--video-kbps", type=int,
+                    help="H.264 bitrate (default: 900 for the SD card, 260 for Wi-Fi)")
     ap.add_argument("--fit", action="store_true")
     ap.add_argument("-j", "--jobs", type=int, default=0)
+    ap.add_argument("--quality", choices=("auto", "wifi", "sd"), default="auto",
+                    help="wifi: compact files for sending over Wi-Fi; sd: best quality for "
+                         "copying to the SD card (default: from where the game is going)")
+    ap.add_argument("--no-detect", action="store_true",
+                    help="don't look for an SD card or a 3DS on the network")
     args = ap.parse_args(argv)
+
+    # One command for everything: with no destination given, look for the
+    # 3DS's SD card, then for the 3DS on the Wi-Fi.
+    if not (args.sd or args.console or args.ftp or args.no_detect):
+        from . import detect
+        t = detect.detect(say)
+        if t.kind == "sd":
+            say(f"found the 3DS SD card at {t.where}: copying there, best quality")
+            args.sd = t.where
+        elif t.kind == "vn3ds":
+            say(f"found vn3ds on {t.where}: sending over Wi-Fi")
+            args.console = t.where
+        elif t.kind == "netloader":
+            say(f"found the Homebrew Launcher's netloader on {t.where}: installing vn3ds, then "
+                "sending over Wi-Fi")
+            args.console = t.where
+            args.install = True
+        elif t.kind == "ftp":
+            say(f"found an FTP server (ftpd) on {t.where}: uploading over Wi-Fi")
+            args.ftp = t.where
+        else:
+            say("no 3DS found: plug in its SD card, or open vn3ds (or the Homebrew Launcher "
+                "and press Y) on the same Wi-Fi. Building the game folder only.")
+    if args.quality == "auto":
+        args.quality = "wifi" if (args.console or args.ftp) else "sd"
 
     if not args.inputs and not args.install:
         ap.error("give a game to port, or --install to send just the engine")
@@ -290,6 +345,13 @@ def main(argv=None):
         for flag in ("rgb565", "no_audio", "no_video", "fit"):
             if getattr(args, flag):
                 vargs.append("--" + flag.replace("_", "-"))
+        vargs += quality_args(args.quality)
+        for flag, val in (("--video-codec", args.video_codec), ("--video-kbps", args.video_kbps)):
+            if val:   # after the quality preset, so these win
+                vargs += [flag, str(val)]
+        if args.jpeg is not None:
+            vargs += ["--jpeg", str(args.jpeg)]
+        say(f"quality: {'compact for Wi-Fi' if args.quality == 'wifi' else 'best, for the SD card'}")
         say("converting (images are the slow part)")
         summary = vnpack.main(vargs)
         text = report(summary, os.path.join(summary["out_dir"], "port-report.txt"))

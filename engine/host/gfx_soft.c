@@ -3,6 +3,7 @@
  * layout is exercised too. */
 
 #include "../source/gfx.h"
+#include "../source/jpeg.h"
 #include "font_data.h"
 #include "host.h"
 
@@ -83,7 +84,17 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
     }
     fclose(f);
     u8 *pix = data;
-    if (flags & 1) {
+    if (flags & 2) { /* baseline JPEG -> tiled RGB565, as on the 3DS */
+        int w = 0, h = 0;
+        pix = fmt == 2 && raw == (u32)tw * (u32)th * 2 ? malloc(raw) : NULL;
+        if (!pix || jpeg_decode_tiled565(data, stored, (uint16_t *)pix, tw, th, &w, &h) != JPEG_OK ||
+            w != iw || h != ih) {
+            free(pix);
+            free(data);
+            return NULL;
+        }
+        free(data);
+    } else if (flags & 1) {
         pix = malloc(raw);
         uLongf n = raw;
         if (uncompress(pix, &n, data, stored) != Z_OK || n != raw) {
@@ -303,6 +314,14 @@ static float edge(float ax, float ay, float bx, float by, float px, float py)
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
+/* An edge that is the top or a left side of a triangle wound with positive
+ * area: pixels exactly on it belong to this triangle (the top-left rule, as
+ * GPUs do it), so triangles sharing an edge don't blend it twice. */
+static bool top_left(float ax, float ay, float bx, float by)
+{
+    return (ay == by && bx > ax) || by < ay;
+}
+
 void gfx_triangle(float x0, float y0, float x1, float y1, float x2, float y2, u32 c)
 {
     if ((c & 0xFF) == 0)
@@ -310,6 +329,12 @@ void gfx_triangle(float x0, float y0, float x1, float y1, float x2, float y2, u3
     float area = edge(x0, y0, x1, y1, x2, y2);
     if (fabsf(area) < 1e-6f)
         return;
+    if (area < 0) {   /* one winding from here on */
+        float tx = x1, ty = y1;
+        x1 = x2, y1 = y2;
+        x2 = tx, y2 = ty;
+    }
+    bool tl0 = top_left(x1, y1, x2, y2), tl1 = top_left(x2, y2, x0, y0), tl2 = top_left(x0, y0, x1, y1);
     int minx = (int)fmaxf(0, floorf(fminf(x0, fminf(x1, x2))));
     int maxx = (int)fminf((float)cur->w - 1, ceilf(fmaxf(x0, fmaxf(x1, x2))));
     int miny = (int)fmaxf(0, floorf(fminf(y0, fminf(y1, y2))));
@@ -319,7 +344,7 @@ void gfx_triangle(float x0, float y0, float x1, float y1, float x2, float y2, u3
             float cx = (float)px + 0.5f, cy = (float)py + 0.5f;
             float w0 = edge(x1, y1, x2, y2, cx, cy), w1 = edge(x2, y2, x0, y0, cx, cy);
             float w2 = edge(x0, y0, x1, y1, cx, cy);
-            if (area > 0 ? (w0 >= 0 && w1 >= 0 && w2 >= 0) : (w0 <= 0 && w1 <= 0 && w2 <= 0))
+            if ((w0 > 0 || (w0 == 0 && tl0)) && (w1 > 0 || (w1 == 0 && tl1)) && (w2 > 0 || (w2 == 0 && tl2)))
                 blend_c(cur->px + (py * cur->w + px) * 4, c);
         }
 }

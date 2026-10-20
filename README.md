@@ -63,7 +63,9 @@ it does the rest:
   copied onto the SD card (or an emulator's `sdmc` folder).
 
 Useful options: `--rgb565` (textures about 60% smaller, slight banding;
-recommended for very large games), `--no-audio`, `--fit`, `-o build`.
+recommended for very large games), `--jpeg 80` (opaque images as JPEG, about
+a fifth of the RGB565 size; the default for Wi-Fi), `--no-audio`, `--fit`,
+`-o build`.
 
 Tested with Eternum 0.9 (431 labels, 12,000+ images, ported from its
 Android build in about 5 minutes), Ren'Py's own *The Question*, the Ren'Py
@@ -73,16 +75,20 @@ Only port games you have the rights to.
 
 ### Wireless: port and send to the 3DS in one command
 
-vn3ds has a **Receive over Wi-Fi** screen (press **Y** on its game list).
-With the 3DS on the same Wi-Fi as your computer:
+vn3ds listens for games over Wi-Fi the whole time it is open, even while
+you play. With the 3DS on the same Wi-Fi as your computer:
 
 ```bash
 tools/vn3ds-port path/to/Game --3ds 192.168.1.23
 ```
 
-This ports the game and streams it straight onto the SD card. The game
-appears in vn3ds's list as soon as the transfer finishes; the IP to use is
-shown on the receive screen.
+This ports the game and streams it straight onto the SD card. Nothing
+stops for it: a small download icon turns in the top corner, and the home
+screen shows the arriving game as a card with a progress bar and the time
+left. You can open and play any other game meanwhile; the arriving one opens
+once it is complete. An update to the game you are playing is kept aside and
+applied the next time you open it. The IP to use is shown at the bottom of
+the home screen and on the **Receive over Wi-Fi** screen (press **Y**).
 
 **Installing or updating vn3ds itself, also over Wi-Fi:**
 
@@ -210,9 +216,12 @@ stereo offset never shows a black strip at the edge.
   `loop`/`noloop`, `if_changed`, `audio.*` names and files under `game/audio/`
 - `pause`, `window show/hide/auto`, `config.name`, `config.version`, `gui.init(w, h)`,
   `gui/main_menu.png` as the title-screen picture
-- `Movie(play=...)` images (animated scenes): re-encoded to a tiled 3DS video format,
-  12 fps and up to 12 seconds by default (`--video-fps`, `--video-seconds`, `--no-video`;
-  needs `ffmpeg`). They play at the depth of the image, flat but with the camera parallax.
+- `Movie(play=...)` images (animated scenes): re-encoded to H.264 (needs `ffmpeg` with
+  libx264) at the clip's own frame rate up to 30 fps, played by the New 3DS's hardware
+  decoder; an Old 3DS shows the clip's first frame. `--video-kbps` (default 900; about 250
+  for a Wi-Fi edition), `--video-fps` (cap), `--video-seconds`, `--no-video`, and
+  `--video-codec cvid` for the older tiled format (12 fps, any 3DS). They play at the depth
+  of the image, flat but with the camera parallax.
 - `call screen` navigation screens made of buttons (maps, phone menus) become a menu, with the
   screen's background picture shown behind it
 - string methods `upper lower title strip capitalize`, indexing and slicing, and

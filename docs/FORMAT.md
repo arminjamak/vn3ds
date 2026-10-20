@@ -9,7 +9,9 @@ table; `0xFFFFFFFF` (written `NONE` below) means "no string".
 sdmc:/3ds/vn3ds/games/<game-id>/
     game.bin          script bytecode + tables (this document)
     img/NNNN.ctex     textures, pre-tiled for the PICA200
-    img/NNNNN.cvid    videos (Ren'Py Movie() images), same tiling
+    img/NNNNN.cvh     videos (Ren'Py Movie() images), H.264 for the New 3DS's decoder
+    img/NNNNN.ctex    ... and next to each .cvh its first frame (the "poster")
+    img/NNNNN.cvid    videos in the older tiled format (--video-codec cvid)
     snd/NNNN.ogg      Ogg Vorbis audio
     port-report.txt   what vn3ds-port skipped or approximated
 ```
@@ -68,7 +70,7 @@ u32 count
   i32  res             RES index of the texture, -1 for a solid colour
   u32  color           RGBA for solids
   f32  w, h            logical size in 3DS px
-  u32  flags           1 = solid, 2 = full screen, 4 = video (res is a .cvid)
+  u32  flags           1 = solid, 2 = full screen, 4 = video (res is a .cvh or .cvid)
   f32  depth           NaN = use defaults
 } [count]
 ```
@@ -254,8 +256,8 @@ u16  format          0 = RGBA8 (bytes A,B,G,R), 1 = RGB8 (bytes B,G,R), 2 = RGB5
 u16  tex_w, tex_h    power of two, 8..1024
 u16  img_w, img_h    pixel content in the top-left of the image
 f32  logical_w, logical_h   size to draw at, in 3DS px
-u32  flags           1 = zlib-compressed payload
-u32  raw_size        payload size after decompression
+u32  flags           1 = zlib-compressed payload, 2 = JPEG payload (see below)
+u32  raw_size        payload size after decompression (texture bytes for JPEG)
 u32  stored_size     bytes that follow the 36-byte header
 ```
 
@@ -263,7 +265,63 @@ The payload is already in the PICA200's native layout, the same one tex3ds
 writes: 8x8 tiles in row-major order starting from the image's top-left,
 Morton order inside a tile. The image's top row is the first row in memory
 and is sampled at `v = 1.0`, so a sub-texture is `{left 0, top 1,
-right img_w/tex_w, bottom 1 - img_h/tex_h}`.
+right img_w/tex_w, bottom 1 - img_h/tex_h}`. Texels right of and below the
+image repeat its last column and row, so bilinear filtering at the edges
+doesn't pull in anything else.
+
+**JPEG payload** (`flags & 2`, written by `vnpack --jpeg Q` for opaque
+images): `format` is 2 (RGB565), `raw_size` is `tex_w * tex_h * 2`, and the
+payload is a baseline JPEG of exactly `img_w` x `img_h` pixels (not padded,
+not tiled). The engine decodes it with its own decoder
+(`engine/source/jpeg.c`) straight into the tiled RGB565 texture, filling the
+padding as above. The decoder takes baseline and extended-sequential Huffman
+JPEGs with 8-bit samples: grayscale or YCbCr, 4:4:4, 4:2:2, 4:2:0 or 4:4:0,
+interleaved or not, with or without restart markers. Progressive,
+arithmetic-coded, lossless, 12-bit and CMYK files fail to load. vnpack writes
+4:2:0 below quality 90 and 4:4:4 from 90 up, with optimised Huffman tables.
+Images with transparency keep the zlib path. Older engines can't load these
+files.
+
+## .cvh video
+
+Ren'Py `Movie()` images, re-encoded by vnpack with libx264: Main profile,
+level 3.0, no B-frames, one slice per frame, an IDR frame at least every 4
+seconds (and at scene cuts), two-pass at `--video-kbps`. The size is the
+clip's on-screen size rounded to multiples of 16 (432x240 for 16:9 in the
+default layout), the frame rate the clip's own, capped by `--video-fps`
+(default 30).
+```
+char magic[4] = "CVH1"
+u16  version         1
+u16  codec           1 = H.264, Annex B
+u16  w, h            coded size, multiples of 16
+u16  tex_w, tex_h    power of two textures that hold a frame
+f32  logical_w, logical_h
+f32  fps
+u32  nframes
+u32  flags           1 = loop
+u32  params_offset   SPS then PPS, each with a 00 00 01 prefix
+u32  params_size
+u8   profile_idc, level_idc, max_ref_frames, reserved
+u32  max_frame_size  largest frame, in bytes
+u32  keyframes       number of IDR frames
+u32  reserved[2]     (64 bytes so far)
+{ u32 offset, size   the frame's NAL units, each with a 00 00 01 prefix
+  u16 nal_count
+  u16 flags          1 = IDR
+} [nframes]
+...SPS, PPS, then the frames in order
+```
+From `params_offset` to the end the file is a plain H.264 stream
+(`ffmpeg -f h264` reads it). Frame 0 is an IDR frame. `img/NNNNN.ctex`
+next to it holds the first frame as decoded (RGB565; half size when
+`--video-kbps` is 400 or less), drawn wherever there's no hardware decoding.
+
+On a New 3DS the engine feeds each NAL unit to `mvdstdProcessVideoFrame`,
+renders with `mvdstdRenderVideoFrame` into RGB565 in linear RAM, and the
+GPU's transfer engine tiles it into one of two textures. Only one clip
+decodes at a time (the most recently shown); others keep their last picture.
+Loops restart at frame 0.
 
 ## .cvid video
 

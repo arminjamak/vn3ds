@@ -123,6 +123,9 @@ class AssetFS:
         if not is_zip:
             roots.append(game_dir)
         for top in roots:
+            if os.path.isfile(top) and top.lower().endswith(".rpa"):
+                archives.append((top, 0, os.path.basename(top)))   # a loose archive given directly
+                continue
             for root, dirs, files in os.walk(top):
                 dirs[:] = [d for d in dirs if d not in ("cache", "saves", "__pycache__")]
                 for fn in files:
@@ -170,11 +173,16 @@ class AssetFS:
             with open(entry[1], "rb") as f:
                 return f.read()
         if entry[0] == "zip":
+            import threading
             if getattr(self, "_pid", None) != os.getpid():
                 import zipfile
                 self.zips = {p: zipfile.ZipFile(p) for p in self.zips}
                 self._pid = os.getpid()
-            return self.zips[entry[1]].read(entry[3])
+                self._zip_lock = threading.Lock()
+            if getattr(self, "_zip_lock", None) is None:
+                self._zip_lock = threading.Lock()
+            with self._zip_lock:   # ZipFile is not safe across threads
+                return self.zips[entry[1]].read(entry[3])
         _, arc, _, off, length, prefix = entry
         with open(arc, "rb") as f:
             f.seek(off)
@@ -504,10 +512,12 @@ def bleed_edges(arr, iterations=6):
     return out
 
 
-def encode_ctex(img, logical_w, logical_h, allow_565=False):
+def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0):
     """Encode a PIL RGBA image (already at its on-screen size) as .ctex bytes.
 
-    Returns (bytes, opaque).
+    jpeg_quality > 0 stores opaque images as a baseline JPEG at that quality
+    (decoded by the engine into an RGB565 texture); images with transparency
+    are unaffected. Returns (bytes, opaque).
     """
     w, h = img.size
     if w > MAX_TEX or h > MAX_TEX:
@@ -516,6 +526,8 @@ def encode_ctex(img, logical_w, logical_h, allow_565=False):
         img = resize_rgba(img, w, h)
     arr = np.asarray(img.convert("RGBA"), dtype=np.uint8)
     opaque = bool(arr[..., 3].min() == 255)
+    if opaque and jpeg_quality > 0:
+        return encode_jpeg_ctex(img, logical_w, logical_h, jpeg_quality), True
     if not opaque:
         arr = bleed_edges(arr)
     tw, th = next_pow2(w), next_pow2(h)
@@ -549,6 +561,25 @@ def encode_ctex(img, logical_w, logical_h, allow_565=False):
     return header + packed, opaque
 
 
+CTEX_ZLIB, CTEX_JPEG = 1, 2   # .ctex flags
+
+
+def encode_jpeg_ctex(img, logical_w, logical_h, quality):
+    """An opaque image as a JPEG .ctex: the payload is a baseline JPEG of the
+    image (not padded); the engine decodes it into a tex_w x tex_h RGB565
+    texture, repeating the edge pixels into the padding."""
+    w, h = img.size
+    tw, th = next_pow2(w), next_pow2(h)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, "JPEG", quality=int(quality), optimize=True, progressive=False,
+                            subsampling=2 if quality < 90 else 0)
+    jpg = buf.getvalue()
+    header = b"CTEX" + struct.pack("<HHHHHHffIII", 1, FMT_RGB565, tw, th, w, h,
+                                   float(logical_w), float(logical_h), CTEX_JPEG,
+                                   tw * th * 2, len(jpg))
+    return header + jpg
+
+
 # --------------------------------------------------------------------------
 # Audio
 # --------------------------------------------------------------------------
@@ -557,9 +588,14 @@ def is_ogg_vorbis(data):
     return data[:4] == b"OggS" and b"\x01vorbis" in data[:256]
 
 
-def convert_audio(data, name, out_path, warn):
-    """Write Ogg Vorbis to out_path, transcoding with ffmpeg when needed."""
-    if is_ogg_vorbis(data):
+def convert_audio(data, name, out_path, warn, profile="sd"):
+    """Write Ogg Vorbis to out_path, transcoding with ffmpeg when needed.
+
+    profile "sd": Ogg Vorbis files are copied as they are (best quality).
+    profile "wifi": everything is re-encoded small for Wi-Fi transfers:
+    22 kHz, mixed to mono and written as identical stereo channels (Vorbis
+    stores the zero difference almost for free), quality 2: about 23 kbps."""
+    if is_ogg_vorbis(data) and profile != "wifi":
         with open(out_path, "wb") as f:
             f.write(data)
         return True
@@ -572,6 +608,19 @@ def convert_audio(data, name, out_path, warn):
         src = os.path.join(tmp, "in" + ext)
         with open(src, "wb") as f:
             f.write(data)
+        if profile == "wifi":
+            mono = ["-af", "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1", "-ar", "22050"]
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *mono, "-c:a", "vorbis",
+                   "-strict", "-2", "-q:a", "2", out_path]
+            r = subprocess.run(cmd, capture_output=True)
+            if r.returncode != 0:   # mono sources: pan needs two channels
+                cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "22050",
+                       "-c:a", "vorbis", "-strict", "-2", "-q:a", "2", out_path]
+                r = subprocess.run(cmd, capture_output=True)
+            if r.returncode != 0:
+                warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
+                return False
+            return True
         cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
                "-c:a", "libvorbis", "-q:a", "3", out_path]
         r = subprocess.run(cmd, capture_output=True)
@@ -664,3 +713,179 @@ def encode_cvid(frames, logical_w, logical_h, fps, loop, threshold=2):
         sizes.append(len(c))
         offset += len(c)
     return head + struct.pack(f"<{n}I", *offs) + struct.pack(f"<{n}I", *sizes) + b"".join(chunks)
+
+
+# --------------------------------------------------------------------------
+# Video (.cvh): H.264 for the New 3DS's hardware decoder (MVD)
+# --------------------------------------------------------------------------
+#
+#   "CVH1" u16 version(1) u16 codec(1 = H.264 Annex B) u16 w h (multiples of 16)
+#   u16 tex_w tex_h (powers of two) f32 logical_w logical_h f32 fps u32 frames
+#   u32 flags(1 = loop) u32 params_offset u32 params_size
+#   u8 profile_idc level_idc max_ref_frames reserved u32 max_frame_size
+#   u32 keyframes u32 reserved[2]                                 (64 bytes)
+#   frame table: u32 offset, u32 size, u16 nal_count, u16 flags(1 = IDR)
+#   SPS + PPS, then each frame's NAL units, every one with a 00 00 01 prefix
+#
+# Offsets are from the start of the file. From params_offset to the end the
+# file is a plain Annex B stream (ffmpeg -f h264 reads it). No B-frames, so
+# decode order is display order; frame 0 is an IDR frame, as is the start of
+# every GOP, so playback can (re)start at any keyframe. The first frame is
+# also written as a normal .ctex next to it (same name, .ctex): the poster for
+# an Old 3DS, the desktop build, and whenever the hardware decoder fails.
+
+CVH_HEADER = 64
+CVH_FRAME = 12
+
+
+def _ffprobe_fps(path):
+    """The clip's frame rate as a Fraction (None when unknown)."""
+    from fractions import Fraction
+    probe = shutil.which("ffprobe")
+    if not probe:
+        return None
+    r = subprocess.run([probe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                        "stream=avg_frame_rate,r_frame_rate", "-of", "default=nw=1", path],
+                       capture_output=True, text=True)
+    best = None
+    for line in r.stdout.splitlines():
+        k, _, v = line.partition("=")
+        try:
+            f = Fraction(v)
+        except (ValueError, ZeroDivisionError):
+            continue
+        if f > 0 and (best is None or k == "avg_frame_rate"):
+            best = f
+    return best
+
+
+def h264_size(logical_w, logical_h):
+    """Coded size for a clip shown at logical_w x logical_h: multiples of 16
+    (the decoder works in 16x16 macroblocks), at most 1024."""
+    def r16(v):
+        return int(min(1024, max(16, round(v / 16.0) * 16)))
+    return r16(logical_w), r16(logical_h)
+
+
+def split_annexb(stream):
+    """NAL units (without start codes) of an Annex B byte stream."""
+    out = []
+    i, n = 0, len(stream)
+    starts = []
+    while True:
+        j = stream.find(b"\x00\x00\x01", i)
+        if j < 0:
+            break
+        starts.append(j + 3)
+        i = j + 3
+    for k, s in enumerate(starts):
+        e = starts[k + 1] - 3 if k + 1 < len(starts) else n
+        nal = stream[s:e]
+        while nal.endswith(b"\x00") and k + 1 < len(starts):   # 4-byte start code / trailing zeros
+            nal = nal[:-1]
+        if nal:
+            out.append(nal)
+    return out
+
+
+def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
+               max_seconds=None, profile="main", level="3.0", gop_seconds=4.0,
+               preset="slower", poster_scale=1.0):
+    """Convert a movie into .cvh bytes plus its poster (.ctex bytes).
+
+    Returns (cvh, poster_ctex, info). Two-pass libx264 at `kbps`, no
+    B-frames, one slice per frame, an IDR frame at least every `gop_seconds`.
+    The frame rate is the clip's own, capped at `fps_cap`. The poster is
+    stored at `poster_scale` of the video's size (RGB565) and drawn scaled up."""
+    from fractions import Fraction
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise OSError("ffmpeg is needed to convert movies")
+    w, h = h264_size(logical_w, logical_h)
+    ext = os.path.splitext(name)[1] or ".webm"
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in" + ext)
+        with open(src, "wb") as f:
+            f.write(data)
+        fps = _ffprobe_fps(src) or Fraction(30)
+        if fps > fps_cap:
+            fps = Fraction(fps_cap)
+        fps = fps.limit_denominator(1001)
+        # Decode and scale once into raw YUV; both x264 passes read that.
+        y4m = os.path.join(tmp, "v.y4m")
+        cmd = [ffmpeg, "-v", "error", "-y", "-i", src]
+        if max_seconds:
+            cmd += ["-t", str(max_seconds)]
+        cmd += ["-an", "-vf", f"fps={fps.numerator}/{fps.denominator},"
+                f"scale={w}:{h}:flags=lanczos,setsar=1,format=yuv420p", y4m]
+        r = subprocess.run(cmd, capture_output=True)
+        if r.returncode != 0:
+            raise OSError(r.stderr.decode(errors="replace").strip()[:200])
+        gop = max(1, int(round(float(fps) * gop_seconds)))
+        x264 = (f"bframes=0:ref=3:keyint={gop}:min-keyint={max(1, gop // 4)}:scenecut=40:"
+                "open-gop=0:slices=1:sliced-threads=0:aud=0:annexb=1:"
+                "nal-hrd=none:force-cfr=1")
+        out = os.path.join(tmp, "v.h264")
+        base = [ffmpeg, "-v", "error", "-y", "-i", y4m, "-an", "-c:v", "libx264",
+                "-profile:v", profile, "-level:v", level, "-preset", preset,
+                "-b:v", f"{int(kbps)}k", "-x264-params", x264,
+                "-passlogfile", os.path.join(tmp, "x264")]
+        for p, dst in ((1, ["-f", "null", os.devnull]), (2, ["-f", "h264", out])):
+            r = subprocess.run(base + ["-pass", str(p)] + dst, capture_output=True)
+            if r.returncode != 0:
+                raise OSError(r.stderr.decode(errors="replace").strip()[:200])
+        with open(out, "rb") as f:
+            stream = f.read()
+        # The poster is the encoded first frame, so it matches what the
+        # decoder will show and the switch to the moving picture is seamless.
+        r = subprocess.run([ffmpeg, "-v", "error", "-f", "h264", "-i", out, "-frames:v", "1",
+                            "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
+        if r.returncode != 0 or len(r.stdout) < w * h * 3:
+            raise OSError("cannot decode the encoded movie's first frame")
+        first = np.frombuffer(r.stdout[: w * h * 3], np.uint8).reshape(h, w, 3)
+
+    sps = pps = None
+    frames = []   # [nal, ...] per frame
+    idr = []
+    for nal in split_annexb(stream):
+        t = nal[0] & 0x1F
+        if t == 7:
+            sps = sps or nal
+        elif t == 8:
+            pps = pps or nal
+        elif t in (1, 5):
+            if not frames or (len(nal) > 1 and nal[1] & 0x80):   # first_mb_in_slice == 0
+                frames.append([])
+                idr.append(t == 5)
+            frames[-1].append(nal)
+        # Repeated SPS/PPS (x264 sends them with every IDR frame), SEI (x264's
+        # version string), AUD and filler data are dropped.
+    if sps is None or pps is None or not frames or not idr[0]:
+        raise OSError("x264 output has no SPS/PPS or doesn't start with an IDR frame")
+    sc = b"\x00\x00\x01"
+    params = sc + sps + sc + pps
+    tw, th = next_pow2(w), next_pow2(h)
+    n = len(frames)
+    params_at = CVH_HEADER + CVH_FRAME * n
+    table, blobs = [], []
+    at = params_at + len(params)
+    for nals, key in zip(frames, idr):
+        blob = b"".join(sc + x for x in nals)
+        table.append(struct.pack("<IIHH", at, len(blob), len(nals), 1 if key else 0))
+        blobs.append(blob)
+        at += len(blob)
+    max_frame = max(len(b) for b in blobs)
+    head = b"CVH1" + struct.pack("<HHHHHHfffIIIIBBBBIIII", 1, 1, w, h, tw, th,
+                                 float(logical_w), float(logical_h), float(fps), n,
+                                 1 if loop else 0, params_at, len(params),
+                                 sps[1], sps[3], 3, 0, max_frame, sum(idr), 0, 0)
+    assert len(head) == CVH_HEADER
+    cvh = head + b"".join(table) + params + b"".join(blobs)
+    img = Image.fromarray(first, "RGB").convert("RGBA")
+    if poster_scale < 1.0:
+        img = img.resize((max(8, int(w * poster_scale)), max(8, int(h * poster_scale))),
+                         Image.LANCZOS)
+    poster, _ = encode_ctex(img, logical_w, logical_h, allow_565=True)
+    info = dict(w=w, h=h, fps=float(fps), frames=n, keyframes=sum(idr),
+                seconds=n / float(fps), bytes=len(cvh), poster_bytes=len(poster))
+    return cvh, poster, info

@@ -18,7 +18,7 @@ from collections import OrderedDict
 
 from . import rpy
 from .assets import (AUDIO_EXTS, IMAGE_EXTS, AssetFS, ImageBuilder,
-                     convert_audio, encode_ctex, encode_cvid, resize_rgba, video_frames)
+                     convert_audio, encode_ctex, encode_cvh, encode_cvid, resize_rgba, video_frames)
 from .compiler import CompileError, Compiler, write_game
 
 DEFAULT_DEPTH_BY_TAG = {"cg": 0.45, "event": 0.45, "ev": 0.45}
@@ -79,18 +79,27 @@ def _image_job(name):
             if w > 1024 or h > 1024:
                 f = min(1024 / w, 1024 / h)
                 w, h = int(w * f), int(h * f)
-            frames = video_frames(b.fs.read(key), key, w, h, _W["video_fps"], _W["video_seconds"])
+            if _W.get("video_codec", "h264") == "h264":
+                kbps = _W["video_kbps"]
+                data, poster, _ = encode_cvh(
+                    b.fs.read(key), key, lw, lh, loop, kbps=kbps,
+                    fps_cap=_W["video_fps"] or 30, max_seconds=_W["video_seconds"],
+                    profile=_W["video_profile"], poster_scale=1.0 if kbps > 400 else 0.5)
+                return name, ("cvh", data, lw, lh, True, poster), warnings
+            fps = _W["video_fps"] or 12
+            frames = video_frames(b.fs.read(key), key, w, h, fps, _W["video_seconds"] or 12)
             if len(frames) == 0:
                 warnings.append(f"movie '{key}' has no frames")
                 return name, None, warnings
-            data = encode_cvid(frames, lw, lh, _W["video_fps"], loop)
+            data = encode_cvid(frames, lw, lh, fps, loop)
             return name, ("video", data, lw, lh, True), warnings
         img = b.render(src)
         if img is None:
             return name, None, warnings
         lw, lh = img.width * scale, img.height * scale
         w, h = max(1, int(round(lw))), max(1, int(round(lh)))
-        data, _ = encode_ctex(resize_rgba(img, w, h), lw, lh, allow_565=_W["rgb565"])
+        data, _ = encode_ctex(resize_rgba(img, w, h), lw, lh, allow_565=_W["rgb565"],
+                              jpeg_quality=_W.get("jpeg", 0))
         full = img.width >= _W["gw"] * 0.95 and img.height >= _W["gh"] * 0.95
         return name, ("tex", data, lw, lh, full), warnings
     except (OSError, ValueError, SyntaxError, MemoryError) as e:
@@ -166,7 +175,16 @@ def resolve_auto_audio(fs, name):
             key = fs.find(d + name + ext, dirs=("",))
             if key:
                 return key
-    return None
+    # Ren'Py names every file anywhere under game/audio/ by its bare name
+    # (audio/sfx/08/door.ogg is `door`), so look in subfolders too.
+    index = getattr(fs, "_audio_by_name", None)
+    if index is None:
+        index = {}
+        for key in sorted(fs.keys()):
+            if key.startswith("audio/") and key.endswith(tuple(AUDIO_EXTS)):
+                index.setdefault(key.rsplit("/", 1)[-1].rsplit(".", 1)[0], key)
+        fs._audio_by_name = index
+    return index.get(name.lower())
 
 
 def main(argv=None):
@@ -186,11 +204,26 @@ def main(argv=None):
     ap.add_argument("--config", help="JSON file with 3D depth settings (see README)")
     ap.add_argument("--rgb565", action="store_true",
                     help="store opaque images as RGB565 (half the memory, some banding)")
+    ap.add_argument("--jpeg", type=int, default=0, metavar="Q",
+                    help="store opaque images as JPEG at quality Q (1-100, e.g. 80: about a "
+                         "fifth of the size, decoded to RGB565 on load); 0 = off")
     ap.add_argument("--no-audio", action="store_true", help="skip audio")
+    ap.add_argument("--audio-profile", choices=("sd", "wifi"), default="sd",
+                    help="sd: keep Ogg files as they are; wifi: re-encode everything small")
     ap.add_argument("--no-video", action="store_true", help="skip Movie() animations")
-    ap.add_argument("--video-fps", type=int, default=12, help="frame rate for converted movies")
-    ap.add_argument("--video-seconds", type=float, default=12,
-                    help="longest movie kept, in seconds (they loop anyway)")
+    ap.add_argument("--video-codec", choices=("h264", "cvid"), default="h264",
+                    help="h264: hardware-decoded on a New 3DS, the first frame elsewhere "
+                         "(default); cvid: the older tile format, any 3DS, low frame rate")
+    ap.add_argument("--video-kbps", type=int, default=900,
+                    help="H.264 bitrate (default 900 for the SD card; about 250 for Wi-Fi)")
+    ap.add_argument("--video-profile", choices=("main", "baseline"), default="main",
+                    help="H.264 profile (default main)")
+    ap.add_argument("--video-fps", type=int, default=None,
+                    help="frame rate for converted movies: the cap for h264 (default 30, "
+                         "clips keep their own rate below it), the rate for cvid (default 12)")
+    ap.add_argument("--video-seconds", type=float, default=None,
+                    help="longest movie kept, in seconds (default: all of it for h264, "
+                         "12 for cvid)")
     ap.add_argument("-j", "--jobs", type=int, default=0,
                     help="processes for image conversion (default: up to 4)")
     ap.add_argument("--check", action="store_true",
@@ -198,6 +231,8 @@ def main(argv=None):
     ap.add_argument("--all-warnings", action="store_true")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
+    if not 0 <= args.jpeg <= 100:
+        ap.error("--jpeg takes a quality from 1 to 100 (0 = off)")
 
     warn = Warnings(args.quiet)
     game_dir = find_game_dir(args.project)
@@ -274,7 +309,7 @@ def main(argv=None):
         d = os.path.join(out_dir, sub)
         os.makedirs(d, exist_ok=True)
         for fn in os.listdir(d):
-            if fn.endswith((".ctex", ".ogg", ".cvid")):
+            if fn.endswith((".ctex", ".ogg", ".cvid", ".cvh")):
                 os.remove(os.path.join(d, fn))
 
     depth_map = dict(DEFAULT_DEPTH_BY_TAG)
@@ -335,7 +370,7 @@ def main(argv=None):
         w = max(1, int(round(logical_w)))
         h = max(1, int(round(logical_h)))
         data, opaque = encode_ctex(resize_rgba(img, w, h), logical_w, logical_h,
-                                   allow_565=args.rgb565)
+                                   allow_565=args.rgb565, jpeg_quality=args.jpeg)
         idx = len(resources)
         rel = f"img/{idx:04d}.ctex"
         with open(os.path.join(out_dir, rel), "wb") as f:
@@ -357,6 +392,7 @@ def main(argv=None):
     # Audio comes first in the resource table: PLAY operands are the
     # compiler's resource indices.
     audio_count = 0
+    audio_jobs = []
     for kind, path in comp.resources:
         rel = f"snd/{len(resources):04d}.ogg"
         resources.append(rel)
@@ -369,8 +405,16 @@ def main(argv=None):
         if key is None:
             warn(None, f"audio file '{path}' not found")
             continue
-        if convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn):
-            audio_count += 1
+        audio_jobs.append((key, rel))
+    # ffmpeg runs in its own process, so threads are enough to use every core
+    from concurrent.futures import ThreadPoolExecutor
+
+    def audio_job(job):
+        key, rel = job
+        return convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn,
+                             args.audio_profile)
+    with ThreadPoolExecutor(max_workers=max(2, os.cpu_count() or 2)) as ex:
+        audio_count = sum(1 for ok in ex.map(audio_job, audio_jobs) if ok)
 
     # Machine voices (vn3ds.json "voices"): a syllable bank plus a pitch per
     # character, played by the engine as text appears.
@@ -404,7 +448,9 @@ def main(argv=None):
     names = [n for n in names if n not in layer_cfg]
     _W.update(builder=builder, defs=defs, scale=scale, gw=gw, gh=gh, vw=vw, vh=vh,
               rgb565=args.rgb565, video=not args.no_video, video_fps=args.video_fps,
-              video_seconds=args.video_seconds)
+              video_seconds=args.video_seconds, video_codec=args.video_codec,
+              video_kbps=args.video_kbps, video_profile=args.video_profile)
+    _W["jpeg"] = args.jpeg
     # Each worker holds a few full-size pictures; more than 4 mostly adds swap.
     jobs = max(1, args.jobs or min(4, os.cpu_count() or 2))
     by_hash = {}
@@ -436,19 +482,24 @@ def main(argv=None):
             images.append(dict(name=name, res=-1, color=rgba, w=w, h=h,
                                flags=1 | (2 if full else 0), depth=depth))
             continue
-        kind, data, lw, lh, full = result
+        kind, data, lw, lh, full = result[:5]
         digest = hashlib.sha1(data).digest()
         res = by_hash.get(digest)
         if res is None:
             res = len(resources)
-            rel = f"img/{res:05d}." + ("cvid" if kind == "video" else "ctex")
+            rel = f"img/{res:05d}." + {"video": "cvid", "cvh": "cvh"}.get(kind, "ctex")
             with open(os.path.join(out_dir, rel), "wb") as f:
                 f.write(data)
             total_bytes += len(data)
+            if kind == "cvh":   # its poster frame: same name, .ctex (the engine looks there)
+                with open(os.path.join(out_dir, rel[:-4] + ".ctex"), "wb") as f:
+                    f.write(result[5])
+                total_bytes += len(result[5])
             resources.append(rel)
             by_hash[digest] = res
         images.append(dict(name=name, res=res, color=0xFFFFFFFF, w=lw, h=lh,
-                           flags=(2 if full else 0) | (4 if kind == "video" else 0), depth=depth))
+                           flags=(2 if full else 0) | (4 if kind in ("video", "cvh") else 0),
+                           depth=depth))
 
     layer_records = []
     for name in sorted(layer_cfg):
@@ -468,7 +519,8 @@ def main(argv=None):
             part = img.crop(bbox)
             lw, lh = part.width * scale, part.height * scale
             w, h = max(1, int(round(lw))), max(1, int(round(lh)))
-            data, _ = encode_ctex(resize_rgba(part, w, h), lw, lh, allow_565=args.rgb565)
+            data, _ = encode_ctex(resize_rgba(part, w, h), lw, lh, allow_565=args.rgb565,
+                                  jpeg_quality=args.jpeg)
             digest = hashlib.sha1(data).digest()
             res = by_hash.get(digest)
             if res is None:

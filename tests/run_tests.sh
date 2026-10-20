@@ -45,4 +45,8 @@ check "$OUT/t3.txt" "Went left."
 if grep -q "This line must not be reached" "$OUT/t3.txt"; then echo "  call screen fell through"; fail=1; fi
 if grep -q "This should never show" "$OUT/t3.txt"; then echo "  hidden menu option was shown"; fail=1; fi
 
+echo "JPEG textures"
+python3 tests/test_jpeg.py > "$OUT/jpeg.txt" 2>&1 || { grep -v "  ok:" "$OUT/jpeg.txt"; fail=1; }
+tail -1 "$OUT/jpeg.txt"
+
 [ $fail = 0 ] && echo "all tests passed" || { echo "FAILED"; exit 1; }
