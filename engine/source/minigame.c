@@ -448,7 +448,7 @@ static void board_update(void)
 static void draw_board(int eye)
 {
     char buf[96];
-    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(18, 16, 38, 255), RGBA(52, 30, 72, 255));
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(30, 30, 32, 255), RGBA(0, 0, 0, 255));
     float pulse = 0.5f + 0.5f * sinf(MG.rt * 5.0f);
     for (int i = 0; i < LB_POST.ntop; i++) {
         float y = BOARD_TOP + ((float)i - MG.scroll) * BOARD_ROW_H;
@@ -456,18 +456,19 @@ static void draw_board(int eye)
             continue;
         const LbEntry *r = &LB_POST.top[i];
         if (r->rank == 0) {
-            mg_text_centered(eye, ". . .", TOP_W / 2, y + 2, 0.5f, 0.1f, RGBA(180, 180, 210, 255));
+            mg_text_centered(eye, ". . .", TOP_W / 2, y + 2, 0.5f, 0.1f, RGBA(152, 152, 159, 255));
             continue;
         }
         float depth = 0.08f;
         u32 fg = MG_WHITE;
         if (r->me) {
             depth = MG.landed ? -0.18f - 0.06f * pulse : -0.05f;
-            mg_rect(eye, 24, y - 1, 352, BOARD_ROW_H - 2, depth + 0.02f,
-                    MG.landed ? RGBA(255, 210, 110, 235) : RGBA(255, 210, 110, 120));
-            fg = MG.landed ? MG_INK : MG_WHITE;
+            ui_rrect(24 + mg_shift(eye, depth + 0.02f), y - 1, 352, BOARD_ROW_H - 2, (BOARD_ROW_H - 2) / 2,
+                     MG.landed ? RGBA(255, 255, 255, 242) : RGBA(255, 255, 255, 90));
+            fg = MG.landed ? RGBA(0, 0, 0, 255) : MG_WHITE;
         } else if (i % 2) {
-            mg_rect(eye, 24, y - 1, 352, BOARD_ROW_H - 2, 0.1f, RGBA(255, 255, 255, 18));
+            ui_rrect(24 + mg_shift(eye, 0.1f), y - 1, 352, BOARD_ROW_H - 2, (BOARD_ROW_H - 2) / 2,
+                     RGBA(255, 255, 255, 16));
         }
         snprintf(buf, sizeof(buf), "#%d", r->rank);
         mg_text(eye, buf, 82 - gfx_text_width(buf, 0.5f), y + 1, 0.5f, depth, fg);
@@ -475,14 +476,14 @@ static void draw_board(int eye)
         snprintf(buf, sizeof(buf), "%d%%", r->score);
         mg_text(eye, buf, 366 - gfx_text_width(buf, 0.5f), y + 1, 0.5f, depth, fg);
         if (r->me && MG.landed)
-            mg_text(eye, "You", 300, y + 1, 0.45f, depth, MG_INK);
+            mg_text(eye, "You", 300, y + 1, 0.45f, depth, RGBA(0, 0, 0, 255));
     }
     /* header over the scrolling rows */
-    gfx_rect(0, 0, TOP_W, BOARD_TOP - 4, RGBA(18, 16, 38, 255));
-    mg_text_centered(eye, MG.game->title, TOP_W / 2, 6, 0.6f, -0.12f, MG_GOLD);
+    gfx_rect(0, 0, TOP_W, BOARD_TOP - 4, RGBA(30, 30, 32, 255));
+    mg_text_centered(eye, MG.game->title, TOP_W / 2, 6, 0.6f, -0.12f, MG_WHITE);
     snprintf(buf, sizeof(buf), "Your run: %d%%     #%d of %d", MG.score, LB_POST.rank, LB_POST.total);
     mg_text_centered(eye, buf, TOP_W / 2, 28, 0.45f, -0.06f, MG_WHITE);
-    gfx_gradient(0, TOP_H - 14, TOP_W, 14, RGBA(52, 30, 72, 0), RGBA(52, 30, 72, 255));
+    gfx_gradient(0, TOP_H - 14, TOP_W, 14, RGBA(0, 0, 0, 0), RGBA(0, 0, 0, 255));
 }
 
 void mg_update(const Input *in, float dt)
@@ -557,13 +558,9 @@ void mg_update(const Input *in, float dt)
 
 static void card(int eye, const char *title, const char *body)
 {
-    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(24, 20, 44, 255), RGBA(70, 40, 90, 255));
-    for (int i = 0; i < 24; i++) {   /* a few stars far behind */
-        float x = (float)((i * 97 + 31) % TOP_W), y = (float)((i * 57 + 11) % TOP_H);
-        gfx_rect(x + mg_shift(eye, 1.0f), y, 2, 2, RGBA(255, 255, 255, 90));
-    }
-    mg_text_centered(eye, title, TOP_W / 2, 26, 0.9f, -0.15f, MG_GOLD);
-    mg_text_centered(eye, body, TOP_W / 2, 80, 0.5f, -0.05f, MG_WHITE);
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(30, 30, 32, 255), RGBA(0, 0, 0, 255));
+    mg_text_centered(eye, title, TOP_W / 2, 26, 0.9f, -0.15f, MG_WHITE);
+    mg_text_centered(eye, body, TOP_W / 2, 80, 0.5f, -0.05f, RGBA(152, 152, 159, 255));
 }
 
 void mg_draw_top(int eye)
@@ -578,8 +575,9 @@ void mg_draw_top(int eye)
     case MG_PAUSED:
         g->draw_top(eye);
         if (MG.phase == MG_PAUSED) {
-            gfx_rect(0, 0, TOP_W, TOP_H, RGBA(0, 0, 0, 150));
-            mg_text_centered(eye, "Paused", TOP_W / 2, 100, 0.9f, -0.2f, MG_WHITE);
+            gfx_rect(0, 0, TOP_W, TOP_H, RGBA(0, 0, 0, 170));
+            ui_rrect(140 + mg_shift(eye, -0.2f), 92, 120, 44, 22, RGBA(44, 44, 46, 242));
+            mg_text_centered(eye, "Paused", TOP_W / 2, 100, 0.8f, -0.2f, MG_WHITE);
         }
         break;
     case MG_RESULT: {
@@ -592,16 +590,16 @@ void mg_draw_top(int eye)
         snprintf(buf, sizeof(buf), "%d%%", MG.score);
         mg_text_centered(eye, buf, TOP_W / 2, 74, 1.6f, -0.35f, MG_WHITE);
         if (MG.verdict[0])
-            mg_text_centered(eye, MG.verdict, TOP_W / 2, 140, 0.5f, -0.1f, RGBA(220, 220, 255, 255));
+            mg_text_centered(eye, MG.verdict, TOP_W / 2, 140, 0.5f, -0.1f, RGBA(152, 152, 159, 255));
         if (MG.score > MG.best_before && MG.best_before >= 0)
             snprintf(buf, sizeof(buf), "New best! (was %d%%)", MG.best_before);
         else if (MG.best_before < 0)
             snprintf(buf, sizeof(buf), "First score on the board");
         else
             snprintf(buf, sizeof(buf), "Best: %d%%", MG.best_before);
-        mg_text_centered(eye, buf, TOP_W / 2, 176, 0.55f, -0.1f, MG_GOLD);
+        mg_text_centered(eye, buf, TOP_W / 2, 176, 0.55f, -0.1f, MG_WHITE);
         if (MG.cheat_used)
-            mg_text_centered(eye, "(one cheat used)", TOP_W / 2, 204, 0.45f, 0, RGBA(200, 200, 200, 255));
+            mg_text_centered(eye, "(one cheat used)", TOP_W / 2, 204, 0.45f, 0, RGBA(99, 99, 104, 255));
         break;
     }
     }
@@ -609,10 +607,10 @@ void mg_draw_top(int eye)
 
 static void bottom_button(float x, float y, float w, float h, const char *label, bool on)
 {
-    gfx_rect(x, y, w, h, on ? RGBA(255, 255, 255, 235) : RGBA(255, 255, 255, 40));
+    ui_rrect(x, y, w, h, fminf(10, h / 2), on ? RGBA(255, 255, 255, 255) : RGBA(44, 44, 46, 255));
     float sc = 0.5f, lh = gfx_line_height(sc);
     gfx_text(label, x + (w - gfx_text_width(label, sc)) / 2, y + (h - lh) / 2, sc,
-             on ? RGBA(20, 20, 30, 255) : MG_WHITE);
+             on ? RGBA(0, 0, 0, 255) : MG_WHITE);
 }
 
 static void bottom_text(const char *s, float x, float y, float scale, u32 c)
@@ -635,7 +633,7 @@ static void bottom_text(const char *s, float x, float y, float scale, u32 c)
 /* Result screen: how posting the score to the online leaderboard went. */
 static void draw_online_status(void)
 {
-    const u32 dim = RGBA(180, 180, 200, 255);
+    const u32 dim = RGBA(152, 152, 159, 255);
     char buf[160];
     gfx_text("Online leaderboard", 14, 86, 0.45f, dim);
     if (MG.from_story) {
@@ -650,7 +648,7 @@ static void draw_online_status(void)
     switch (LB_POST.state) {
     case LB_DONE:
         snprintf(buf, sizeof(buf), "Posted: #%d of %d", LB_POST.rank, LB_POST.total);
-        gfx_text(buf, 14, 106, 0.55f, MG_GOLD);
+        gfx_text(buf, 14, 106, 0.55f, MG_WHITE);
         break;
     case LB_FAILED:
         gfx_text("Offline", 14, 106, 0.55f, MG_WHITE);
@@ -668,10 +666,10 @@ void mg_draw_bottom(void)
 {
     const MiniGame *g = MG.game;
     char buf[200];
-    gfx_gradient(0, 0, BOT_W, BOT_H, RGBA(20, 18, 34, 255), RGBA(36, 30, 56, 255));
+    gfx_gradient(0, 0, BOT_W, BOT_H, RGBA(14, 14, 16, 255), RGBA(0, 0, 0, 255));
     switch (MG.phase) {
     case MG_INTRO:
-        gfx_text("Controls", 14, 10, 0.55f, MG_GOLD);
+        gfx_text("Controls", 14, 10, 0.55f, MG_WHITE);
         bottom_text(g->controls, 14, 34, 0.45f, MG_WHITE);
         if (!MG.from_story)
             snprintf(buf, sizeof(buf), "Cheat (once): %s\nL, R, SELECT or tap Cheat", g->cheat);
@@ -680,19 +678,19 @@ void mg_draw_bottom(void)
                      MG.cheats_left);
         else
             snprintf(buf, sizeof(buf), "Cheat: %s\nNone left: they unlock at milestones.", g->cheat);
-        bottom_text(buf, 14, 132, 0.45f, RGBA(255, 200, 150, 255));
+        bottom_text(buf, 14, 132, 0.45f, RGBA(152, 152, 159, 255));
         if (!MG.from_story)
-            bottom_button(10, 196, 140, 36, "B: Back", false);
-        bottom_button(170, 196, 140, 36, "A: Start", true);
+            bottom_button(10, 196, 140, 36, "B  Back", false);
+        bottom_button(170, 196, 140, 36, "A  Start", true);
         break;
     case MG_PLAY:
         if (g->draw_bottom) {
             g->draw_bottom();
         } else {
-            gfx_text(g->title, 14, 12, 0.55f, MG_GOLD);
+            gfx_text(g->title, 14, 12, 0.55f, MG_WHITE);
             snprintf(buf, sizeof(buf), "%d:%02d", (int)MG.t / 60, (int)MG.t % 60);
             gfx_text(buf, 14, 40, 0.5f, MG_WHITE);
-            gfx_text("START: pause", 14, 180, 0.45f, RGBA(180, 180, 200, 255));
+            gfx_text("START  Pause", 14, 180, 0.45f, RGBA(152, 152, 159, 255));
         }
         if (!MG.cheat_used && MG.cheats_left > 0) {
             char lab[24];
@@ -711,11 +709,11 @@ void mg_draw_bottom(void)
         break;
     }
     case MG_RESULT:
-        gfx_text(g->title, 14, 12, 0.55f, MG_GOLD);
+        gfx_text(g->title, 14, 12, 0.55f, MG_WHITE);
         snprintf(buf, sizeof(buf), "Score %d%%", MG.score);
         gfx_text(buf, 14, 44, 0.6f, MG_WHITE);
         draw_online_status();
-        bottom_button(90, 196, 140, 36, "A: Continue", true);
+        bottom_button(90, 196, 140, 36, "A  Continue", true);
         break;
     }
 }

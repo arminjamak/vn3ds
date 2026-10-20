@@ -64,6 +64,8 @@ static void record_frame(FILE *f)
 const char *platform_root(void) { return root_dir; }
 bool platform_mkdir(const char *path) { return mkdir(path, 0755) == 0; }
 u32 platform_time(void) { return (u32)time(NULL); }
+void platform_keep_awake(bool on) { (void)on; }
+void platform_screens(bool on) { (void)on; }
 
 void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void *ud)
 {
@@ -164,6 +166,57 @@ static void dump(const char *dir, int index, const char *tag)
     snprintf(path, sizeof(path), "%s/%04d_%s.png", dir, index, tag);
     write_png(path, img, W, H);
     free(img);
+}
+
+/* --ui-tour: one picture of each screen and panel, to check the UI's look. */
+static int run_ui_tour(const char *out)
+{
+    Input in;
+    int shot = 0;
+    memset(&in, 0, sizeof(in));
+    for (int f = 0; f < 20; f++)
+        app_update(&in, 1.0f / 60.0f);
+    app_render();
+    dump(out, shot++, "title");
+    E.title_sel = 0;
+    in.down = KEY_A_;   /* start the story and read a few lines */
+    app_update(&in, 1.0f / 60.0f);
+    for (int f = 0; f < 60 * 12; f++) {
+        in.down = f % 40 == 39 ? KEY_A_ : 0;
+        app_update(&in, 1.0f / 60.0f);
+    }
+    memset(&in, 0, sizeof(in));
+    const Overlay ovs[] = {OV_PREFS, OV_SAVE, OV_LOG};
+    const char *names[] = {"prefs", "save", "log"};
+    for (int k = 0; k < 3; k++) {
+        E.overlay = ovs[k];
+        E.slot_page = 0;
+        E.prefs_sel = 2;
+        save_scan(E.slot_page, E.slots);
+        app_render();
+        dump(out, shot++, names[k]);
+    }
+    E.overlay = OV_NONE;
+    E.auto_mode = true;
+    app_render();
+    dump(out, shot++, "auto");
+    E.auto_mode = false;
+    E.screen = SCR_MGMENU;
+    E.mg_sel = 0;
+    app_render();
+    dump(out, shot++, "minigames");
+    E.mg_board = true;
+    app_render();
+    dump(out, shot++, "board");
+    E.mg_board = false;
+    E.screen = SCR_RECEIVE;
+    app_render();
+    dump(out, shot++, "receive");
+    app_error("Could not open game.bin: the file is damaged. Send the game again from your computer.");
+    app_render();
+    dump(out, shot++, "error");
+    printf("ui tour: %d pictures\n", shot);
+    return 0;
 }
 
 static void record_frame(FILE *f);
@@ -282,7 +335,7 @@ int main(int argc, char **argv)
     bool talk_frames = false;
     u32 talk_serial = 0;
     setvbuf(stdout, NULL, _IOLBF, 0);
-    bool test_save = false, pace = false, home = false;
+    bool test_save = false, pace = false, home = false, ui_tour = false;
     FILE *rec = NULL;
     const char *stop_label = NULL, *minigame = NULL, *board = NULL;
     for (int i = 1; i < argc; i++) {
@@ -310,8 +363,12 @@ int main(int argc, char **argv)
             minigame = argv[++i];
         else if (!strcmp(argv[i], "--leaderboard") && i + 1 < argc)
             board = argv[++i];
+        else if (!strcmp(argv[i], "--listen"))
+            app_listen_background = true;
         else if (!strcmp(argv[i], "--home"))
             home = true;
+        else if (!strcmp(argv[i], "--ui-tour"))
+            ui_tour = true;
         else if (!strcmp(argv[i], "--pace"))
             pace = true;
         else if (!strcmp(argv[i], "--stop-label") && i + 1 < argc)
@@ -352,7 +409,8 @@ int main(int argc, char **argv)
         printf("%s\nfiles %u, refused %u, %.1f MB, games now: %d\n", NET.message, (unsigned)NET.files_done,
                (unsigned)NET.refused, NET.bytes_done / 1048576.0, E.ngames);
         app_render();
-        dump(".", 0, "receive");
+        if (out)
+            dump(out, 0, "receive");
         return NET.completed ? 0 : 1;
     }
     if (home) {
@@ -373,6 +431,39 @@ int main(int argc, char **argv)
             app_render();
             if (out)
                 dump(out, k, "home");
+        }
+        if (app_listen_background && out) {
+            /* --listen: stay on the home screen in real time while a transfer
+             * comes in, one frame a second, until two seconds after it ends */
+            int shot = 0, after = -1;
+            bool tried = false;
+            for (int frame = 0; frame < 60 * 180 && after < 120; frame++) {
+                Input press = none;
+                if (!tried && E.rx_new && E.rx_rate > 0) {   /* try to open it: it must say to wait */
+                    press.down = KEY_A_;
+                    tried = true;
+                }
+                app_update(&press, 1.0f / 60.0f);
+                if (press.down)
+                    printf("home: A on the arriving card -> %s (screen %d)\n", E.toast, (int)E.screen);
+                static char said[160];
+                if (strcmp(said, NET.message)) {
+                    snprintf(said, sizeof(said), "%s", NET.message);
+                    printf("home: net: %s\n", said);
+                }
+                if (E.rx_new && E.game_sel != E.ngames)
+                    E.game_sel = E.ngames;   /* look at the arriving card */
+                if (NET.completed && after < 0)
+                    after = 0;
+                if (after >= 0)
+                    after++;
+                if (frame % 60 == 0 && (NET.receiving || after > 0)) {
+                    app_render();
+                    dump(out, shot++, "home-rx");
+                }
+                usleep(16000);
+            }
+            printf("home: received %s, %d games now\n", NET.last_game, E.ngames);
         }
         printf("home: %d games\n", E.ngames);
         return 0;
@@ -396,6 +487,8 @@ int main(int argc, char **argv)
         return 1;
     }
     printf("== %s ==\n", E.game.title);
+    if (ui_tour)
+        return run_ui_tour(out);
     if (board)
         return run_leaderboard(board, out);
     if (minigame)
@@ -418,22 +511,14 @@ int main(int argc, char **argv)
     for (int frame = 0; frame < 60 * 60 * 60 * 12; frame++) { /* up to 12 hours of game time */
         memset(&in, 0, sizeof(in));
         host_now = frame * (double)dt;
-        if (E.rx_overlay) {
-            /* a transfer arrived mid-story: watch the overlay, then carry on */
-            static int rxf;
-            rxf++;
-            if (out && rxf % 30 == 1) {
-                app_render();
-                dump(out, shots++, "rx");
+        {
+            /* transfers arrive in the background: the story carries on */
+            static u32 rx_done_seen;
+            if (NET.completed != rx_done_seen) {
+                rx_done_seen = NET.completed;
+                printf("    [rx] received %s%s while playing\n", NET.last_game,
+                       NET.staged ? " (staged update)" : "");
             }
-            if (E.rx_overlay >= 2 && rxf > 150) {
-                printf("    [rx] received %s%s; continuing\n", E.rx_game, E.rx_staged ? " (staged update)" : "");
-                in.down = KEY_B_;
-                rxf = 0;
-            }
-            app_update(&in, dt);
-            app_render();
-            continue;
         }
         if (stop_addr >= 0 && vm_watch_hit) {
             printf("== reached %s ==\n", stop_label);

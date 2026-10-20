@@ -11,8 +11,10 @@ typedef struct {
     char message[160];
     char current[300];
     char last_game[64];
+    char game[64];       /* the game the transfer is working on now ("" until known) */
     u32 files_total, files_done, refused, skipped, completed;
     u64 bytes_total, bytes_done;
+    u64 bytes_skipped;   /* part of bytes_done that was already on the card */
 } NetStatus;
 
 extern NetStatus NET;

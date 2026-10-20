@@ -108,12 +108,14 @@ typedef struct {
     int title_sel;
     int mg_sel;
 
-    /* A Wi-Fi transfer that arrives while playing: 0 none, 1 receiving,
-     * 2 finished, 3 the connection was lost. The game is paused meanwhile. */
-    int rx_overlay;
-    char rx_game[64];     /* the game that was received */
-    bool rx_staged;       /* it was an update to the open game (applies on restart) */
-    bool rx_engine;       /* vn3ds itself was updated */
+    /* Wi-Fi transfers run in the background while you play: a corner icon
+     * shows one is going, and the home screen lists the arriving game with
+     * its progress. A game that isn't in the list yet gets an extra card at
+     * the end (index ngames). */
+    bool rx_new;              /* the arriving game is new: show its card */
+    char rx_new_id[64];
+    char rx_new_title[96];
+    float rx_rate;            /* bytes per second, smoothed; 0 until known */
     bool mg_board;   /* Minigames menu: the online leaderboard is showing */
     char toast[96];
     float toast_t;
@@ -133,8 +135,6 @@ void app_init(const char *game_dir);
 /* Wi-Fi receive screen (games and engine updates from vn3ds-port --3ds). */
 void app_receive_open(void);
 void app_receive_close(void);
-/* Buttons of the transfer overlay (ui.c draws them). */
-void app_rx_continue(void);
 /* Resume: slot 0 is the automatic save (on HOME, quitting, leaving a game,
  * and every two minutes), with a snapshot of the screen for the home menu. */
 #define RESUME_SLOT 0
@@ -143,16 +143,23 @@ void app_rx_continue(void);
 void app_autosave(void);
 void app_play_game(int index);   /* carry on where you left off */
 bool app_has_resume(void);       /* for the loaded game */
-void app_rx_play(void);
+/* Cards on the home screen: the games, plus one for a new game arriving. */
+int app_home_count(void);
+/* True while a transfer is writing this game's files (it can't be opened yet). */
+bool app_rx_busy(const char *id);
+float app_rx_progress(void);      /* 0..1 of the current transfer */
+/* "about 3 min left" and the like; "" while the speed isn't known yet. */
+void app_rx_eta_text(char *out, size_t len);
 void app_rescan_games(void);
 extern bool app_start_receiving; /* set before app_init, e.g. when launched via 3dslink */
+extern bool app_listen_background; /* accept transfers at any time (3DS default) */
 void app_update(const Input *in, float dt);
 void app_render(void);
 void app_shutdown(void);
 
 /* app.c */
 void app_toast(const char *msg);
-void app_load_game(int index);
+bool app_load_game(int index);
 void app_to_title(void);
 void app_new_game(void);
 bool app_new_game_at(const char *label); /* debugging: skip to a label */
@@ -172,6 +179,9 @@ void ui_activate(int id);
 void ui_mg_board(void);
 void ui_overlay_input(const Input *in);
 void ui_draw_top(int eye);
+void ui_draw_rx_icon(int eye);   /* corner icon while a transfer runs */
+/* A filled rounded rectangle (buttons, cards, panels). */
+void ui_rrect(float x, float y, float w, float h, float r, u32 c);
 void ui_draw_bottom(void);
 void ui_wrap(const char *src, float width, float scale, char *out, size_t len);
 int ui_count_lines(const char *s);

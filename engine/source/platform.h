@@ -32,3 +32,7 @@ bool platform_mkdir(const char *path);
 /* Calls cb for each sub-folder name of `path`. */
 void platform_list_dirs(const char *path, void (*cb)(const char *name, void *ud), void *ud);
 u32 platform_time(void); /* seconds since 1970 */
+/* Long transfers: keep the console awake (even with the lid closed) and
+ * switch the screens' backlights off and on. No-ops on the desktop. */
+void platform_keep_awake(bool on);
+void platform_screens(bool on);

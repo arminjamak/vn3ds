@@ -14,10 +14,13 @@ tools/vnpack.sh "$OUT/proj" -o "$OUT/build" -q --no-audio
 mkdir -p "$OUT/root"
 printf 'text_speed = 6\n' > "$OUT/root/settings.cfg"   # instant text
 fail=0
+# engine notices that are not problems
+benign='leaderboard: offline'
+problems() { grep -E "ERROR|\[log\]" "$1" | grep -v "$benign"; }
 for label in $(grep -oE '^label (ch4_test_[a-z_]+)' tests/snapshot/route_tests.rpy | cut -d' ' -f2); do
     engine/build-host/vn3ds-host "$OUT/build/snapshot" --label "$label" --root "$OUT/root" > "$OUT/t.txt" 2>&1 || true
-    if grep -qE "ERROR|\[log\]" "$OUT/t.txt" || ! grep -q "Did the birds just stop moving" "$OUT/t.txt"; then
-        echo "  FAIL $label"; grep -E "ERROR|\[log\]" "$OUT/t.txt" | head -3; fail=1
+    if problems "$OUT/t.txt" > /dev/null || ! grep -q "Did the birds just stop moving" "$OUT/t.txt"; then
+        echo "  FAIL $label"; problems "$OUT/t.txt" | head -3; fail=1
     else
         echo "  ok   $label ($(grep -vcE '^\s+\[' "$OUT/t.txt") lines)"
     fi

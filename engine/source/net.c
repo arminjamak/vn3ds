@@ -10,6 +10,14 @@
  * Version 2 lets updates skip what the card already has: after a file's
  * size and CRC the server answers 3 ("have it": no data follows, and that 3
  * is the file's status) or 4 ("send it": data follows, then the status).
+ * Version 3 avoids a round trip per file, which on a slow Wi-Fi link costs
+ * far more than the data: the client sends the whole manifest first (every
+ * entry as in version 2: path, size, CRC), the server answers once with a
+ * bitmap of the files it needs (bit i = entry i, LSB first), then the client
+ * streams those files back to back as u32 index + data, with no replies in
+ * between. At the end the server sends "DONE" u32 failed. A dropped
+ * connection just means sending the manifest again: finished files are on
+ * the card and get skipped, so transfers resume by themselves.
  *
  * Paths are restricted to games/<id>/... and the engine file itself, so a
  * client can't write anywhere else on the card. The main loop only accepts
@@ -61,7 +69,13 @@ static size_t wlen;
 static bool write_failed;
 static void widen_window(int fd);
 
-enum { ST_HEADER, ST_PATHLEN, ST_PATH, ST_SIZE, ST_DATA };
+enum { ST_HEADER, ST_PATHLEN, ST_PATH, ST_SIZE, ST_DATA, ST_INDEX };
+
+/* version 3: the manifest */
+#define MF_MAX 40000
+static char *mf_paths;     /* NUL-separated */
+static u32 *mf_off, *mf_crc, mf_n, mf_bytes, mf_cap, mf_failed;
+static u64 *mf_size;
 
 static int listen_fd = -1, conn_fd = -1;
 static int state;
@@ -81,8 +95,21 @@ static void set_status(const char *fmt, const char *arg)
     snprintf(NET.message, sizeof(NET.message), fmt, arg ? arg : "");
 }
 
+static void mf_free(void)
+{
+    free(mf_paths);
+    free(mf_off);
+    free(mf_crc);
+    free(mf_size);
+    mf_paths = NULL;
+    mf_off = mf_crc = NULL;
+    mf_size = NULL;
+    mf_n = mf_bytes = mf_cap = mf_failed = 0;
+}
+
 static void close_conn(void)
 {
+    mf_free();
     if (out) {
         fclose(out);
         out = NULL;
@@ -132,10 +159,49 @@ void net_soc_release(void)
 /* The game that is open right now: files for it are staged in
  * updates/<id>/ instead of overwriting what it is reading. */
 static char live_game[64];
+/* Odd while the main thread is changing live_game; the receiver thread
+ * retries its copy until it reads the same even value before and after. */
+static volatile u32 live_seq;
 
 void net_set_live_game(const char *id)
 {
+    live_seq++;
+    __sync_synchronize();
     snprintf(live_game, sizeof(live_game), "%s", id ? id : "");
+    __sync_synchronize();
+    live_seq++;
+}
+
+static void copy_live_game(char *out, size_t len)
+{
+    for (;;) {
+        u32 seq = live_seq;
+        __sync_synchronize();
+        if (!(seq & 1)) {
+            snprintf(out, len, "%s", live_game);
+            __sync_synchronize();
+            if (live_seq == seq)
+                return;
+        }
+#ifdef __3DS__
+        svcSleepThread(100000LL);
+#else
+        usleep(100);
+#endif
+    }
+}
+
+/* Remembers which game an incoming path belongs to (for the home screen). */
+static void note_game(const char *rel)
+{
+    if (strncmp(rel, "games/", 6) != 0)
+        return;
+    const char *id = rel + 6;
+    size_t n = strcspn(id, "/");
+    if (n == 0 || n >= sizeof(NET.game) || (strlen(NET.game) == n && !strncmp(NET.game, id, n)))
+        return;
+    memcpy(NET.game, id, n);
+    NET.game[n] = 0;
 }
 
 bool net_start(int port)
@@ -243,6 +309,7 @@ static void begin_file(void)
         NET.refused++;
         return;
     }
+    note_game(path);
     target_path(path, final_path, sizeof(final_path));
     snprintf(tmp_path, sizeof(tmp_path), "%s.part", final_path);
     make_dirs(final_path);
@@ -332,12 +399,19 @@ static void end_file(void)
     } else {
         code = write_failed ? 2 : 1;
     }
-    reply(code);
+    if (proto == 3) {
+        if (code)
+            mf_failed++;
+    } else {
+        reply(code);
+    }
 }
 
 static void finish_transfer(void)
 {
     send(conn_fd, "DONE", 4, 0);
+    if (proto == 3)
+        send(conn_fd, (const char *)&mf_failed, 4, 0);
     set_status("Done: %s", NET.last_game[0] ? NET.last_game : "vn3ds updated");
     NET.receiving = false;
     NET.completed++;
@@ -350,9 +424,11 @@ static void live_path(const char *rel, char *out, size_t len);
  * the game being played go to updates/<id>/ until it is restarted. */
 static void target_path(const char *rel, char *out, size_t len)
 {
-    size_t n = strlen(live_game);
-    if (n && !strncmp(rel, "games/", 6) && !strncmp(rel + 6, live_game, n) && rel[6 + n] == '/') {
-        snprintf(out, len, "%s/updates/%s/%s", E.root, live_game, rel + 7 + n);
+    char live[64];
+    copy_live_game(live, sizeof(live));
+    size_t n = strlen(live);
+    if (n && !strncmp(rel, "games/", 6) && !strncmp(rel + 6, live, n) && rel[6 + n] == '/') {
+        snprintf(out, len, "%s/updates/%s/%s", E.root, live, rel + 7 + n);
         NET.staged = true;
         return;
     }
@@ -377,6 +453,7 @@ static bool have_file(void)
 {
     if (!path_allowed(path))
         return false;
+    note_game(path);
     char full[400];
     live_path(path, full, sizeof(full));   /* compare with what the game uses */
     FILE *f = fopen(full, "rb");
@@ -411,13 +488,30 @@ static void feed(const u8 *p, size_t n)
             got = 0;
             if (state == ST_HEADER) {
                 proto = rd_u32(hdr + 4);
-                if (memcmp(hdr, "VN3D", 4) != 0 || (proto != 1 && proto != 2)) {
+                if (memcmp(hdr, "VN3D", 4) != 0 || proto < 1 || proto > 3) {
                     set_status("Unknown sender (update vn3ds-port?)", NULL);
                     close_conn();
                     return;
                 }
                 NET.files_total = rd_u32(hdr + 8);
                 memcpy(&NET.bytes_total, hdr + 12, 8);
+                if (proto == 3) {
+                    mf_free();
+                    mf_cap = 64 * 1024;
+                    if (NET.files_total > MF_MAX || !(mf_paths = malloc(mf_cap)) ||
+                        !(mf_off = malloc(4 * (NET.files_total + 1))) ||
+                        !(mf_crc = malloc(4 * (NET.files_total + 1))) ||
+                        !(mf_size = malloc(8 * (NET.files_total + 1)))) {
+                        set_status("Too many files for one transfer", NULL);
+                        close_conn();
+                        return;
+                    }
+                    if (NET.files_total == 0) {
+                        finish_transfer();
+                        close_conn();
+                        return;
+                    }
+                }
                 state = ST_PATHLEN;
                 need = 2;
                 NET.receiving = true;
@@ -430,6 +524,65 @@ static void feed(const u8 *p, size_t n)
                 }
                 state = ST_PATH;
                 need = path_len;
+            } else if (proto == 3) {
+                /* one manifest entry */
+                if (mf_bytes + path_len + 1 > mf_cap) {
+                    char *grown = realloc(mf_paths, mf_cap * 2 + path_len + 1);
+                    if (!grown) {
+                        close_conn();
+                        return;
+                    }
+                    mf_paths = grown;
+                    mf_cap = mf_cap * 2 + path_len + 1;
+                }
+                memcpy(mf_paths + mf_bytes, path, path_len);
+                mf_paths[mf_bytes + path_len] = 0;
+                mf_off[mf_n] = mf_bytes;
+                mf_bytes += path_len + 1;
+                memcpy(&mf_size[mf_n], hdr, 8);
+                mf_crc[mf_n] = rd_u32(hdr + 8);
+                if (++mf_n < NET.files_total) {
+                    state = ST_PATHLEN;
+                    need = 2;
+                    break;
+                }
+                /* the whole list is here: answer with what we still need */
+                u32 nb = (mf_n + 7) / 8, needed = 0;
+                u8 *bits = calloc(1, nb);
+                if (!bits) {
+                    close_conn();
+                    return;
+                }
+                for (u32 i = 0; i < mf_n; i++) {
+                    snprintf(path, sizeof(path), "%s", mf_paths + mf_off[i]);
+                    path_len = (u16)strlen(path);
+                    file_size = mf_size[i];
+                    file_crc = mf_crc[i];
+                    if (have_file()) {
+                        NET.files_done++;
+                        NET.skipped++;
+                        NET.bytes_done += file_size;
+                        NET.bytes_skipped += file_size;
+                    } else {
+                        bits[i >> 3] |= (u8)(1u << (i & 7));
+                        needed++;
+                    }
+                    if ((i & 63) == 0) {
+                        char m[64];
+                        snprintf(m, sizeof(m), "%u of %u", (unsigned)i, (unsigned)mf_n);
+                        set_status("Comparing with the card: %s", m);
+                    }
+                }
+                send(conn_fd, (const char *)bits, nb, 0);
+                free(bits);
+                set_status("Receiving...", NULL);
+                if (needed == 0) {
+                    finish_transfer();
+                    return;
+                }
+                state = ST_INDEX;
+                need = 4;
+                break;
             } else {
                 memcpy(&file_size, hdr, 8);
                 if (proto == 2) {
@@ -440,6 +593,7 @@ static void feed(const u8 *p, size_t n)
                         NET.files_done++;
                         NET.skipped++;
                         NET.bytes_done += file_size;
+                        NET.bytes_skipped += file_size;
                         state = ST_PATHLEN;
                         need = 2;
                         if (NET.files_done + NET.refused >= NET.files_total)
@@ -468,7 +622,7 @@ static void feed(const u8 *p, size_t n)
                 return;
             got = 0;
             state = ST_SIZE;
-            need = proto == 2 ? 12 : 8;
+            need = proto >= 2 ? 12 : 8;
             break;
         }
         case ST_DATA: {
@@ -481,8 +635,36 @@ static void feed(const u8 *p, size_t n)
             n -= take;
             if (file_done == file_size) {
                 end_file();
-                state = ST_PATHLEN;
-                need = 2;
+                state = proto == 3 ? ST_INDEX : ST_PATHLEN;
+                need = proto == 3 ? 4 : 2;
+                if (NET.files_done + NET.refused >= NET.files_total)
+                    finish_transfer();
+            }
+            break;
+        }
+        case ST_INDEX: {   /* version 3: which manifest entry comes next */
+            size_t take = need - got < n ? need - got : n;
+            memcpy(hdr + got, p, take);
+            got += take;
+            p += take;
+            n -= take;
+            if (got < need)
+                return;
+            got = 0;
+            u32 idx = rd_u32(hdr);
+            if (idx >= mf_n) {
+                close_conn();
+                return;
+            }
+            snprintf(path, sizeof(path), "%s", mf_paths + mf_off[idx]);
+            path_len = (u16)strlen(path);
+            file_size = mf_size[idx];
+            begin_file();
+            state = ST_DATA;
+            if (file_size == 0) {
+                end_file();
+                state = ST_INDEX;
+                need = 4;
                 if (NET.files_done + NET.refused >= NET.files_total)
                     finish_transfer();
             }
@@ -558,15 +740,17 @@ void net_poll(void)
     need = 20;
     NET.files_done = NET.refused = NET.skipped = 0;
     NET.staged = false;
-    NET.bytes_done = 0;
-    NET.last_game[0] = 0;
+    NET.bytes_done = NET.bytes_skipped = 0;
+    NET.last_game[0] = NET.game[0] = 0;
     set_status("Connected", NULL);
     rx_quit = false;
     rx_active = true;
 #ifdef __3DS__
     s32 prio = 0x30;
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
-    rx_thread = threadCreate(rx_main, NULL, 32 * 1024, prio > 0x18 ? prio - 1 : prio, -2, false);
+    /* below the main thread, so a transfer while someone plays never costs a frame:
+     * the main thread waits for the screen every frame, and the receiver runs then */
+    rx_thread = threadCreate(rx_main, NULL, 32 * 1024, prio < 0x3F ? prio + 1 : prio, -2, false);
     rx_started = rx_thread != NULL;
 #else
     rx_started = pthread_create(&rx_thread, NULL, rx_main_host, NULL) == 0;

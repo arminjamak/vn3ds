@@ -63,6 +63,26 @@ static u32 map_keys(u32 k)
     return o;
 }
 
+void platform_keep_awake(bool on)
+{
+    aptSetSleepAllowed(!on);
+}
+
+void platform_screens(bool on)
+{
+    static bool off;
+    if (on == !off)
+        return;
+    if (R_SUCCEEDED(gspLcdInit())) {
+        if (on)
+            GSPLCD_PowerOnAllBacklights();
+        else
+            GSPLCD_PowerOffAllBacklights();
+        gspLcdExit();
+        off = !on;
+    }
+}
+
 /* HOME, sleep (closing the lid) or the power menu: save where we are first,
  * so the home screen can carry on from exactly here. */
 static aptHookCookie apt_cookie;
@@ -120,6 +140,8 @@ int main(int argc, char **argv)
     }
 
     aptUnhook(&apt_cookie);
+    platform_screens(true);
+    platform_keep_awake(false);
     app_shutdown();
     audio_exit();
     gfx_exit();

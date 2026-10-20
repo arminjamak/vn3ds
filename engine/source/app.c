@@ -219,13 +219,32 @@ static bool load_game_dir(const char *dir, const char *id)
     return true;
 }
 
-void app_load_game(int index)
+static void rx_wait_toast(const char *title)
 {
+    char eta[48], msg[96];
+    app_rx_eta_text(eta, sizeof(eta));
+    if (eta[0])
+        snprintf(msg, sizeof(msg), "%s is still arriving: %s", title, eta);
+    else
+        snprintf(msg, sizeof(msg), "%s is still arriving", title);
+    app_toast(msg);
+}
+
+bool app_load_game(int index)
+{
+    if (index == E.ngames && E.rx_new) {
+        rx_wait_toast(E.rx_new_title);
+        return false;
+    }
     if (index < 0 || index >= E.ngames)
-        return;
+        return false;
+    if (app_rx_busy(E.games[index])) {
+        rx_wait_toast(E.game_titles[index]);
+        return false;
+    }
     char dir[400];
     snprintf(dir, sizeof(dir), "%s/games/%s", E.root, E.games[index]);
-    load_game_dir(dir, E.games[index]);
+    return load_game_dir(dir, E.games[index]);
 }
 
 /* ---- resume: autosave and snapshots ------------------------------------------ */
@@ -301,11 +320,8 @@ static void home_refresh(void)
 
 void app_play_game(int index)
 {
-    if (index < 0 || index >= E.ngames)
-        return;
-    bool resume = E.game_resume[index].used;
-    app_load_game(index);
-    if (resume && E.loaded)
+    bool resume = index >= 0 && index < E.ngames && E.game_resume[index].used;
+    if (app_load_game(index) && resume && E.loaded)
         app_load_slot(RESUME_SLOT);
 }
 
@@ -323,7 +339,7 @@ void app_init(const char *game_dir)
     if (game_dir) {
         const char *slash = strrchr(game_dir, '/');
         load_game_dir(game_dir, slash ? slash + 1 : game_dir);
-        if (!app_start_receiving)
+        if (!app_start_receiving && app_listen_background)
             net_start(NET_PORT);
         return;
     }
@@ -331,7 +347,8 @@ void app_init(const char *game_dir)
     if (app_start_receiving)
         app_receive_open();
     else {
-        net_start(NET_PORT);   /* listen in the background: games can arrive any time */
+        if (app_listen_background)
+            net_start(NET_PORT);   /* listen in the background: games can arrive any time */
         if (E.ngames == 1 && !AP.on)
             app_load_game(0);
     }
@@ -339,11 +356,20 @@ void app_init(const char *game_dir)
 
 void app_rescan_games(void)
 {
+    /* stay on the same card, including a new game whose card was arriving */
+    char keep[64] = "";
+    if (E.game_sel < E.ngames)
+        snprintf(keep, sizeof(keep), "%s", E.games[E.game_sel]);
+    else if (E.rx_new)
+        snprintf(keep, sizeof(keep), "%s", E.rx_new_id);
     char games[300];
     E.ngames = 0;
     snprintf(games, sizeof(games), "%s/games", E.root);
     platform_list_dirs(games, add_game, NULL);
-    if (E.game_sel >= E.ngames)
+    for (int i = 0; i < E.ngames; i++)
+        if (!strcmp(E.games[i], keep))
+            E.game_sel = i;
+    if (E.game_sel >= app_home_count())
         E.game_sel = 0;
     home_refresh();
 }
@@ -869,79 +895,161 @@ static void touch_buttons(const Input *in)
 
 /* ---- receiving while playing ------------------------------------------------ */
 
+#ifdef __3DS__
+bool app_listen_background = true;
+#else
+bool app_listen_background = false;   /* desktop tests opt in with --listen */
+#endif
+
 static u32 rx_seen;
-static bool rx_paused_audio;
+static bool rx_was_receiving;
 
-static void rx_resume_audio(void)
+static int game_index(const char *id)
 {
-    if (rx_paused_audio)
-        audio_pause(CH_MUSIC, false);
-    rx_paused_audio = false;
-}
-
-void app_rx_continue(void)
-{
-    E.rx_overlay = 0;
-    rx_resume_audio();
-}
-
-/* Save the story if one is running, then open the received game (or restart
- * the open one with its update). */
-void app_rx_play(void)
-{
-    char id[64];
-    snprintf(id, sizeof(id), "%s", E.rx_game);
-    rx_resume_audio();
-    E.rx_overlay = 0;
-    if (E.loaded && E.screen == SCR_GAME && !E.rx_staged && save_write(SLOTS_PER_PAGE * SLOT_PAGES))
-        app_toast("Your story was saved in the last slot.");
     for (int i = 0; i < E.ngames; i++)
-        if (!strcmp(E.games[i], id)) {
-            app_load_game(i);
-            return;
-        }
+        if (!strcmp(E.games[i], id))
+            return i;
+    return -1;
 }
 
-/* Called every frame: keeps the background receiver going and, when a
- * transfer arrives outside the Receive screen, pauses everything under a
- * progress overlay. Returns true while the overlay owns the frame. */
-static bool rx_overlay_update(const Input *in)
+int app_home_count(void)
+{
+    return E.ngames + (E.rx_new ? 1 : 0);
+}
+
+bool app_rx_busy(const char *id)
+{
+    if (!NET.receiving || !id || !id[0])
+        return false;
+    char cur[64];
+    snprintf(cur, sizeof(cur), "%s", NET.game);
+    return !strcmp(cur, id);
+}
+
+float app_rx_progress(void)
+{
+    if (!NET.bytes_total)
+        return 0;
+    return clampf((float)((double)NET.bytes_done / (double)NET.bytes_total), 0, 1);
+}
+
+void app_rx_eta_text(char *out, size_t len)
+{
+    out[0] = 0;
+    if (!NET.receiving || E.rx_rate <= 0)
+        return;
+    u64 done = NET.bytes_done, total = NET.bytes_total;
+    double left = done < total ? (double)(total - done) / E.rx_rate : 0;
+    if (left < 60)
+        snprintf(out, len, "less than a minute left");
+    else if (left < 3600)
+        snprintf(out, len, "about %d min left", (int)(left / 60 + 0.5));
+    else
+        snprintf(out, len, "about %d h %d min left", (int)(left / 3600), (int)(left / 60) % 60);
+}
+
+/* Bytes per second actually sent (files already on the card don't count),
+ * smoothed over a few seconds. */
+static void rx_measure(void)
+{
+    static float t0;
+    static u64 sent0;
+    u64 sent = NET.bytes_done - NET.bytes_skipped;
+    if (!rx_was_receiving) {
+        t0 = E.time;
+        sent0 = sent;
+        E.rx_rate = 0;
+        return;
+    }
+    if (E.time - t0 < 1.0f)
+        return;
+    float r = sent > sent0 ? (float)((double)(sent - sent0) / (E.time - t0)) : 0;
+    E.rx_rate = E.rx_rate > 0 ? E.rx_rate * 0.8f + r * 0.2f : r;
+    t0 = E.time;
+    sent0 = sent;
+}
+
+/* A game that isn't in the list yet gets its own card while it arrives. */
+static void rx_track_new_game(void)
+{
+    static float looked_up;
+    char id[64];
+    snprintf(id, sizeof(id), "%s", NET.receiving ? NET.game : "");
+    if (!id[0] || game_index(id) >= 0) {
+        if (E.rx_new) {
+            E.rx_new = false;
+            if (E.game_sel >= E.ngames)
+                E.game_sel = E.ngames > 0 ? E.ngames - 1 : 0;
+        }
+        return;
+    }
+    if (!E.rx_new || strcmp(E.rx_new_id, id)) {
+        E.rx_new = true;
+        snprintf(E.rx_new_id, sizeof(E.rx_new_id), "%s", id);
+        snprintf(E.rx_new_title, sizeof(E.rx_new_title), "%s", id);
+        looked_up = -10;
+    }
+    if (E.time - looked_up > 1.0f) {   /* its real title, once game.bin is in */
+        looked_up = E.time;
+        char dir[400], title[96];
+        snprintf(dir, sizeof(dir), "%s/games/%s", E.root, id);
+        if (game_peek_title(dir, title, sizeof(title)))
+            snprintf(E.rx_new_title, sizeof(E.rx_new_title), "%s", title);
+    }
+}
+
+static void rx_done_toast(void)
+{
+    char id[64], msg[96];
+    snprintf(id, sizeof(id), "%s", NET.last_game);
+    int i = game_index(id);
+    const char *title = i >= 0 ? E.game_titles[i] : id;
+    if (id[0] && NET.staged && E.loaded && !strcmp(id, E.game.id))
+        snprintf(msg, sizeof(msg), "Update for %s: applies next time", title);
+    else if (id[0] && NET.engine_updated)
+        snprintf(msg, sizeof(msg), "%s is ready. Restart vn3ds to update it", title);
+    else if (id[0])
+        snprintf(msg, sizeof(msg), "%s is ready", title);
+    else if (NET.engine_updated)
+        snprintf(msg, sizeof(msg), "vn3ds updated: restart it to use it");
+    else
+        return;
+    app_toast(msg);
+    E.toast_t = 3.5f;
+}
+
+/* Called every frame: keeps the background receiver going. Nothing stops
+ * for a transfer: a corner icon shows it, and the home screen its card. */
+static void rx_update(Input *in)
 {
     net_poll();
-    if (NET.completed != rx_seen) {
-        rx_seen = NET.completed;
+    rx_measure();
+    /* overnight transfers: stay awake, and away from a story let the screens
+     * go dark when nobody is looking (the button that wakes them does nothing else) */
+    static float idle;
+    static bool awake_held, dark;
+    bool woke = dark && in->down;
+    idle = (in->down || in->held) ? 0 : idle + 1.0f / 60.0f;
+    if (NET.receiving != awake_held) {
+        awake_held = NET.receiving;
+        platform_keep_awake(awake_held);
+    }
+    bool want_dark = NET.receiving && idle > 60.0f && E.screen != SCR_GAME && E.screen != SCR_MINIGAME;
+    if (want_dark != dark) {
+        dark = want_dark;
+        platform_screens(!dark);
+    }
+    if (woke)
+        in->down = 0;
+    bool finished = NET.completed != rx_seen;
+    if (finished || (rx_was_receiving && !NET.receiving)) {
         app_rescan_games();
-        if (E.screen != SCR_RECEIVE) {
-            snprintf(E.rx_game, sizeof(E.rx_game), "%s", NET.last_game);
-            E.rx_staged = NET.staged;
-            E.rx_engine = NET.engine_updated;
-            E.rx_overlay = 2;
-        }
+        if (finished && E.screen != SCR_RECEIVE)
+            rx_done_toast();
+        rx_seen = NET.completed;
     }
-    if (E.screen == SCR_RECEIVE)
-        return false;
-    if (!E.rx_overlay && NET.receiving) {
-        E.rx_overlay = 1;
-        if (!rx_paused_audio) {
-            audio_pause(CH_MUSIC, true);
-            rx_paused_audio = true;
-        }
-        talk_end();
-    }
-    if (E.rx_overlay == 1 && !NET.receiving && NET.completed == rx_seen)
-        E.rx_overlay = 3;   /* the sender went away */
-    if (!E.rx_overlay)
-        return false;
-    touch_buttons(in);
-    if (E.rx_overlay >= 2) {
-        bool can_play = E.rx_overlay == 2 && E.rx_game[0] &&
-                        (!E.loaded || strcmp(E.rx_game, E.game.id) || E.rx_staged);
-        if ((in->down & KEY_A_) && can_play)
-            app_rx_play();
-        else if (in->down & (KEY_A_ | KEY_B_))
-            app_rx_continue();
-    }
-    return true;
+    rx_track_new_game();
+    rx_was_receiving = NET.receiving;
 }
 
 void app_update(const Input *in_real, float dt)
@@ -956,8 +1064,7 @@ void app_update(const Input *in_real, float dt)
         E.toast_t -= dt;
     audio_update(dt);
     lb_poll();
-    if (rx_overlay_update(in))
-        return;   /* a transfer is on screen: the game waits */
+    rx_update(in);
 
     E.cf_pos += ((float)E.game_sel - E.cf_pos) * fminf(1.0f, dt * 9.0f);
 
@@ -978,14 +1085,14 @@ void app_update(const Input *in_real, float dt)
             app_receive_open();
             break;
         }
-        if (E.ngames == 0) {
+        if (app_home_count() == 0) {
             if (in->down & KEY_START_)
                 E.quit = true;
             break;
         }
         if ((in->down & (KEY_LEFT_ | KEY_UP_)) && E.game_sel > 0)
             E.game_sel--;
-        if ((in->down & (KEY_RIGHT_ | KEY_DOWN_)) && E.game_sel < E.ngames - 1)
+        if ((in->down & (KEY_RIGHT_ | KEY_DOWN_)) && E.game_sel < app_home_count() - 1)
             E.game_sel++;
         if (in->down & KEY_A_)
             app_play_game(E.game_sel);   /* carry on where you left off */
@@ -1086,14 +1193,16 @@ void app_render(void)
     }
     gfx_target_top(EYE_LEFT, 0x000000FF);
     ui_draw_top(EYE_LEFT);
+    ui_draw_rx_icon(EYE_LEFT);
     if (strength > 0) {
         gfx_target_top(EYE_RIGHT, 0x000000FF);
         ui_draw_top(EYE_RIGHT);
+        ui_draw_rx_icon(EYE_RIGHT);
     }
     gfx_target_bottom(0x1A1A24FF);
     ui_draw_bottom();
     /* keep a snapshot of each new line (or choice) for the home screen */
-    if (E.screen == SCR_GAME && !E.rx_overlay && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
+    if (E.screen == SCR_GAME && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
         ((E.vm.state == VM_SAY && E.text_done) || E.vm.state == VM_MENU)) {
         snapped_serial = E.say_serial;
         gfx_target_snapshot(0x000000FF);

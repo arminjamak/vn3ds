@@ -8,7 +8,7 @@
 enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
     B_TITLE_CONTINUE = 6, B_HOME_PLAY = 50, B_HOME_PREV, B_HOME_NEXT, B_HOME_TITLE,
-    B_MG = 60, B_MG_BACK = 90, B_RX_CONTINUE = 92, B_RX_PLAY = 93, B_MG_BOARD = 91,
+    B_MG = 60, B_MG_BACK = 90, B_MG_BOARD = 91,
     B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
     B_TO_TITLE = 30,
@@ -16,15 +16,95 @@ enum {
     B_CHOICE = 100, B_SLOT = 200, B_PREF_DEC = 300, B_PREF_INC = 320, B_GAME = 400,
 };
 
+/* ---- style: black and white, rounded ------------------------------------ */
+
 #define WHITE 0xFFFFFFFFu
 #define BLACK 0x000000FFu
-#define PANEL(a) RGBA(12, 12, 22, (u32)((a) * 255))
+#define INK2 RGBA(152, 152, 159, 255)   /* secondary text */
+#define INK3 RGBA(99, 99, 104, 255)     /* tertiary text, empty things */
+#define FILL1 RGBA(28, 28, 30, 255)     /* cards and grouped lists */
+#define FILL2 RGBA(44, 44, 46, 255)     /* buttons */
+#define FILL3 RGBA(64, 64, 68, 255)     /* tracks, toggles that are on */
+#define HAIRLINE RGBA(255, 255, 255, 24)
+/* the translucent "glass" laid over the scene on the top screen */
+#define PANEL(a) RGBA(14, 14, 16, (u32)((a) * 255))
+#define R_BUTTON 10.0f   /* corner radius of buttons and cards */
 
 static inline float eye_sign(int eye) { return eye == EYE_LEFT ? -1.0f : 1.0f; }
 /* Horizontal shift for something at `depth` seen by `eye`. */
 static inline float shift(int eye, float depth) { return eye_sign(eye) * depth * app_strength(); }
 
 static float ui_depth(void) { return E.loaded ? E.game.depth_ui : -0.35f; }
+
+/* A filled rounded rectangle, drawn as one triangle fan so that translucent
+ * fills never blend twice where pieces would overlap. */
+void ui_rrect(float x, float y, float w, float h, float r, u32 c)
+{
+    if (w <= 0 || h <= 0 || !(c & 0xFF))
+        return;
+    r = fminf(r, fminf(w, h) / 2);
+    if (r < 1) {
+        gfx_rect(x, y, w, h, c);
+        return;
+    }
+    int seg = r < 5 ? 3 : r < 12 ? 5 : 7;
+    const float cxs[4] = {x + w - r, x + w - r, x + r, x + r}, cys[4] = {y + r, y + h - r, y + h - r, y + r};
+    float mx = x + w / 2, my = y + h / 2, px = 0, py = 0, fx = 0, fy = 0;
+    for (int k = 0; k < 4; k++)
+        for (int j = 0; j <= seg; j++) {
+            float a = ((float)k - 1 + (float)j / (float)seg) * (float)M_PI / 2;   /* from -90 degrees */
+            float vx = cxs[k] + r * cosf(a), vy = cys[k] + r * sinf(a);
+            if (k == 0 && j == 0) {
+                fx = vx;
+                fy = vy;
+            } else {
+                gfx_triangle(mx, my, px, py, vx, vy, c);
+            }
+            px = vx;
+            py = vy;
+        }
+    gfx_triangle(mx, my, px, py, fx, fy, c);
+}
+
+/* Fills the outside of each rounded corner: laid over a picture's square
+ * corners it rounds them (pictures can't be clipped), in the colour of
+ * what is behind (`top` for the upper corners, `bottom` for the lower). */
+static void round_corners(float x, float y, float w, float h, float r, u32 top, u32 bottom)
+{
+    const float px[4] = {x, x + w, x + w, x}, py[4] = {y, y, y + h, y + h};
+    const float cx[4] = {x + r, x + w - r, x + w - r, x + r}, cy[4] = {y + r, y + r, y + h - r, y + h - r};
+    for (int k = 0; k < 4; k++) {
+        u32 c = k < 2 ? top : bottom;
+        float a0 = (float)M_PI * (k == 0 ? 1.0f : k == 1 ? 1.5f : k == 2 ? 0.0f : 0.5f);
+        float lx = cx[k] + r * cosf(a0), ly = cy[k] + r * sinf(a0);
+        for (int j = 1; j <= 5; j++) {
+            float a = a0 + (float)M_PI / 2 * (float)j / 5;
+            float vx = cx[k] + r * cosf(a), vy = cy[k] + r * sinf(a);
+            gfx_triangle(px[k], py[k], lx, ly, vx, vy, c);
+            lx = vx;
+            ly = vy;
+        }
+    }
+}
+
+/* A thin horizontal bar with round ends: progress, the 3D meter. */
+static void progress_bar(float x, float y, float w, float h, float p, u32 track, u32 fill)
+{
+    ui_rrect(x, y, w, h, h / 2, track);
+    if (p > 0)
+        ui_rrect(x, y, fmaxf(h, w * clampf(p, 0, 1)), h, h / 2, fill);
+}
+
+static u32 mix(u32 a, u32 b, float t)
+{
+    t = clampf(t, 0, 1);
+    u32 out = 0;
+    for (int sh = 0; sh < 32; sh += 8) {
+        float ca = (float)((a >> sh) & 0xFF), cb = (float)((b >> sh) & 0xFF);
+        out |= (u32)(ca + (cb - ca) * t + 0.5f) << sh;
+    }
+    return out;
+}
 
 /* ---- text helpers ------------------------------------------------------- */
 
@@ -187,44 +267,20 @@ int ui_title_items(int *ids)
     return n;
 }
 
-/* Title of a game in the list by folder id. */
-static const char *game_title_of(const char *id)
+/* The game shown on home card `i` (a new one may still be arriving). */
+static const char *home_title(int i)
 {
-    for (int i = 0; i < E.ngames; i++)
-        if (!strcmp(E.games[i], id))
-            return E.game_titles[i];
-    return id;
+    return i < E.ngames ? E.game_titles[i] : E.rx_new_title;
 }
 
-static bool rx_can_play(void)
+static bool home_arriving(int i)
 {
-    return E.rx_overlay == 2 && E.rx_game[0] &&
-           (!E.loaded || strcmp(E.rx_game, E.game.id) || E.rx_staged);
+    return i >= E.ngames ? E.rx_new : app_rx_busy(E.games[i]);
 }
 
 int ui_buttons(Button *b, int max)
 {
     int n = 0;
-    if (E.rx_overlay == 1)
-        return 0;
-    if (E.rx_overlay >= 2) {
-        static char play[80];
-        if (rx_can_play()) {
-            bool same = E.loaded && !strcmp(E.rx_game, E.game.id);
-            if (same)
-                snprintf(play, sizeof(play), "Restart with the update");
-            else
-                snprintf(play, sizeof(play), "%s %s", E.loaded && E.screen == SCR_GAME ? "Save & play" : "Play",
-                         game_title_of(E.rx_game));
-            n = add(b, n, max, 12, 196, 140, 36, same ? "B: Keep playing" : "B: Continue", B_RX_CONTINUE);
-            n = add(b, n, max, 160, 196, 148, 36, play, B_RX_PLAY);
-            b[n - 1].hot = true;
-        } else {
-            n = add(b, n, max, 90, 196, 140, 36, "A: Continue", B_RX_CONTINUE);
-            b[n - 1].hot = true;
-        }
-        return n;
-    }
     switch (E.screen) {
     case SCR_MGMENU: {
         static char labels[16][96];
@@ -238,8 +294,8 @@ int ui_buttons(Button *b, int max)
             n = add(b, n, max, 12, 26 + i * 25, 296, 23, labels[i], B_MG + i);
             b[n - 1].hot = i == E.mg_sel;
         }
-        n = add(b, n, max, 12, 206, 120, 30, E.mg_board ? "B: Close" : "B: Back", B_MG_BACK);
-        n = add(b, n, max, 188, 206, 120, 30, E.mg_board ? "X: Refresh" : "X: Leaderboard",
+        n = add(b, n, max, 12, 206, 120, 30, E.mg_board ? "B  Close" : "B  Back", B_MG_BACK);
+        n = add(b, n, max, 188, 206, 120, 30, E.mg_board ? "X  Refresh" : "X  Leaderboard",
                 B_MG_BOARD);
         break;
     }
@@ -249,17 +305,27 @@ int ui_buttons(Button *b, int max)
     case SCR_MINIGAME:   /* minigame.c handles its own touch areas */
         break;
     case SCR_GAMELIST: {
-        if (E.ngames > 0) {
-            bool resume = E.game_resume[E.game_sel].used;
-            n = add(b, n, max, 70, 84, 180, 48, resume ? "A: Play (continue)" : "A: Play", B_HOME_PLAY);
-            b[n - 1].hot = true;
+        int count = app_home_count();
+        if (count > 0) {
+            static char play[48];
+            int sel = E.game_sel;
+            bool arriving = home_arriving(sel);
+            bool resume = sel < E.ngames && E.game_resume[sel].used;
+            if (arriving)
+                snprintf(play, sizeof(play), "Arriving  %d%%", (int)(app_rx_progress() * 100));
+            else
+                snprintf(play, sizeof(play), resume ? "A  Continue" : "A  Play");
+            n = add(b, n, max, 70, 84, 180, 48, play, B_HOME_PLAY);
+            b[n - 1].hot = !arriving;
+            b[n - 1].disabled = arriving;
             n = add(b, n, max, 14, 90, 48, 36, "<", B_HOME_PREV);
-            b[n - 1].disabled = E.game_sel == 0;
+            b[n - 1].disabled = sel == 0;
             n = add(b, n, max, 258, 90, 48, 36, ">", B_HOME_NEXT);
-            b[n - 1].disabled = E.game_sel >= E.ngames - 1;
-            n = add(b, n, max, 10, 200, 146, 34, "X: Title screen", B_HOME_TITLE);
+            b[n - 1].disabled = sel >= count - 1;
+            n = add(b, n, max, 10, 200, 146, 34, "X  Title screen", B_HOME_TITLE);
+            b[n - 1].disabled = arriving;
         }
-        n = add(b, n, max, 164, 200, 146, 34, "Y: Receive", B_RECEIVE);
+        n = add(b, n, max, 164, 200, 146, 34, "Y  Receive", B_RECEIVE);
         break;
     }
     case SCR_TITLE:
@@ -423,9 +489,7 @@ void ui_activate(int id)
     case B_HOME_PLAY: app_play_game(E.game_sel); break;
     case B_HOME_TITLE: app_load_game(E.game_sel); break;
     case B_HOME_PREV: if (E.game_sel > 0) E.game_sel--; break;
-    case B_HOME_NEXT: if (E.game_sel < E.ngames - 1) E.game_sel++; break;
-    case B_RX_CONTINUE: app_rx_continue(); break;
-    case B_RX_PLAY: app_rx_play(); break;
+    case B_HOME_NEXT: if (E.game_sel < app_home_count() - 1) E.game_sel++; break;
     case B_MG_BACK:
         if (E.mg_board)
             E.mg_board = false;
@@ -536,9 +600,10 @@ static void draw_toast(int eye)
         return;
     float a = clampf(E.toast_t / 0.3f, 0, 1);
     float dx = shift(eye, ui_depth() - 0.1f);
-    float w = gfx_text_width(E.toast, 0.5f) + 20;
-    gfx_rect(200 - w / 2 + dx, 8, w, 22, rgba_alpha(PANEL(0.85f), a));
-    gfx_text(E.toast, 210 - w / 2 + dx, 11, 0.5f, rgba_alpha(WHITE, a));
+    float sc = fit_scale(E.toast, 0.5f, 330);
+    float w = gfx_text_width(E.toast, sc) + 28;
+    ui_rrect(200 - w / 2 + dx, 8, w, 24, 12, rgba_alpha(RGBA(44, 44, 46, 242), a));
+    gfx_text(E.toast, 214 - w / 2 + dx, 8 + (24 - gfx_line_height(sc)) / 2, sc, rgba_alpha(WHITE, a));
 }
 
 static void draw_choices_top(int eye, bool caption)
@@ -556,7 +621,7 @@ static void draw_choices_top(int eye, bool caption)
     float dx = shift(eye, ui_depth() - 0.15f);
     for (int i = first; i < first + vis; i++, y += h + gap) {
         bool sel = i == E.menu_sel;
-        gfx_rect(50 + dx, y, 300, h, sel ? RGBA(255, 255, 255, 235) : PANEL(0.8f));
+        ui_rrect(50 + dx, y, 300, h, h / 2, sel ? RGBA(255, 255, 255, 242) : PANEL(0.78f));
         const char *t = vm->choices[i].text;
         float sc = fit_scale(t, 0.5f, 288);
         gfx_text(t, 200 - gfx_text_width(t, sc) / 2 + dx, y + (h - gfx_line_height(sc)) / 2, sc,
@@ -588,33 +653,33 @@ static void draw_dialogue(int eye)
         text_centered(vis, 200 + dx, y, E.text_scale, c->text_color);
     } else if (has_text || (E.window_mode == WIN_SHOW && !E.tr.active)) {
         float dx = shift(eye, d);
-        gfx_rect(6 + dx, 164, 388, 72, PANEL(E.set.box_alpha));
-        gfx_rect(6 + dx, 164, 388, 1, RGBA(255, 255, 255, 70));
+        ui_rrect(6 + dx, 164, 388, 72, 12, PANEL(E.set.box_alpha));
         if (has_text) {
             if (vm->say_who[0]) {
+                /* the name in a white pill, with the character's colour as a dot */
                 float nd = shift(eye, d - 0.08f);
-                float sc = 0.55f;
-                float nw = gfx_text_width(vm->say_who, sc) + 14;
-                gfx_rect(12 + nd, 144, nw, 20, PANEL(fminf(1, E.set.box_alpha + 0.1f)));
-                gfx_text(vm->say_who, 19 + nd, 144 + (20 - gfx_line_height(sc)) / 2, sc,
-                         c->name_color);
+                float sc = 0.5f;
+                float nw = gfx_text_width(vm->say_who, sc) + 30;
+                ui_rrect(12 + nd, 143, nw, 19, 9.5f, RGBA(255, 255, 255, 242));
+                gfx_circle(22 + nd, 152.5f, 3.5f, c->name_color | 0xFF);
+                gfx_text(vm->say_who, 30 + nd, 143 + (19 - gfx_line_height(sc)) / 2, sc, BLACK);
             }
-            gfx_text(vis, 14 + dx, 169, E.text_scale, c->text_color);
+            gfx_text(vis, 16 + dx, 170, E.text_scale, c->text_color);
             if (say && E.text_done) {
                 float a = 0.55f + 0.45f * sinf(E.time * 6);
-                gfx_rect(381 + dx, 225, 6, 6, rgba_alpha(WHITE, a));
+                gfx_triangle(379 + dx, 224, 389 + dx, 224, 384 + dx, 230, rgba_alpha(WHITE, a));
             }
         }
     }
     if (menu)
         draw_choices_top(eye, has_text);
 
-    const char *mode = E.skip ? "Skip >>" : (E.auto_mode ? "Auto" : NULL);
+    const char *mode = E.skip ? "Skip" : (E.auto_mode ? "Auto" : NULL);
     if (mode) {
-        float dx = shift(eye, d);
-        float w = gfx_text_width(mode, 0.45f) + 12;
-        gfx_rect(394 - w + dx, 6, w, 18, PANEL(0.7f));
-        gfx_text(mode, 400 - w + dx, 8, 0.45f, WHITE);
+        float dx = shift(eye, d) - (NET.receiving ? 32 : 0);   /* room for the download icon */
+        float w = gfx_text_width(mode, 0.45f) + 20;
+        ui_rrect(394 - w + dx, 7, w, 20, 10, PANEL(0.75f));
+        gfx_text(mode, 404 - w + dx, 7 + (20 - gfx_line_height(0.45f)) / 2, 0.45f, WHITE);
     }
 }
 
@@ -634,15 +699,15 @@ void ui_mg_board(void)
  * on top, then the best free-play runs. */
 static void draw_my_scores(int eye, const MiniGame *g, float x, float y, float w, float h)
 {
-    const u32 GOLD = RGBA(255, 210, 110, 255), DIM = RGBA(190, 190, 215, 255);
+    const u32 GOLD = WHITE, DIM = INK2;
     float px = x + shift(eye, -0.25f);
     char buf[64];
     int story, runs[5];
     int n = mg_scores(g->id, &story, runs, 5);
-    gfx_rect(px, y, w, h, RGBA(255, 255, 255, 30));
-    gfx_text("Your scores", px + 8, y + 6, 0.45f, GOLD);
-    float ly = y + 26;
-    gfx_rect(px + 4, ly - 2, w - 8, 20, RGBA(255, 210, 110, 40));
+    ui_rrect(px, y, w, h, R_BUTTON, RGBA(255, 255, 255, 22));
+    gfx_text("Your scores", px + 10, y + 7, 0.45f, GOLD);
+    float ly = y + 28;
+    ui_rrect(px + 4, ly - 2, w - 8, 20, 7, RGBA(255, 255, 255, 30));
     gfx_text("Story", px + 10, ly, 0.45f, DIM);
     snprintf(buf, sizeof(buf), story >= 0 ? "%d%%" : "not yet", story);
     gfx_text(buf, px + w - 10 - gfx_text_width(buf, 0.45f), ly, 0.45f, story >= 0 ? WHITE : DIM);
@@ -662,11 +727,11 @@ static void draw_my_scores(int eye, const MiniGame *g, float x, float y, float w
 static void draw_board_top(int eye)
 {
     const MiniGame *g = mg_at(E.mg_sel);
-    const u32 GOLD = RGBA(255, 210, 110, 255), DIM = RGBA(190, 190, 215, 255);
+    const u32 GOLD = WHITE, DIM = INK2;
     char buf[300];
     if (!g)
         return;
-    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(24, 20, 44, 255), RGBA(70, 40, 90, 255));
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(30, 30, 32, 255), BLACK);
     snprintf(buf, sizeof(buf), "%s: online top %d", g->title, LB_TOP_MAX);
     float sc = fit_scale(buf, 0.62f, 380);
     gfx_text(buf, 200 - gfx_text_width(buf, sc) / 2 + shift(eye, -0.3f), 10, sc, GOLD);
@@ -692,9 +757,11 @@ static void draw_board_top(int eye)
         for (int i = 0; i < LB_TOP.ntop; i++) {
             const LbEntry *e = &LB_TOP.top[i];
             float y = 42 + i * 18;
-            u32 c = !strcmp(e->name, lb_name()) ? GOLD : WHITE;
-            if (i % 2 == 0)
-                gfx_rect(14 + dx, y - 1, 258, 18, RGBA(255, 255, 255, 18));
+            u32 c = WHITE;
+            if (!strcmp(e->name, lb_name()))
+                ui_rrect(14 + dx, y - 1, 258, 18, 9, RGBA(255, 255, 255, 40));
+            else if (i % 2 == 0)
+                ui_rrect(14 + dx, y - 1, 258, 18, 9, RGBA(255, 255, 255, 14));
             snprintf(buf, sizeof(buf), "%d", e->rank);
             gfx_text(buf, 44 - gfx_text_width(buf, 0.5f) + dx, y, 0.5f, DIM);
             gfx_text(e->name, 58 + dx, y, fit_scale(e->name, 0.5f, 160), c);
@@ -724,7 +791,7 @@ static void draw_title_top(int eye)
         s.from_scene = 1;
         render_sprite(&s, eye, 0, 0, 0);
     } else {
-        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(40, 30, 80, 255), RGBA(150, 80, 120, 255));
+        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(36, 36, 38, 255), BLACK);
     }
     float dx = shift(eye, -0.5f);
     float sc = fit_scale(g->title, 1.0f, 360);
@@ -741,6 +808,19 @@ static void header(const char *title);
 
 /* ---- home screen: coverflow of where each game was left -------------------- */
 
+/* The home screen's backdrop: a quiet fall from dark grey to black. */
+#define HOME_TOP RGBA(30, 30, 32, 255)
+#define HOME_BOTTOM RGBA(0, 0, 0, 255)
+static u32 home_bg_at(float y) { return mix(HOME_TOP, HOME_BOTTOM, y / TOP_H); }
+
+/* A small download glyph: an arrow into a tray. */
+static void download_glyph(float cx, float cy, float s, u32 c)
+{
+    gfx_line(cx, cy - 6 * s, cx, cy + 1.5f * s, 2.0f * s, c);
+    gfx_triangle(cx - 4.5f * s, cy + 0.5f * s, cx + 4.5f * s, cy + 0.5f * s, cx, cy + 5.5f * s, c);
+    gfx_rect(cx - 5.5f * s, cy + 7 * s, 11 * s, 1.8f * s, c);
+}
+
 static void draw_card(int eye, int i, float o)
 {
     float a = fabsf(o);
@@ -748,41 +828,48 @@ static void draw_card(int eye, int i, float o)
     float x = 200 + side * (fminf(a, 1.0f) * 128 + fmaxf(a - 1.0f, 0) * 58);
     float k = a < 1 ? 1.0f - 0.4f * a : 0.6f - 0.08f * fminf(a - 1.0f, 2.0f);
     float depth = -0.28f + 0.55f * fminf(a, 1.6f);
-    float w = THUMB_W * k, h = THUMB_H * k;
+    float w = THUMB_W * k, h = THUMB_H * k, r = 9 * k + 2;
     float cx = x + shift(eye, depth), cy = 98 - (1 - fminf(a, 1)) * 6;
     float fade = clampf(1.6f - (a - 1.0f), 0, 1);
-    u32 frame = a < 0.5f ? RGBA(255, 210, 110, 255) : RGBA(255, 255, 255, 90);
-    gfx_rect(cx - w / 2 - 3, cy - h / 2 - 3, w + 6, h + 6, rgba_alpha(frame, fade));
-    if (E.game_thumb[i]) {
-        gfx_image(E.game_thumb[i], cx - w / 2, cy - h / 2, w, h, 0, fade);
+    float x0 = cx - w / 2, y0 = cy - h / 2;
+    bool chosen = a < 0.5f;
+    GfxTex *thumb = i < E.ngames ? E.game_thumb[i] : NULL;
+    if (chosen)   /* a white edge around the chosen card */
+        ui_rrect(x0 - 2.5f, y0 - 2.5f, w + 5, h + 5, r + 2.5f, rgba_alpha(WHITE, fade));
+    if (thumb) {
+        gfx_image(thumb, x0, y0, w, h, 0, fade);
+        if (chosen)
+            round_corners(x0, y0, w, h, r, WHITE, WHITE);
+        else
+            round_corners(x0, y0, w, h, r, home_bg_at(y0), home_bg_at(y0 + h));
     } else {
-        gfx_gradient(cx - w / 2, cy - h / 2, w, h, rgba_alpha(RGBA(60, 50, 110, 255), fade),
-                     rgba_alpha(RGBA(110, 60, 120, 255), fade));
-        text_centered(E.game_titles[i], cx, cy - 10, fit_scale(E.game_titles[i], 0.55f * k, w - 12),
-                      rgba_alpha(WHITE, fade));
+        ui_rrect(x0, y0, w, h, r, rgba_alpha(FILL2, fade));
+        text_centered(home_title(i), cx, cy - (home_arriving(i) ? 2 : 10) * k,
+                      fit_scale(home_title(i), 0.55f * k, w - 16), rgba_alpha(WHITE, fade));
+    }
+    if (home_arriving(i)) {   /* still on its way: a glyph and how far along it is */
+        if (thumb)
+            ui_rrect(x0, y0, w, h, r, RGBA(0, 0, 0, (u8)(120 * fade)));
+        download_glyph(cx, cy - (thumb ? 6 : 24) * k, k, rgba_alpha(WHITE, fade));
+        progress_bar(x0 + 14 * k, y0 + h - 16 * k, w - 28 * k, 4, app_rx_progress(),
+                     RGBA(255, 255, 255, (u8)(60 * fade)), rgba_alpha(WHITE, fade));
     }
     if (a > 0.5f)   /* side cards sit back and darker */
-        gfx_rect(cx - w / 2, cy - h / 2, w, h, RGBA(10, 8, 30, (u8)(110 * fminf(a, 1) * fade)));
-    /* a soft reflection under each card */
-    gfx_gradient(cx - w / 2, cy + h / 2 + 4, w, 18, rgba_alpha(RGBA(255, 255, 255, 40), fade),
-                 RGBA(255, 255, 255, 0));
+        ui_rrect(x0, y0, w, h, r, RGBA(0, 0, 0, (u8)(120 * fminf(a, 1) * fade)));
 }
 
 static void draw_coverflow(int eye)
 {
-    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(20, 22, 50, 255), RGBA(64, 36, 84, 255));
-    for (int i = 0; i < 18; i++) {   /* far-away specks */
-        float x = (float)((i * 89 + 23) % TOP_W), y = (float)((i * 53 + 7) % TOP_H);
-        gfx_rect(x + shift(eye, 1.0f), y, 2, 2, RGBA(255, 255, 255, 60));
-    }
-    if (E.ngames == 0) {
-        text_centered("vn3ds", 200 + shift(eye, -0.4f), 60, 1.2f, WHITE);
-        text_centered("No games yet: send one from your computer.\nvn3ds is listening for it.",
-                      200 + shift(eye, -0.2f), 130, 0.5f, RGBA(255, 230, 200, 255));
+    gfx_gradient(0, 0, TOP_W, TOP_H, HOME_TOP, HOME_BOTTOM);
+    int n = app_home_count();
+    if (n == 0) {
+        text_centered("vn3ds", 200 + shift(eye, -0.4f), 66, 1.2f, WHITE);
+        text_centered("No games yet. Send one from your computer:\nvn3ds is listening for it.",
+                      200 + shift(eye, -0.2f), 132, 0.5f, INK2);
         return;
     }
     /* far cards first, the chosen one last (nearest) */
-    int order[MAX_GAMES], n = E.ngames;
+    int order[MAX_GAMES + 1];
     for (int i = 0; i < n; i++)
         order[i] = i;
     for (int i = 0; i < n; i++)
@@ -795,95 +882,49 @@ static void draw_coverflow(int eye)
     for (int k = 0; k < n; k++)
         if (fabsf(order[k] - E.cf_pos) < 3.2f)
             draw_card(eye, order[k], (float)order[k] - E.cf_pos);
-    /* the chosen game: its name and where you are */
+    /* the chosen game: its name and where you are (or how far it has come) */
     int sel = E.game_sel;
     float dx = shift(eye, -0.2f);
-    const char *t = E.game_titles[sel];
-    text_centered(t, 200 + dx, 176, fit_scale(t, 0.62f, 360), WHITE);
-    const SlotInfo *r = &E.game_resume[sel];
+    const char *t = home_title(sel);
+    text_centered(t, 200 + dx, 174, fit_scale(t, 0.62f, 360), WHITE);
     char line[160];
-    if (r->used)
-        snprintf(line, sizeof(line), "%.80s", r->preview);
-    else
-        snprintf(line, sizeof(line), "Not started yet");
-    text_centered(line, 200 + shift(eye, -0.1f), 200, fit_scale(line, 0.45f, 370), RGBA(220, 210, 255, 255));
-}
-
-/* ---- the transfer overlay ------------------------------------------------- */
-
-static void rx_progress_text(char *out, size_t len)
-{
-    if (NET.skipped)
-        snprintf(out, len, "%u / %u files  (%u unchanged)\n%.1f / %.1f MB", (unsigned)NET.files_done,
-                 (unsigned)NET.files_total, (unsigned)NET.skipped, NET.bytes_done / 1048576.0,
-                 NET.bytes_total / 1048576.0);
-    else
-        snprintf(out, len, "%u / %u files\n%.1f / %.1f MB", (unsigned)NET.files_done,
-                 (unsigned)NET.files_total, NET.bytes_done / 1048576.0, NET.bytes_total / 1048576.0);
-}
-
-static const char *rx_headline(char *buf, size_t len)
-{
-    const char *title = game_title_of(E.rx_game);
-    if (E.rx_overlay == 1)
-        return "Receiving over Wi-Fi";
-    if (E.rx_overlay == 3)
-        return "The transfer was interrupted";
-    if (!E.rx_game[0] && E.rx_engine)
-        return "vn3ds was updated";
-    if (E.rx_staged)
-        snprintf(buf, len, "An update for %s arrived", title);
-    else
-        snprintf(buf, len, "%s is on your 3DS", title);
-    return buf;
-}
-
-static void draw_rx_top(int eye)
-{
-    char buf[200], head[160];
-    gfx_rect(0, 0, TOP_W, TOP_H, RGBA(8, 8, 16, 165));
-    float dx = shift(eye, -0.3f);
-    gfx_rect(50 + dx, 64, 300, 112, RGBA(30, 28, 52, 235));
-    gfx_rect(50 + dx, 64, 300, 3, RGBA(255, 210, 110, 255));
-    const char *h = rx_headline(head, sizeof(head));
-    text_centered(h, 200 + dx, 78, fit_scale(h, 0.62f, 280), RGBA(255, 210, 110, 255));
-    if (E.rx_overlay == 1) {
-        float p = NET.bytes_total ? (float)((double)NET.bytes_done / (double)NET.bytes_total) : 0;
-        gfx_rect(72 + dx, 112, 256, 10, RGBA(255, 255, 255, 40));
-        gfx_rect(72 + dx, 112, 256 * clampf(p, 0, 1), 10, RGBA(255, 210, 110, 255));
-        rx_progress_text(buf, sizeof(buf));
-        text_centered(buf, 200 + dx, 130, 0.45f, WHITE);
-    } else if (E.rx_overlay == 3) {
-        text_centered("Run the same command again\nto carry on where it stopped.", 200 + dx, 112, 0.45f, WHITE);
-    } else if (E.rx_staged) {
-        text_centered("Keep playing this version, or restart\nnow to use the update.", 200 + dx, 112, 0.45f,
-                      WHITE);
-    } else if (!E.rx_game[0] && E.rx_engine) {
-        text_centered("Restart vn3ds from the Homebrew\nLauncher to use the new version.", 200 + dx, 112, 0.45f,
-                      WHITE);
+    if (home_arriving(sel)) {
+        char eta[48];
+        app_rx_eta_text(eta, sizeof(eta));
+        if (eta[0])
+            snprintf(line, sizeof(line), "Arriving  %d%%  ·  %s", (int)(app_rx_progress() * 100), eta);
+        else
+            snprintf(line, sizeof(line), "Arriving  %d%%", (int)(app_rx_progress() * 100));
+    } else if (sel < E.ngames && E.game_resume[sel].used) {
+        snprintf(line, sizeof(line), "%.80s", E.game_resume[sel].preview);
     } else {
-        text_centered(E.loaded && E.screen == SCR_GAME ? "Keep playing, or save and play it now."
-                                                       : "Play it now, or carry on.", 200 + dx, 116, 0.45f, WHITE);
+        snprintf(line, sizeof(line), "Not started yet");
     }
+    text_centered(line, 200 + shift(eye, -0.1f), 199, fit_scale(line, 0.45f, 370), INK2);
 }
 
-static void draw_rx_bottom(void)
+/* ---- the download icon ------------------------------------------------------ */
+
+/* While a transfer runs in the background: a download glyph in the top
+ * right corner, with a spinner going round behind it. */
+void ui_draw_rx_icon(int eye)
 {
-    char buf[200], head[160];
-    gfx_rect(0, 0, BOT_W, BOT_H, RGBA(8, 8, 16, 190));
-    header(rx_headline(head, sizeof(head)));
-    if (E.rx_overlay == 1) {
-        float p = NET.bytes_total ? (float)((double)NET.bytes_done / (double)NET.bytes_total) : 0;
-        gfx_rect(20, 60, 280, 14, RGBA(255, 255, 255, 40));
-        gfx_rect(20, 60, 280 * clampf(p, 0, 1), 14, RGBA(255, 210, 110, 255));
-        rx_progress_text(buf, sizeof(buf));
-        gfx_text(buf, 20, 84, 0.45f, WHITE);
-        const char *cur = strrchr(NET.current, '/');
-        snprintf(buf, sizeof(buf), "%s", cur ? cur + 1 : NET.current);
-        gfx_text(buf, 20, 124, 0.42f, RGBA(180, 180, 210, 255));
-        gfx_text("Your game is paused and carries on\nwhen the transfer is done.", 20, 156, 0.42f,
-                 RGBA(180, 180, 210, 255));
+    if (!NET.receiving || E.screen == SCR_RECEIVE)
+        return;
+    float cx = TOP_W - 20 + shift(eye, ui_depth() - 0.15f), cy = 20, r = 10.5f;
+    gfx_circle(cx, cy, 14, PANEL(0.62f));
+    for (int i = 0; i < 24; i++) {   /* the faint ring */
+        float a = (float)i / 24 * 2 * (float)M_PI, b = (float)(i + 1) / 24 * 2 * (float)M_PI;
+        gfx_line(cx + r * cosf(a), cy + r * sinf(a), cx + r * cosf(b), cy + r * sinf(b), 1.6f,
+                 RGBA(255, 255, 255, 40));
     }
+    float head = E.time * 5.5f;   /* the spinner: a short comet */
+    for (int i = 0; i < 10; i++) {
+        float a = head - (float)i * 0.2f, b = a - 0.2f;
+        gfx_line(cx + r * cosf(a), cy + r * sinf(a), cx + r * cosf(b), cy + r * sinf(b), 2.0f,
+                 rgba_alpha(WHITE, 1.0f - (float)i / 10));
+    }
+    download_glyph(cx, cy - 0.5f, 0.75f, WHITE);
 }
 
 void ui_draw_top(int eye)
@@ -903,14 +944,14 @@ void ui_draw_top(int eye)
             draw_board_top(eye);
             break;
         }
-        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(24, 20, 44, 255), RGBA(70, 40, 90, 255));
+        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(30, 30, 32, 255), BLACK);
         const MiniGame *g = mg_at(E.mg_sel);
-        text_centered("Minigames", 200 + shift(eye, -0.3f), 20, 0.8f, RGBA(255, 210, 110, 255));
+        text_centered("Minigames", 200 + shift(eye, -0.3f), 18, 0.8f, WHITE);
         if (g) {
             text_centered(g->title, 140 + shift(eye, -0.2f), 62, fit_scale(g->title, 0.65f, 260), WHITE);
             char wrapped[600];
             ui_wrap(g->rules, 250, 0.42f, wrapped, sizeof(wrapped));
-            text_centered(wrapped, 140 + shift(eye, -0.05f), 96, 0.42f, RGBA(220, 220, 255, 255));
+            text_centered(wrapped, 140 + shift(eye, -0.05f), 96, 0.42f, INK2);
             draw_my_scores(eye, g, 284, 52, 106, 170);
         }
         break;
@@ -921,66 +962,74 @@ void ui_draw_top(int eye)
             draw_dialogue(eye);
         break;
     case SCR_RECEIVE: {
-        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(15, 30, 55, 255), RGBA(40, 60, 100, 255));
+        gfx_gradient(0, 0, TOP_W, TOP_H, HOME_TOP, HOME_BOTTOM);
         float dx = shift(eye, -0.3f);
-        text_centered("Receive over Wi-Fi", 200 + dx, 22, 0.8f, WHITE);
+        text_centered("Receive over Wi-Fi", 200 + dx, 18, 0.8f, WHITE);
         char line[200];
-        if (NET.listening) {
-            snprintf(line, sizeof(line), "On your computer:\nvn3ds-port <game> --3ds %s", NET.address);
-            text_centered(line, 200 + shift(eye, -0.15f), 70, 0.5f, RGBA(200, 230, 255, 255));
+        if (NET.listening) {   /* the command to type, in a card */
+            float cd = shift(eye, -0.15f);
+            ui_rrect(40 + cd, 56, 320, 52, 12, FILL1);
+            text_centered("On your computer", 200 + cd, 62, 0.42f, INK2);
+            snprintf(line, sizeof(line), "vn3ds-port <game> --3ds %s", NET.address);
+            text_centered(line, 200 + cd, 80, fit_scale(line, 0.55f, 300), WHITE);
         }
-        text_centered(NET.message, 200 + dx, 128, 0.5f, RGBA(255, 230, 180, 255));
+        text_centered(NET.message, 200 + dx, 124, fit_scale(NET.message, 0.5f, 370), INK2);
         if (NET.bytes_total > 0) {
-            float p = (float)((double)NET.bytes_done / (double)NET.bytes_total);
             float bx = 50 + shift(eye, -0.2f);
-            gfx_rect(bx, 160, 300, 12, RGBA(255, 255, 255, 50));
-            gfx_rect(bx, 160, 300 * clampf(p, 0, 1), 12, RGBA(120, 200, 255, 255));
-            snprintf(line, sizeof(line), "%u / %u files  -  %.1f / %.1f MB", (unsigned)NET.files_done,
-                     (unsigned)NET.files_total, NET.bytes_done / 1048576.0, NET.bytes_total / 1048576.0);
-            text_centered(line, 200 + dx, 180, 0.45f, WHITE);
+            progress_bar(bx, 152, 300, 6, app_rx_progress(), FILL3, WHITE);
+            char eta[48];
+            app_rx_eta_text(eta, sizeof(eta));
+            snprintf(line, sizeof(line), "%u of %u files  ·  %.1f of %.1f MB%s%s", (unsigned)NET.files_done,
+                     (unsigned)NET.files_total, NET.bytes_done / 1048576.0, NET.bytes_total / 1048576.0,
+                     eta[0] ? "\n" : "", eta);
+            text_centered(line, 200 + dx, 168, 0.45f, WHITE);
         }
         if (NET.engine_updated)
-            text_centered("vn3ds was updated - restart it to use the new version", 200 + dx, 205, 0.42f,
-                          RGBA(255, 210, 120, 255));
+            text_centered("vn3ds was updated: restart it to use the new version", 200 + dx, 214, 0.42f, INK2);
         break;
     }
     case SCR_ERROR: {
-        gfx_rect(0, 0, TOP_W, TOP_H, RGBA(40, 10, 10, 255));
+        gfx_gradient(0, 0, TOP_W, TOP_H, HOME_TOP, HOME_BOTTOM);
         char wrapped[600];
-        ui_wrap(E.error, 360, 0.5f, wrapped, sizeof(wrapped));
-        gfx_text("Something went wrong", 20, 20, 0.7f, RGBA(255, 160, 160, 255));
-        gfx_text(wrapped, 20, 60, 0.5f, WHITE);
+        ui_wrap(E.error, 344, 0.5f, wrapped, sizeof(wrapped));
+        gfx_circle(34, 32, 11, RGBA(255, 69, 58, 255));
+        gfx_rect(32.8f, 25, 2.4f, 9, WHITE);
+        gfx_rect(32.8f, 36, 2.4f, 2.4f, WHITE);
+        gfx_text("Something went wrong", 54, 22, 0.7f, WHITE);
+        ui_rrect(16, 54, 368, 170, 12, FILL1);
+        gfx_text(wrapped, 28, 64, 0.5f, INK2);
         break;
     }
     }
-    if (E.rx_overlay)
-        draw_rx_top(eye);
     draw_toast(eye);
 }
 
 /* ---- bottom screen ------------------------------------------------------- */
 
+/* Buttons: dark grey and rounded; the focused one white with black text;
+ * a toggle that is on a lighter grey with a dot. */
 static void draw_button(const Button *b)
 {
-    u32 bg = b->hot ? RGBA(255, 255, 255, 235) : (b->on ? RGBA(80, 130, 220, 255) : RGBA(255, 255, 255, 34));
+    u32 bg = b->hot ? WHITE : (b->on ? FILL3 : FILL2);
     u32 fg = b->hot ? BLACK : WHITE;
-    float a = b->disabled ? 0.35f : 1.0f;
-    gfx_rect(b->x, b->y, b->w, b->h, rgba_alpha(bg, a * (float)(bg & 0xFF) / 255.0f));
-    gfx_rect(b->x, b->y + b->h - 1, b->w, 1, RGBA(0, 0, 0, 90));
-    float sc = fit_scale(b->label, 0.5f, b->w - 8);
+    float a = b->disabled ? 0.4f : 1.0f;
+    ui_rrect(b->x, b->y, b->w, b->h, fminf(R_BUTTON, b->h / 2), rgba_alpha(bg, a));
+    float sc = fit_scale(b->label, 0.5f, b->w - (b->on ? 18 : 10));
     float lh = gfx_line_height(sc);
-    gfx_text(b->label, b->x + (b->w - gfx_text_width(b->label, sc)) / 2, b->y + (b->h - lh) / 2,
-             sc, rgba_alpha(fg, a));
+    float tw = gfx_text_width(b->label, sc);
+    float tx = b->x + (b->w - tw) / 2 + (b->on ? 4 : 0);
+    if (b->on)
+        gfx_circle(tx - 7, b->y + b->h / 2, 2.5f, rgba_alpha(WHITE, a));
+    gfx_text(b->label, tx, b->y + (b->h - lh) / 2, sc, rgba_alpha(fg, a));
 }
 
 static void header(const char *text)
 {
-    gfx_rect(0, 0, BOT_W, 22, RGBA(0, 0, 0, 110));
-    gfx_text(text, 6, 3, fit_scale(text, 0.48f, 240), RGBA(220, 220, 235, 255));
+    gfx_text(text, 10, 4, fit_scale(text, 0.5f, 230), WHITE);
     float s = gfx_slider();
-    gfx_text("3D", 262, 4, 0.42f, RGBA(200, 200, 210, 255));
-    gfx_rect(282, 8, 32, 6, RGBA(255, 255, 255, 40));
-    gfx_rect(282, 8, 32 * s * fminf(1, E.set.depth_mult), 6, RGBA(120, 200, 255, 255));
+    gfx_text("3D", 262, 5, 0.42f, INK2);
+    progress_bar(282, 9, 30, 5, s * fminf(1, E.set.depth_mult), FILL3, WHITE);
+    gfx_rect(0, 22, BOT_W, 1, HAIRLINE);
 }
 
 /* History, newest at the bottom of [top, bottom). */
@@ -1001,8 +1050,10 @@ static void draw_history(float top, float bottom, int skip, bool fade)
         if (ty + lines * lh < top)
             break;
         if (h->who[0]) {
-            if (ty >= top)
-                gfx_text(h->who, 10, ty, sc, rgba_alpha(h->who_color, a));
+            if (ty >= top) {
+                gfx_circle(14, ty + lh / 2, 2.5f, rgba_alpha(h->who_color | 0xFF, a));
+                gfx_text(h->who, 21, ty, sc, rgba_alpha(WHITE, a));
+            }
             ty += lh;
         }
         /* draw line by line so partially visible entries clip cleanly */
@@ -1014,7 +1065,7 @@ static void draw_history(float top, float bottom, int skip, bool fade)
             memcpy(line, p, c);
             line[c] = 0;
             if (ty >= top)
-                gfx_text(line, 14, ty, sc, rgba_alpha(RGBA(235, 235, 240, 255), a));
+                gfx_text(line, 14, ty, sc, rgba_alpha(RGBA(210, 210, 215, 255), a));
             ty += lh;
             p += n;
             if (*p == '\n')
@@ -1026,7 +1077,7 @@ static void draw_history(float top, float bottom, int skip, bool fade)
 static void draw_slots(const char *title)
 {
     char head[64];
-    snprintf(head, sizeof(head), "%s  -  page %d/%d", title, E.slot_page + 1, SLOT_PAGES);
+    snprintf(head, sizeof(head), "%s  ·  page %d of %d", title, E.slot_page + 1, SLOT_PAGES);
     header(head);
     Button b[16];
     int n = ui_buttons(b, 16);
@@ -1037,9 +1088,9 @@ static void draw_slots(const char *title)
         }
         const SlotInfo *s = &E.slots[b[i].id - B_SLOT];
         bool hot = b[i].hot;
-        gfx_rect(b[i].x, b[i].y, b[i].w, b[i].h, hot ? RGBA(255, 255, 255, 230) : RGBA(255, 255, 255, 30));
+        ui_rrect(b[i].x, b[i].y, b[i].w, b[i].h, R_BUTTON, hot ? WHITE : FILL1);
         u32 fg = hot ? BLACK : WHITE;
-        gfx_text(b[i].label, b[i].x + 5, b[i].y + 3, 0.45f, fg);
+        gfx_text(b[i].label, b[i].x + 7, b[i].y + 4, 0.45f, fg);
         if (s->used) {
             char when[32];
             time_t t = (time_t)s->time;
@@ -1048,17 +1099,17 @@ static void draw_slots(const char *title)
                 strftime(when, sizeof(when), "%Y-%m-%d %H:%M", tm);
             else
                 snprintf(when, sizeof(when), "?");
-            gfx_text(when, b[i].x + 26, b[i].y + 4, 0.38f, hot ? RGBA(60, 60, 60, 255) : RGBA(180, 180, 190, 255));
+            gfx_text(when, b[i].x + 28, b[i].y + 5, 0.38f, hot ? RGBA(90, 90, 95, 255) : INK2);
             char wrapped[200];
             ui_wrap(s->preview, b[i].w - 10, 0.36f, wrapped, sizeof(wrapped));
             /* first two lines only */
             char *nl = strchr(wrapped, '\n');
             if (nl && (nl = strchr(nl + 1, '\n')))
                 *nl = 0;
-            gfx_text(wrapped, b[i].x + 5, b[i].y + 20, 0.36f, fg);
+            gfx_text(wrapped, b[i].x + 7, b[i].y + 20, 0.36f, fg);
         } else {
-            gfx_text(s->preview[0] ? s->preview : "empty", b[i].x + 26, b[i].y + 4, 0.38f,
-                     hot ? RGBA(90, 90, 90, 255) : RGBA(140, 140, 150, 255));
+            gfx_text(s->preview[0] ? s->preview : "Empty", b[i].x + 28, b[i].y + 5, 0.38f,
+                     hot ? RGBA(110, 110, 115, 255) : INK3);
         }
     }
 }
@@ -1084,48 +1135,53 @@ static void pref_value(int row, char *out, size_t len)
 
 void ui_draw_bottom(void)
 {
-    gfx_gradient(0, 0, BOT_W, BOT_H, RGBA(34, 34, 50, 255), RGBA(16, 16, 24, 255));
+    gfx_gradient(0, 0, BOT_W, BOT_H, RGBA(14, 14, 16, 255), BLACK);
     Button b[48];
-    if (E.rx_overlay) {
-        draw_rx_bottom();
-        int nb = ui_buttons(b, 48);
-        for (int i = 0; i < nb; i++)
-            draw_button(&b[i]);
-        return;
-    }
     int n;
     switch (E.screen) {
     case SCR_RECEIVE:
         header("Wi-Fi");
         {
             char msg[400], wrapped[500];
-            snprintf(msg, sizeof(msg), "Keep this screen open while your computer sends games. "
-                     "Both must be on the same Wi-Fi network.\n\nPort %d", NET.port);
-            ui_wrap(msg, 300, 0.45f, wrapped, sizeof(wrapped));
-            gfx_text(wrapped, 10, 34, 0.45f, WHITE);
-            if (E.ngames)
-                gfx_text("Received games appear in the list.", 10, 150, 0.42f, RGBA(180, 220, 255, 255));
+            snprintf(msg, sizeof(msg), "Your computer and the 3DS must be on the same Wi-Fi network.\n\n"
+                     "Games also arrive while you play: you don't need to stay here.\n\nPort %d", NET.port);
+            ui_rrect(8, 32, 304, 132, 12, FILL1);
+            ui_wrap(msg, 280, 0.45f, wrapped, sizeof(wrapped));
+            gfx_text(wrapped, 20, 42, 0.45f, INK2);
         }
         break;
     case SCR_GAMELIST:
         header("vn3ds");
-        if (E.ngames > 0) {
-            char pos[48];
-            snprintf(pos, sizeof(pos), "%d / %d", E.game_sel + 1, E.ngames);
-            gfx_text(pos, 160 - gfx_text_width(pos, 0.45f) / 2, 40, 0.45f, RGBA(190, 190, 215, 255));
+        if (app_home_count() > 0) {   /* page dots */
+            int cnt = app_home_count();
+            float step = cnt > 16 ? 300.0f / cnt : 12, x0 = 160 - step * (cnt - 1) / 2;
+            for (int i = 0; i < cnt; i++)
+                gfx_circle(x0 + step * i, 52, i == E.game_sel ? 3.0f : 2.2f, i == E.game_sel ? WHITE : INK3);
         }
-        if (NET.listening) {
+        if (NET.receiving) {   /* what is arriving, and how long it will take */
+            char msg[160], eta[48];
+            const char *who = NET.game[0] && E.rx_new ? E.rx_new_title : "";
+            for (int i = 0; i < E.ngames && !who[0]; i++)
+                if (app_rx_busy(E.games[i]))
+                    who = E.game_titles[i];
+            app_rx_eta_text(eta, sizeof(eta));
+            snprintf(msg, sizeof(msg), "Receiving%s%s  %d%%%s%s", who[0] ? " " : "", who,
+                     (int)(app_rx_progress() * 100), eta[0] ? "  ·  " : "", eta);
+            float sc = fit_scale(msg, 0.42f, 290);
+            gfx_text(msg, 160 - gfx_text_width(msg, sc) / 2, 148, sc, INK2);
+            progress_bar(60, 168, 200, 4, app_rx_progress(), FILL3, WHITE);
+        } else if (NET.listening) {
             char msg[96];
             snprintf(msg, sizeof(msg), "Listening for games on %s", NET.address);
-            gfx_text(msg, 160 - gfx_text_width(msg, 0.4f) / 2, 160, 0.4f, RGBA(160, 200, 170, 255));
+            gfx_text(msg, 160 - gfx_text_width(msg, 0.4f) / 2, 160, 0.4f, INK3);
         }
-        if (E.ngames == 0) {
+        if (app_home_count() == 0) {
             char msg[400], wrapped[500];
             snprintf(msg, sizeof(msg),
                      "No games yet. Press Y to receive one over Wi-Fi, or copy games made with "
                      "vn3ds-port to\n%s/games/\n\nSTART: exit", E.root);
-            ui_wrap(msg, 300, 0.5f, wrapped, sizeof(wrapped));
-            gfx_text(wrapped, 10, 40, 0.5f, WHITE);
+            ui_wrap(msg, 296, 0.48f, wrapped, sizeof(wrapped));
+            gfx_text(wrapped, 12, 36, 0.48f, INK2);
         }
         break;
     case SCR_TITLE:
@@ -1153,21 +1209,24 @@ void ui_draw_bottom(void)
         case OV_LOAD: draw_slots("Load"); return;
         case OV_PREFS:
             header("Settings");
+            ui_rrect(4, 25, 312, 6 * 26 - 1, R_BUTTON, FILL1);   /* a grouped list */
             for (int r = 0; r < 6; r++) {
                 float y = 26 + r * 26;
                 if (r == E.prefs_sel)
-                    gfx_rect(4, y, 312, 24, RGBA(255, 255, 255, 40));
+                    ui_rrect(6, y, 308, 23, 8, FILL2);
+                else if (r > 0 && r - 1 != E.prefs_sel)
+                    gfx_rect(12, y - 1.5f, 296, 1, HAIRLINE);
                 char v[32];
                 pref_value(r, v, sizeof(v));
-                gfx_text(PREF_NAMES[r], 10, y + 4, 0.48f, WHITE);
-                gfx_text(v, 140, y + 4, 0.48f, RGBA(180, 220, 255, 255));
+                gfx_text(PREF_NAMES[r], 14, y + 4, 0.48f, WHITE);
+                gfx_text(v, 212 - gfx_text_width(v, 0.48f), y + 4, 0.48f, INK2);
             }
             break;
         }
         break;
     case SCR_ERROR:
         header("Error");
-        gfx_text("Press A to continue.", 10, 40, 0.5f, WHITE);
+        gfx_text("Press A to continue.", 12, 36, 0.5f, INK2);
         break;
     case SCR_MINIGAME:
         mg_draw_bottom();

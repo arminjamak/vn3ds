@@ -10,7 +10,10 @@
 #     camera at doc_wide             # back out, still handheld
 #     camera                         # no camera move at all
 #
-# Every shot except `camera` alone keeps a light handheld sway, so the whole
+# Coverage shots cut straight to their framing, as a crew cuts between
+# setups; only doc_punch moves (a quick zoom when something lands) and
+# doc_creep (a slow drift in). Every shot except `camera` alone keeps a light
+# handheld sway, so the whole
 # game feels filmed by someone standing in the room. Establishing shots are
 # slow loops that end where they began, so a scene can idle on them for as
 # long as the player reads. On the 3DS, xrotate/yrotate tilt and orbit around
@@ -42,13 +45,27 @@ transform doc_wide:
 
 # a medium shot centred on whoever stands at xalign `a`
 transform doc_medium(a=0.5):
-    ease 0.6 zoom 1.28 xoffset ((a - 0.5) * 1280 * 1.28)
+    zoom 1.28 xoffset ((a - 0.5) * 1280 * 1.28)
     doc_sway(1.0)
 
 # a close-up: tighter and a little higher (faces sit high in the frame)
 transform doc_close(a=0.5):
-    ease 0.7 zoom 1.55 xoffset ((a - 0.5) * 1280 * 1.55) yoffset (-210)
+    zoom 1.55 xoffset ((a - 0.5) * 1280 * 1.55) yoffset (-210)
     doc_sway(0.8)
+
+# close on someone small (Miso, Pim, Dross, Ember): the camera dips instead
+# of rising, so their face stays above the text box
+transform doc_low(a=0.5):
+    zoom 1.4 xoffset ((a - 0.5) * 1280 * 1.4) yoffset (40)
+    doc_sway(0.8)
+
+# down on the floor (Miso): low and close, her face just above the text box
+transform doc_floor(a=0.5):
+    zoom 1.5 xoffset ((a - 0.5) * 1280 * 1.5) yoffset (200)
+    doc_sway(0.7)
+
+# (doc_close, doc_punch and doc_creep rise toward faces at standing height;
+# for POV shots and CGs with low or off-centre subjects use est_dolly.)
 
 # the camera operator reacts: a fast zoom-in on something that lands
 transform doc_punch(a=0.5):
@@ -57,7 +74,7 @@ transform doc_punch(a=0.5):
 
 # filming through a doorway / from across the room: slightly off-axis
 transform doc_peek(a=0.5):
-    ease 0.8 zoom 1.2 xoffset ((a - 0.5) * 1280 * 1.2 + 90) yoffset 20
+    zoom 1.2 xoffset ((a - 0.5) * 1280 * 1.2 + 90) yoffset 20
     doc_sway(0.7)
 
 # a slow drift onto a face, for the quiet lines

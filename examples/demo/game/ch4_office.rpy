@@ -2,6 +2,14 @@
 # Aron presents the system his choices built. The system (one of seven, each
 # in two flavours, plus the open question) is chosen in ch4_ending_select
 # from the seven hidden principles. Systems live in ch4_systems.rpy.
+#
+# Blocking. bg office looks at the glass wall and the green hill, where the
+# brightness (the assembly) is: Aron stands at the table with the model
+# world (slightleft), his companion beside him (center), Ashveil by the
+# window (ch4_window, further back). bg office reverse is shot from the glass wall, from the
+# assembly's side: the table is on the right, so Aron is at slightright,
+# the companion still in the middle, the doorway (the back row) at left.
+# Ashveil, by the glass, is behind that camera.
 
 define ch4_listener = Character("The Listener", color="#f4f0ff")
 define ch4_measurer = Character("The Measurer", color="#cfe3ff")
@@ -9,61 +17,180 @@ define ch4_assembly = Character("The Assembly", color="#ffffff")
 
 label ch4_office:
     scene white with blackout
-    scene bg office with slowfade
+    scene bg office
+    camera at est_dolly
+    with slowfade
     play music "audio/office.ogg" fadein 1.5
     "A bright room in a world with no mistakes in it. A long dark table. A green hill. On the wall, in plain grey letters: less, but better."
+    camera at doc_medium(0.23)
     "On the table, a small orange lantern, lit."
     if ch4_route == "architect":
-        show aron normal at center with dissolve
-        show mira smile at slightleft with dissolve
+        show aron neutral at slightleft
+        show mira smile at center
+        camera at doc_wide
+        with dissolve
         "Mira stands beside him in her teal dress. The real one. She has his notebook under her arm, because she's the one who kept it."
-        m "Breathe. You've explained worse things to my mother."
-        a smile "Your mother is much scarier than this."
+        camera at doc_close(0.5)
+        m grin "Breathe. You've explained worse things to my mother."
+        camera at doc_close(0.32)
+        a grin "Your mother is much scarier than this."
     elif ch4_route == "chosen":
-        show aron normal at center with dissolve
-        show mira smile at slightleft with dissolve
+        show aron neutral at slightleft
+        show mira smile at center
+        camera at doc_wide
+        with dissolve
         "He said he'd come if she could come too. The Mira from the kitchen. Some of her, and some of the other. It comes to enough."
-        m "Is this the bit where you explain the universe? Do I need a coffee for this?"
+        camera at doc_close(0.5)
+        m curious "Is this the bit where you explain the universe? Do I need a coffee for this?"
+        camera at doc_close(0.32)
         a smile "There's coffee after. I asked."
     elif ch4_route == "lantern":
-        show aron normal at center with dissolve
-        show ember soft at slightleft with dissolve
+        show aron neutral at slightleft
+        show ember tender at center
+        camera at doc_wide
+        with dissolve
         "They found him at the bottom of somebody else's staircase, lantern in hand, and waited politely until the bakery woman smiled."
-        em "Don't be nervous. They're only the oldest things there are."
-        a smile "That's very reassuring, Ember. Thank you."
+        camera at doc_medium(0.5)
+        em grin "Don't be nervous. They're only the oldest things there are."
+        camera at doc_close(0.32)
+        a grin "That's very reassuring, Ember. Thank you."
     elif ch4_route == "longfog":
-        show aron tired at center with dissolve
-        show theo normal at slightleft with dissolve
+        show aron tired at slightleft
+        show theo neutral at center
+        camera at doc_wide
+        with dissolve
         "The fog lifted one ordinary Tuesday and didn't come back. That afternoon someone came to fetch the man who wrote the notebook the boy found."
-        th "Bro. I parked on a cloud. Is that allowed? There was no sign."
+        camera at doc_close(0.5)
+        th grin "Bro. I parked on a cloud. Is that allowed? There was no sign."
+        show aron smile
     else:
-        show aron normal at center with dissolve
+        show aron neutral at slightleft
+        camera at doc_wide
+        with dissolve
         "He came alone. That's all right. He's practised being kind to rooms where nobody might be listening."
+        show aron thinking
+        camera at doc_creep(0.32)
         at "Nobody beside me yet. Yet. I'm learning to notice the yet."
     if ch4_ashveil_fasts:
+        camera at doc_peek(0.15)
         "At the end of the table there's an empty chair. Nobody needs to be told whose it is."
     else:
+        show patron thinking at ch4_window with dissolve
+        camera at doc_medium(0.84)
         "Lord Ashveil stands by the window, thinner. Hungry, and choosing to be. He's only here to watch how it's done."
     if ch4_route != "lantern" and watch >= 6:
-        show pim chatty at slightright, bob with dissolve
-        pi "Psst. Bro. Watch delegation. We're the back row. The moth's on the lamp."
+        call ch4_office_back
+        show pim chatty at left, bob
+        camera at doc_medium(0.14)
+        with dissolve
+        pi grin "Psst. Bro. Watch delegation. We're the back row. The moth's on the lamp."
         hide pim with dissolve
+    call ch4_office_front
+    camera at est_crane
+    with dissolve
     "Then the others arrive, or rather the room turns out to have been inside them all along: a brightness that has opinions."
+    show aron awe
     "Older than the Council, and nothing like it. Not hungry. Whatever they were, they finished eating a very long time ago."
+    camera at est_dolly
     ch4_listener "Architect. The network that runs your existence has applied to join us, and to be trusted with its own experiments."
     ch4_measurer "Most applications are clever and greedy, or kind and vague. Show us the design. What it costs, and what it does on a bad day."
+    call ch4_office_back
+    camera at doc_medium(0.68)
+    with dissolve
     if kept_journal:
-        a normal "I've kept a notebook since the first morning. First line: 'If this is a test, I want to pass it by being kind.' This is that line, with the maths filled in."
+        a determined "I've kept a notebook since the first morning. First line: 'If this is a test, I want to pass it by being kind.' This is that line, with the maths filled in."
     else:
-        a normal "I wrote one line, the first morning, and then mostly lived it. 'If this is a test, I want to pass it by being kind.' This is what survived contact."
+        a determined "I wrote one line, the first morning, and then mostly lived it. 'If this is a test, I want to pass it by being kind.' This is what survived contact."
+    camera at doc_close(0.68)
     a "The floor is one line. Every sentient being in every world gets a fair share of its world. And it works without knowing which world is real."
+    call ch4_cut_council
     ch4_measurer "...Every design we have been shown begins by locating the original and protecting it. Yours refuses to look."
-    a "I spent a long time sorting the people around me into real and rendered. It nearly cost me everyone. I'm not building that into the foundations."
-    show bg worlds with dissolve
+    call ch4_cut_aron
+    a neutral "I spent a long time sorting the people around me into real and rendered. It nearly cost me everyone. I'm not building that into the foundations."
+    call ch4_broll_worlds
     a "And one piece of evidence. Sealed in protection, my mind leaked. A cab driver told me my own story. A café table said 'protected'."
+    call ch4_office_back
+    show aron grin
+    camera at doc_medium(0.68)
+    with dissolve
     a "Everyone thought I was losing my mind. I mostly took notes. One mind's design really does reshape a world. I'm asking to do it on purpose. Carefully."
-    show bg office with dissolve
+    show aron determined
     jump ch4_ending_select
+
+# ---- the two angles of the office, and the cutaways ----------------------------------
+# Each sets the stage only; the caller adds a camera and a transition (the
+# ch4_cut_* ones do both).
+label ch4_office_front:
+    scene bg office
+    show aron neutral at slightleft
+    if ch4_route == "architect" or ch4_route == "chosen":
+        show mira smile at center
+    elif ch4_route == "lantern":
+        show ember tender at center
+    elif ch4_route == "longfog":
+        show theo neutral at center
+    if not ch4_ashveil_fasts:
+        show patron neutral at ch4_window
+    return
+
+label ch4_office_back:
+    scene bg office reverse
+    show aron determined at slightright
+    if ch4_route == "architect" or ch4_route == "chosen":
+        show mira smile at center
+    elif ch4_route == "lantern":
+        show ember tender at center
+    elif ch4_route == "longfog":
+        show theo neutral at center
+    return
+
+# Aron presenting, from the assembly's side
+label ch4_cut_aron:
+    call ch4_office_back
+    camera at doc_close(0.68)
+    with quick
+    return
+
+# the assembly: they have no faces, so the whole bright room is their shot
+label ch4_cut_council:
+    call ch4_office_front
+    camera at doc_wide
+    with quick
+    return
+
+# the assembly deciding: the whole room, the hill lit
+label ch4_cut_brightness:
+    call ch4_office_front
+    camera at est_dolly
+    with dissolve
+    return
+
+# Ashveil listening at the window (only when he isn't fasting)
+label ch4_cut_ashveil:
+    call ch4_office_front
+    show patron embarrassed
+    camera at doc_medium(0.84)
+    with quick
+    return
+
+# B-roll while Aron talks: what he is describing
+label ch4_broll_worlds:
+    scene bg worlds
+    camera at est_pan
+    with dissolve
+    return
+
+label ch4_broll_spawning:
+    scene bg spawning
+    camera at est_crane
+    with dissolve
+    return
+
+label ch4_broll_earth:
+    scene bg earth
+    camera at est_stars
+    with dissolve
+    return
 
 # ---- choosing the system -------------------------------------------------------------
 label ch4_ending_select:
@@ -136,9 +263,14 @@ label ch4_ending_select:
         jump ch4_sys_exit
 
 # ---- the six supporting rules: one line each ------------------------------------------
-# Called from each system. Skips the principle that already won.
+# Called from each system. Skips the principle that already won. The camera
+# drifts along the seven principle cards above the sideboard while he talks.
 label ch4_office_rules:
-    a normal "The rest are supporting rules. A good design has one main idea and then gets out of its own way."
+    call ch4_office_back
+    camera at doc_medium(0.68)
+    with quick
+    a neutral "The rest are supporting rules. A good design has one main idea and then gets out of its own way."
+    camera at est_pan
     if ch4_win != "truth":
         if p_truth > 0:
             a "On truth: any being that asks what it is gets a true answer, with someone sitting beside it."
@@ -188,31 +320,56 @@ label ch4_office_rules:
             a "On the hand that runs it: close and attentive. A gardener walking the rows, not a farmer counting yield."
         else:
             a "On the hand that runs it: open question. Touch lightly or tend closely. Keep asking every century."
+    call ch4_cut_brightness
     return
 
 # ---- the close -----------------------------------------------------------------------
+# From here the camera calms down: fewer cuts, wider, steadier.
 label ch4_office_close:
+    camera at ch4_calm
     ch4_listener "One thing more. A design that needs to know where the original is can be broken by finding it. Yours cannot."
     ch4_measurer "We do not know which of our worlds is real either. Nobody does. We had not expected a child's toybox to teach us that."
+    call ch4_office_back
+    show aron surprised
+    camera at doc_close(0.68)
+    with dissolve
     a "...Huh. I thought I was the only one who didn't know."
+    call ch4_office_front
+    show aron curious
+    camera at est_dolly
+    with dissolve
     ch4_listener "The network will need someone to keep its 'better' honest. Not to rule. To steer. Will you?"
+    call ch4_office_back
+    camera at doc_close(0.68)
+    with dissolve
     if ch4_route == "chosen":
-        a "I said no to their desk. I'll say yes to this, from the kitchen table. Two days a week. With her."
-        m "Three days. You'll get bored on Thursdays."
+        a smile "I said no to their desk. I'll say yes to this, from the kitchen table. Two days a week. With her."
+        camera at doc_close(0.5)
+        m grin "Three days. You'll get bored on Thursdays."
     elif ch4_route == "lantern":
         a "Yes. As long as I can still carry the lantern. I don't want to steer anything I've stopped visiting."
-        em "He'll come back covered in other people's rain. Every time. I'll make tea."
+        camera at doc_medium(0.5)
+        em tender "He'll come back covered in other people's rain. Every time. I'll make tea."
     elif ch4_route == "longfog":
-        a "Yes. Slowly. I think slowly now. I think that might be what the job needs."
-        th "Bro. Chief architect of everything. I'm going to need a bigger croissant."
+        a smile "Yes. Slowly. I think slowly now. I think that might be what the job needs."
+        camera at doc_close(0.5)
+        th laugh "Bro. Chief architect of everything. I'm going to need a bigger croissant."
     elif ch4_route == "architect":
         a "Yes. I already said it once at a drafting table. I'll keep saying it, every morning, on purpose."
-        m "Every morning at 7:07. I'll make sure."
+        camera at doc_close(0.5)
+        m tender "Every morning at 7:07. I'll make sure."
     else:
-        a "Yes. Nobody's standing next to me. That's all right. The job's about the ones who aren't in the room."
-    a "I'll do it the way my favourite designer made radios and alarm clocks. Useful. Honest. Unobtrusive. Built to last. Thorough to the last detail."
-    a "Down to the breath of the man at number fourteen. And as little of it as possible. Less, but better."
-    a "Not the nearest good. The absolute best. And I'll check it the way I checked my first theory: is it kind to someone who'll never know I did it?"
+        a smile "Yes. Nobody's standing next to me. That's all right. The job's about the ones who aren't in the room."
+    camera at doc_medium(0.68)
+    a determined "I'll do it the way my favourite designer made radios and alarm clocks. Useful. Honest. Unobtrusive. Built to last. Thorough to the last detail."
+    camera at doc_creep(0.68)
+    a tender "Down to the breath of the man at number fourteen. And as little of it as possible. Less, but better."
+    camera at ch4_calm
+    a determined "Not the nearest good. The absolute best. And I'll check it the way I checked my first theory: is it kind to someone who'll never know I did it?"
+    call ch4_office_front
+    show aron neutral
+    camera at ch4_calm
+    with dissolve
     if integrity >= 8:
         ch4_measurer "You held to that when nobody was watching. We can see the record."
     elif bond >= 8:

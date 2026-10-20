@@ -150,7 +150,98 @@ def _send_batch(host, files, start, progress, port, timeout, state, proto=2):
         sock.close()
 
 
-def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8):
+def _send_v3(host, files, port, timeout, progress):
+    """Protocol 3: manifest, one bitmap back, then the needed files in one
+    stream. Returns (sent, skipped, failed)."""
+    total = sum(os.path.getsize(p) for _, p in files)
+    sock = socket.create_connection((host, port), timeout=timeout)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 20)
+    try:
+        sock.settimeout(90)
+        head = [b"VN3D" + struct.pack("<IIQ", 3, len(files), total)]
+        sizes = []
+        say(f"checking {len(files)} files")
+        for remote, local in files:
+            name = remote.encode("utf-8")
+            size = os.path.getsize(local)
+            sizes.append(size)
+            head.append(struct.pack("<H", len(name)) + name + struct.pack("<QI", size, _crc32(local)))
+        sock.sendall(b"".join(head))
+        # the 3DS compares the list with its card (this can take a while)
+        sock.settimeout(1800)
+        bits = _recv_exact(sock, (len(files) + 7) // 8)
+        sock.settimeout(120)
+        need = [i for i in range(len(files)) if bits[i >> 3] >> (i & 7) & 1]
+        skipped = len(files) - len(need)
+        if skipped:
+            say(f"{skipped} files are already on the 3DS; sending {len(need)}")
+        want = sum(sizes[i] for i in need)
+        done, t0, last = 0, time.time(), 0
+        for i in need:
+            sock.sendall(struct.pack("<I", i))
+            with open(files[i][1], "rb") as f:
+                while True:
+                    chunk = f.read(64 * 1024)
+                    if not chunk:
+                        break
+                    sock.sendall(chunk)
+                    done += len(chunk)
+                    if time.time() - last > 1 or done == want:
+                        last = time.time()
+                        rate = done / max(1e-3, time.time() - t0) / 1e6
+                        left = (want - done) / max(rate * 1e6, 1) / 60
+                        print(f"\r  {done / 1e6:7.1f} / {want / 1e6:.1f} MB  ({rate:.3f} MB/s, "
+                              f"about {left:.0f} min left)   ", end="", flush=True)
+            progress["done"] = i
+        if need:
+            print()
+        if _recv_exact(sock, 4) != b"DONE":
+            raise ConnectionError("transfer did not finish cleanly")
+        failed = struct.unpack("<I", _recv_exact(sock, 4))[0]
+        return len(need) - failed, skipped, failed
+    finally:
+        sock.close()
+
+
+def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8, forever=False):
+    """Stream files to vn3ds's receive screen. Returns (sent, refused).
+
+    Newer vn3ds builds get protocol 3: a dropped connection is simply
+    retried (with `forever`, until it works, e.g. overnight), and every
+    retry skips what already arrived. Older builds fall back to protocols
+    2 and 1 below."""
+    progress = {"done": 0}
+    attempt = 0
+    while True:
+        try:
+            sent, skipped, failed = _send_v3(host, files, port, timeout, progress)
+            if skipped:
+                say(f"{skipped} unchanged files were already on the 3DS")
+            return sent + skipped, failed
+        except ConnectionError as e:
+            if attempt == 0 and "closed" in str(e):
+                break   # an older vn3ds hung up on protocol 3: use the old protocols
+            err = e
+        except OSError as e:
+            err = e
+        attempt += 1
+        print()
+        if not forever and attempt > retries:
+            say(f"giving up after {retries} reconnects; run the same command again to resume")
+            raise err
+        wait = min(60, 5 * attempt)
+        say(f"connection dropped ({err.__class__.__name__}); retrying in {wait} s "
+            f"(attempt {attempt}{'' if forever else f' of {retries}'})")
+        time.sleep(wait)
+        while not wait_for_receiver(host, port, seconds=120):
+            if not forever:
+                raise err
+            say("waiting for vn3ds (keep it open; it listens on its own)")
+    return _send_v12(host, files, port, timeout, retries)
+
+
+def _send_v12(host, files, port=VN3DS_PORT, timeout=15, retries=8):
     """Stream files to vn3ds's receive screen. Returns (sent, refused).
 
     Wi-Fi on the 3DS drops out now and then, so a broken connection is
