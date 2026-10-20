@@ -99,3 +99,59 @@ fifth): record the bell on the lantern loop's tonic.
 | snake_shed_end | cheat ends | soft thump, skin turns solid, ~250 ms |
 | snake_wrap | wrapping through a wall in the cheat | warbly teleport blip, ~150 ms |
 | snake_phase | passing through your body in the cheat | ghostly whoosh, ~120 ms |
+
+## Miso's Hunt (miso)
+| name | when | sound |
+|---|---|---|
+| miso_step | paw step (quiet, frequent) | soft paw pad on wood, 0.08 s |
+| miso_pounce | pounce | quick airy whoosh plus a small chirp, 0.25 s |
+| miso_catch | dot caught | bright glitchy pop, a pixel being eaten, 0.2 s |
+| miso_combo | multiplier rises | rising three-note sparkle, 0.4 s |
+| miso_combo_break | chain of 3+ times out | soft falling two-note tone, 0.35 s |
+| miso_whiff | pounce on nothing | soft thump of paws landing, 0.15 s |
+| miso_dot_spawn | a dot leaks from the wall | crackly bitcrushed fizz with a wet seep, 0.5 s |
+| miso_dot_fade | a dot expires | short digital fizzle to silence, 0.3 s |
+| miso_dot_blink | a blinker jumps (near Miso) | tiny teleport tick/zap, 0.1 s |
+| miso_dot_flee | a shy dot runs | skittering glitch squeak, 0.25 s |
+| miso_beam_on | a beam fades in | soft airy choir swell, 1.0 s |
+| miso_beam_sweep | a beam is near | low gentle hum/whoosh, 0.6 s |
+| miso_spotted | Miso is spotted | bright angelic "ting" plus a startled "mrrp?!", 0.6 s |
+| miso_recover | the freeze ends | little shake-off ruffle, 0.3 s |
+| miso_phase | the leak widens | low glitch rumble with a warble, 0.8 s |
+| miso_nap | cheat: nap | cat yawn into a soft purr, 0.9 s |
+| miso_wake | nap ends | small chirpy trill, 0.3 s |
+| miso_bird | robin outside (ambient) | robin chirp, 0.4 s |
+| miso_tick | last 5 seconds | soft clock tick, 0.1 s |
+| miso_time_up | time's up | gentle bell, 0.6 s |
+| miso_meow | the closing "Meow." | a clear, content synthesised meow, 0.7 s |
+
+## The Hungry Sky (invaders)
+Most are played at rate 0.95-1.05 for variety.
+
+| name | sound |
+|---|---|
+| invaders_shoot | soft bright glassy "pew" of light, 0.12 s |
+| invaders_hit_spirit | small airy pop with a sparkle tail, 0.3 s |
+| invaders_hit_angel | bright chime burst with a feather flutter, 0.4 s |
+| invaders_angel_armor | metallic "ting" (a captain's first hit), 0.15 s |
+| invaders_enemy_shot | low golden bell-tone launch, 0.25 s |
+| invaders_wisp | faint breathy whoosh, 0.25 s |
+| invaders_dive | rising-then-falling wing swoop, 0.6 s |
+| invaders_step | soft low thump as the formation steps down, 0.12 s |
+| invaders_overrun | ominous low swell, 0.6 s |
+| invaders_player_hit | crackling impact, a lantern sputter, 0.35 s |
+| invaders_life_lost | two-note falling chime, 0.6 s |
+| invaders_game_over | slow descending lantern-going-out tone, 1.5 s |
+| invaders_wave_clear | short triumphant shimmer arpeggio, 1.0 s |
+| invaders_wave_start | brief rising "here they come" swell, 0.6 s |
+| invaders_golden_light | huge warm choir-like bloom (the cheat), 1.2 s |
+| invaders_boss_roar | childlike but huge hungry "oooh" with a deep rumble, 1.5 s |
+| invaders_boss_phase | hungry growl / stomach rumble, 0.8 s |
+| invaders_boss_spread | soft breath-out with a scatter of light tones, 0.4 s |
+| invaders_boss_pull | deep inhale that starts the vortex, 1.0 s |
+| invaders_boss_pull_end | satisfied little "mm", 0.4 s |
+| invaders_boss_spit | wet-cute "ptoo" with two tiny sparkle pops, 0.4 s |
+| invaders_boss_hit | dull soft thud with a pitch-bent "hm", 0.15 s |
+| invaders_boss_gulp | gulp/slurp (a shot into the open mouth), 0.25 s |
+| invaders_boss_defeat | big glowing release winding down, 2.0 s |
+| invaders_boss_sleep | tiny yawn into a soft snore, 1.5 s |

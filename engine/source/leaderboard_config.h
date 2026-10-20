@@ -12,6 +12,14 @@
  *   development key; make a real one with `openssl rand -hex 32` before
  *   deploying. */
 
+/* Release settings (the real key, the server address) live in
+ * leaderboard_secret.h, which is kept out of git. */
+#if defined(__has_include)
+#if __has_include("leaderboard_secret.h")
+#include "leaderboard_secret.h"
+#endif
+#endif
+
 #ifndef LEADERBOARD_URL
 #define LEADERBOARD_URL ""
 #endif

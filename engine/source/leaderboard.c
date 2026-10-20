@@ -373,10 +373,11 @@ out:
     return status;
 }
 
-static void parse_top(LbJob *j, const char *p)
+/* Lines of rank<TAB>name<TAB>score[<TAB>me]; rank 0 is a gap. */
+static void parse_top(LbJob *j, const char *p, int max)
 {
     j->ntop = 0;
-    while (*p && j->ntop < LB_TOP_MAX) {
+    while (*p && j->ntop < max) {
         LbEntry *e = &j->top[j->ntop];
         char *end;
         e->rank = (int)strtol(p, &end, 10);
@@ -390,7 +391,8 @@ static void parse_top(LbJob *j, const char *p)
         p += n;
         if (*p != '\t')
             break;
-        e->score = atoi(p + 1);
+        e->score = (int)strtol(p + 1, &end, 10);
+        e->me = *end == '\t' && end[1] == '1';
         j->ntop++;
         p += strcspn(p, "\n");
         if (*p == '\n')
@@ -422,8 +424,11 @@ static void work(void *arg)
             fail(j, "Unexpected reply");
             return;
         }
+        const char *nl = strchr(body, '\n');   /* newer servers send the board too */
+        if (nl)
+            parse_top(j, nl + 1, LB_BOARD_MAX);
     } else {
-        parse_top(j, body);
+        parse_top(j, body, LB_TOP_MAX);
     }
     __sync_synchronize();
     j->state = LB_DONE;

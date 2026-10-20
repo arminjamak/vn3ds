@@ -581,6 +581,35 @@ void ui_mg_board(void)
 
 /* The selected game's online top 10 on the left, the player's own name and
  * local best on the right. */
+/* The player's own scores for a game, in a panel: the first story run pinned
+ * on top, then the best free-play runs. */
+static void draw_my_scores(int eye, const MiniGame *g, float x, float y, float w, float h)
+{
+    const u32 GOLD = RGBA(255, 210, 110, 255), DIM = RGBA(190, 190, 215, 255);
+    float px = x + shift(eye, -0.25f);
+    char buf[64];
+    int story, runs[5];
+    int n = mg_scores(g->id, &story, runs, 5);
+    gfx_rect(px, y, w, h, RGBA(255, 255, 255, 30));
+    gfx_text("Your scores", px + 8, y + 6, 0.45f, GOLD);
+    float ly = y + 26;
+    gfx_rect(px + 4, ly - 2, w - 8, 20, RGBA(255, 210, 110, 40));
+    gfx_text("Story", px + 10, ly, 0.45f, DIM);
+    snprintf(buf, sizeof(buf), story >= 0 ? "%d%%" : "not yet", story);
+    gfx_text(buf, px + w - 10 - gfx_text_width(buf, 0.45f), ly, 0.45f, story >= 0 ? WHITE : DIM);
+    ly += 24;
+    if (n == 0) {
+        gfx_text("Free play:\nno runs yet", px + 10, ly, 0.42f, DIM);
+        return;
+    }
+    for (int i = 0; i < n && ly < y + h - 16; i++, ly += 18) {
+        snprintf(buf, sizeof(buf), "%d.", i + 1);
+        gfx_text(buf, px + 10, ly, 0.45f, DIM);
+        snprintf(buf, sizeof(buf), "%d%%", runs[i]);
+        gfx_text(buf, px + w - 10 - gfx_text_width(buf, 0.45f), ly, 0.45f, i == 0 ? GOLD : WHITE);
+    }
+}
+
 static void draw_board_top(int eye)
 {
     const MiniGame *g = mg_at(E.mg_sel);
@@ -626,20 +655,10 @@ static void draw_board_top(int eye)
     }
 
     /* you */
-    float px = 284 + shift(eye, -0.25f);
-    gfx_rect(px, 42, 104, 150, RGBA(255, 255, 255, 30));
-    gfx_text("Playing as", px + 8, 50, 0.42f, DIM);
-    gfx_text(lb_name(), px + 8, 66, fit_scale(lb_name(), 0.52f, 90), WHITE);
-    gfx_text("Your best", px + 8, 104, 0.42f, DIM);
-    int best = mg_best(g->id);
-    if (best >= 0)
-        snprintf(buf, sizeof(buf), "%d%%", best);
-    else
-        snprintf(buf, sizeof(buf), "-");
-    gfx_text(buf, px + 8, 120, 0.9f, GOLD);
+    draw_my_scores(eye, g, 284, 42, 106, 170);
     if (lb_online() && LB_POST.state == LB_DONE && !strcmp(LB_POST.game, g->id)) {
         snprintf(buf, sizeof(buf), "Online #%d of %d", LB_POST.rank, LB_POST.total);
-        gfx_text(buf, px + 8, 166, fit_scale(buf, 0.42f, 90), DIM);
+        gfx_text(buf, 290 + shift(eye, -0.25f), 218, fit_scale(buf, 0.42f, 96), DIM);
     }
 }
 
@@ -699,10 +718,11 @@ void ui_draw_top(int eye)
         const MiniGame *g = mg_at(E.mg_sel);
         text_centered("Minigames", 200 + shift(eye, -0.3f), 20, 0.8f, RGBA(255, 210, 110, 255));
         if (g) {
-            text_centered(g->title, 200 + shift(eye, -0.2f), 70, 0.7f, WHITE);
+            text_centered(g->title, 140 + shift(eye, -0.2f), 62, fit_scale(g->title, 0.65f, 260), WHITE);
             char wrapped[600];
-            ui_wrap(g->rules, 360, 0.45f, wrapped, sizeof(wrapped));
-            text_centered(wrapped, 200 + shift(eye, -0.05f), 110, 0.45f, RGBA(220, 220, 255, 255));
+            ui_wrap(g->rules, 250, 0.42f, wrapped, sizeof(wrapped));
+            text_centered(wrapped, 140 + shift(eye, -0.05f), 96, 0.42f, RGBA(220, 220, 255, 255));
+            draw_my_scores(eye, g, 284, 52, 106, 170);
         }
         break;
     }

@@ -65,7 +65,11 @@ class LeaderboardTest(unittest.TestCase):
             sig = leaderboard.sign(key, game, name, score, nonce)
         form = urllib.parse.urlencode(dict(game=game, name=name, score=score, player=player,
                                            nonce=nonce, sig=sig))
-        return self.request("/v1/score", form.encode())
+        status, body = self.request("/v1/score", form.encode())
+        if status == 200:   # the first line; the board around the player follows
+            self.last_board = [tuple(l.split("\t")) for l in body.splitlines()[1:]]
+            body = body.splitlines(keepends=True)[0]
+        return status, body
 
     def top(self, game, n=10):
         status, body = self.request(f"/v1/top?game={game}&n={n}")
@@ -86,6 +90,28 @@ class LeaderboardTest(unittest.TestCase):
                          [("1", "Ann", "90"), ("2", "Bob", "70"), ("2", "Ann", "70")])
         self.assertEqual(self.top("snake", n=1), [("1", "Ann", "90")])
         self.assertEqual(self.top("tower"), [])
+        # the reply's board ends just after the player, who is marked
+        self.post("snake", "Bob", 10, player="bbbb2222")
+        self.assertEqual(self.last_board[1], ("2", "Bob", "70", "1"))
+        self.assertEqual([r[3] for r in self.last_board].count("1"), 1)
+
+    def test_5_board_window(self):
+        # a long board, checked on the store itself (posting 60 scores over
+        # HTTP would trip the rate limit): the top, a gap, the stretch to you
+        with tempfile.TemporaryDirectory() as d:
+            store = leaderboard.Store(os.path.join(d, "t.db"))
+            for i in range(60):
+                store.submit("draw", f"p{i:07d}", f"P{i}", 99 - i)
+            self.assertEqual(store.submit("draw", "me000001", "Me", 5), (61, 61))
+            board = store.board("draw", "me000001", "Me")
+            ranks = [r[0] for r in board]
+            self.assertEqual(ranks[:10], list(range(1, 11)))
+            self.assertEqual(ranks[10], 0)                 # the gap
+            self.assertEqual(board[-1], (61, "Me", 5, 1))
+            # near the top there is no gap
+            near = store.board("draw", "p0000003", "P3")
+            self.assertNotIn(0, [r[0] for r in near])
+            self.assertEqual(near[3], (4, "P3", 96, 1))
 
     def test_2_name_cleanup(self):
         status, body = self.post("tower", "  Zoë \t  X  ", 33)

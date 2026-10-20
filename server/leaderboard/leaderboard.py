@@ -8,7 +8,7 @@ plain text so the 3DS can parse it with a few lines of C:
        200, one line per entry: rank<TAB>name<TAB>score
        (an empty body means nobody has played yet)
 
-  POST /v1/score   (application/x-www-form-urlencoded)
+  POST /v1/score       (reply: ok/rank/total, then the board around you)   (application/x-www-form-urlencoded)
        game=<id>&name=<name>&score=<0..100>&player=<console id>&nonce=<random>&sig=<hex>
        sig = hex(HMAC-SHA256(key, "game|name|score|nonce"))
        200, "ok<TAB>rank<TAB>total"
@@ -172,6 +172,26 @@ class Store:
             out.append((rank, name, score))
         return out
 
+    def board(self, game, player, name, top=10, before=24, after=5):
+        """The stretch of the board a game shows after a run: the top, then
+        the rows leading up to this player's best and a few after it.
+        Returns (rank, name, score, me) tuples; rank 0 marks a gap."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT name, score, player FROM scores WHERE game=? "
+                "ORDER BY score DESC, achieved, id", (game,)).fetchall()
+        ranked, rank, last = [], 0, None
+        for i, (n, sc, pl) in enumerate(rows):
+            if sc != last:
+                rank, last = i + 1, sc
+            ranked.append((rank, n, sc, 1 if (pl == player and n == name) else 0))
+        me = next((i for i, r in enumerate(ranked) if r[3]), None)
+        if me is None:
+            return ranked[:top]
+        if me < top + before:
+            return ranked[:me + after + 1]
+        return ranked[:top] + [(0, "...", 0, 0)] + ranked[me - before:me + after + 1]
+
     # admin
     def list(self, game=None):
         with self.lock:
@@ -305,7 +325,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.server.store.use_nonce(nonce):
             raise ApiError(409, "nonce already used")
         rank, total = self.server.store.submit(game, player, clean, int(score))
-        self.reply(200, f"ok\t{rank}\t{total}\n")
+        # After the first line, the board around the player's best, so the
+        # game can scroll down to them: rank<TAB>name<TAB>score<TAB>me
+        # (rank 0 = a gap in the list).
+        board = self.server.store.board(game, player, clean)
+        self.reply(200, f"ok\t{rank}\t{total}\n" +
+                   "".join(f"{r}\t{n}\t{sc}\t{m}\n" for r, n, sc, m in board))
 
 
 class LeaderboardServer(ThreadingHTTPServer):

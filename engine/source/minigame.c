@@ -33,34 +33,78 @@ static void best_path(char *out, size_t len)
     snprintf(out, len, "%s/saves/%s/minigames.cfg", E.root, E.loaded ? E.game.id : "_");
 }
 
-int mg_best(const char *id)
+/* minigames.cfg keeps, per game, the first story run and the best few
+ * free-play runs:
+ *     tower.story = 72
+ *     tower.runs = 91 85 60
+ * (An older "tower = 80" line counts as a free-play run.) */
+#define RUNS_MAX 5
+
+typedef struct {
+    int story;
+    int runs[RUNS_MAX];
+    int nruns;
+} MgScores;
+
+static void add_run(MgScores *sc, int score)
 {
-    char path[400], line[128];
+    int i;
+    if (sc->nruns < RUNS_MAX) {
+        i = sc->nruns++;
+    } else {
+        if (score <= sc->runs[RUNS_MAX - 1])
+            return;   /* not among the best */
+        i = RUNS_MAX - 1;
+    }
+    sc->runs[i] = score;
+    for (; i > 0 && sc->runs[i] > sc->runs[i - 1]; i--) {
+        int t = sc->runs[i];
+        sc->runs[i] = sc->runs[i - 1];
+        sc->runs[i - 1] = t;
+    }
+}
+
+static void load_scores(MgScores *all, int n)
+{
+    for (int i = 0; i < n; i++) {
+        all[i].story = -1;
+        all[i].nruns = 0;
+    }
+    char path[400], line[160];
     best_path(path, sizeof(path));
     FILE *f = fopen(path, "r");
     if (!f)
-        return -1;
-    int best = -1;
+        return;
     while (fgets(line, sizeof(line), f)) {
-        char key[64];
-        int v;
-        if (sscanf(line, " %63[^ =] = %d", key, &v) == 2 && !strcmp(key, id))
-            best = v;
+        char key[64], *eq = strchr(line, '=');
+        if (!eq || sscanf(line, " %63[^ =]", key) != 1)
+            continue;
+        char *dot = strchr(key, '.');
+        if (dot)
+            *dot = 0;
+        int gi = -1;
+        for (int i = 0; i < n; i++)
+            if (!strcmp(mg_at(i)->id, key))
+                gi = i;
+        if (gi < 0)
+            continue;
+        const char *field = dot ? dot + 1 : "";
+        if (!strcmp(field, "story")) {
+            all[gi].story = atoi(eq + 1);
+        } else {   /* "runs" or a legacy single best */
+            char *p = eq + 1, *end;
+            for (long v = strtol(p, &end, 10); end != p; v = strtol(p, &end, 10)) {
+                add_run(&all[gi], (int)v);
+                p = end;
+            }
+        }
     }
     fclose(f);
-    return best;
 }
 
-static void save_best(const char *id, int score)
+static void save_scores(const MgScores *all, int n)
 {
     char path[400], dir[400];
-    int vals[32];
-    const MiniGame *g;
-    for (int i = 0; i < mg_count() && i < 32; i++)
-        vals[i] = mg_best(mg_at(i)->id);
-    for (int i = 0; i < mg_count() && i < 32; i++)
-        if (!strcmp(mg_at(i)->id, id) && score > vals[i])
-            vals[i] = score;
     snprintf(dir, sizeof(dir), "%s/saves", E.root);
     platform_mkdir(dir);
     snprintf(dir, sizeof(dir), "%s/saves/%s", E.root, E.loaded ? E.game.id : "_");
@@ -69,10 +113,57 @@ static void save_best(const char *id, int score)
     FILE *f = fopen(path, "w");
     if (!f)
         return;
-    for (int i = 0; i < mg_count() && i < 32; i++)
-        if ((g = mg_at(i)) && vals[i] >= 0)
-            fprintf(f, "%s = %d\n", g->id, vals[i]);
+    for (int i = 0; i < n; i++) {
+        if (all[i].story >= 0)
+            fprintf(f, "%s.story = %d\n", mg_at(i)->id, all[i].story);
+        if (all[i].nruns) {
+            fprintf(f, "%s.runs =", mg_at(i)->id);
+            for (int k = 0; k < all[i].nruns; k++)
+                fprintf(f, " %d", all[i].runs[k]);
+            fprintf(f, "\n");
+        }
+    }
     fclose(f);
+}
+
+int mg_scores(const char *id, int *story, int *runs, int max)
+{
+    MgScores all[32];
+    int n = mg_count() < 32 ? mg_count() : 32;
+    load_scores(all, n);
+    *story = -1;
+    for (int i = 0; i < n; i++)
+        if (!strcmp(mg_at(i)->id, id)) {
+            *story = all[i].story;
+            int k = 0;
+            for (; k < all[i].nruns && k < max; k++)
+                runs[k] = all[i].runs[k];
+            return k;
+        }
+    return 0;
+}
+
+int mg_best(const char *id)
+{
+    int story, runs[RUNS_MAX];
+    int n = mg_scores(id, &story, runs, RUNS_MAX);
+    return n > 0 && runs[0] > story ? runs[0] : story;
+}
+
+/* The first story run is kept as it was; free-play runs join the best list. */
+static void record_score(const char *id, int score, bool story)
+{
+    MgScores all[32];
+    int n = mg_count() < 32 ? mg_count() : 32;
+    load_scores(all, n);
+    for (int i = 0; i < n; i++)
+        if (!strcmp(mg_at(i)->id, id)) {
+            if (story && all[i].story < 0)
+                all[i].story = score;
+            else if (!story)
+                add_run(&all[i], score);
+        }
+    save_scores(all, n);
 }
 
 /* ---- random ------------------------------------------------------------------ */
@@ -132,7 +223,8 @@ static void bank_load(const MiniGame *g)
         s32 res = rd_s32(E.game.audio_names + 8 + 8 * i);
         if (!an || strncmp(an, "minigame/", 9) != 0)
             continue;
-        bool shared = !strcmp(an, "minigame/cheat") || !strcmp(an, "minigame/result");
+        bool shared = !strcmp(an, "minigame/cheat") || !strcmp(an, "minigame/result") ||
+                      !strcmp(an, "minigame/board_tick") || !strcmp(an, "minigame/board_land");
         if (!shared && strncmp(an, prefix, strlen(prefix)) != 0)
             continue;
         snprintf(bank_names[bank_n], sizeof(bank_names[0]), "%s", an + 9);
@@ -277,10 +369,15 @@ static void finish(void)
     MG.score = MG.score < 0 ? 0 : (MG.score > 100 ? 100 : MG.score);
     const char *v = MG.game->verdict ? MG.game->verdict() : NULL;
     snprintf(MG.verdict, sizeof(MG.verdict), "%s", v ? v : "");
-    save_best(MG.game->id, MG.score);
+    record_score(MG.game->id, MG.score, MG.from_story);
     /* Only free play posts online: story runs differ in how many cheats you hold. */
     MG.posted = !MG.from_story && lb_post(MG.game->id, MG.score);
     MG.phase = MG_RESULT;
+    MG.rt = 0;
+    MG.board_t0 = -1;
+    MG.scroll = 0;
+    MG.scroll_ticks = 0;
+    MG.landed = false;
     mg_sfx("result");
 }
 
@@ -304,6 +401,88 @@ static void leave(void)
         E.music_res = -1;
         E.screen = SCR_MGMENU;
     }
+}
+
+/* ---- the online board after a free-play run ------------------------------- */
+
+#define BOARD_ROW_H 20
+#define BOARD_TOP 50
+
+/* Index of this console's row in the posted board, or -1. */
+static int board_me(void)
+{
+    if (MG.from_story || !MG.posted || LB_POST.state != LB_DONE || strcmp(LB_POST.game, MG.game->id))
+        return -1;
+    for (int i = 0; i < LB_POST.ntop; i++)
+        if (LB_POST.top[i].me)
+            return i;
+    return -1;
+}
+
+/* After the score has had a moment, scroll from #1 down to your row. */
+static void board_update(void)
+{
+    int me = board_me();
+    if (me < 0)
+        return;
+    if (MG.board_t0 < 0) {
+        if (MG.rt < 1.8f)
+            return;
+        MG.board_t0 = MG.rt;
+    }
+    float target = (float)(me > 4 ? me - 4 : 0);
+    float dur = clampf(1.0f + target * 0.09f, 1.2f, 4.5f);
+    float p = clampf((MG.rt - MG.board_t0) / dur, 0, 1);
+    float e = 1 - (1 - p) * (1 - p) * (1 - p);
+    MG.scroll = target * e;
+    if ((int)MG.scroll > MG.scroll_ticks) {
+        MG.scroll_ticks = (int)MG.scroll;
+        mg_sfx("board_tick");
+    }
+    if (p >= 1 && !MG.landed) {
+        MG.landed = true;
+        mg_sfx("board_land");
+    }
+}
+
+static void draw_board(int eye)
+{
+    char buf[96];
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(18, 16, 38, 255), RGBA(52, 30, 72, 255));
+    float pulse = 0.5f + 0.5f * sinf(MG.rt * 5.0f);
+    for (int i = 0; i < LB_POST.ntop; i++) {
+        float y = BOARD_TOP + ((float)i - MG.scroll) * BOARD_ROW_H;
+        if (y < BOARD_TOP - BOARD_ROW_H || y > TOP_H)
+            continue;
+        const LbEntry *r = &LB_POST.top[i];
+        if (r->rank == 0) {
+            mg_text_centered(eye, ". . .", TOP_W / 2, y + 2, 0.5f, 0.1f, RGBA(180, 180, 210, 255));
+            continue;
+        }
+        float depth = 0.08f;
+        u32 fg = MG_WHITE;
+        if (r->me) {
+            depth = MG.landed ? -0.18f - 0.06f * pulse : -0.05f;
+            mg_rect(eye, 24, y - 1, 352, BOARD_ROW_H - 2, depth + 0.02f,
+                    MG.landed ? RGBA(255, 210, 110, 235) : RGBA(255, 210, 110, 120));
+            fg = MG.landed ? MG_INK : MG_WHITE;
+        } else if (i % 2) {
+            mg_rect(eye, 24, y - 1, 352, BOARD_ROW_H - 2, 0.1f, RGBA(255, 255, 255, 18));
+        }
+        snprintf(buf, sizeof(buf), "#%d", r->rank);
+        mg_text(eye, buf, 82 - gfx_text_width(buf, 0.5f), y + 1, 0.5f, depth, fg);
+        mg_text(eye, r->name, 96, y + 1, 0.5f, depth, fg);
+        snprintf(buf, sizeof(buf), "%d%%", r->score);
+        mg_text(eye, buf, 366 - gfx_text_width(buf, 0.5f), y + 1, 0.5f, depth, fg);
+        if (r->me && MG.landed)
+            mg_text(eye, "You", 300, y + 1, 0.45f, depth, MG_INK);
+    }
+    /* header over the scrolling rows */
+    gfx_rect(0, 0, TOP_W, BOARD_TOP - 4, RGBA(18, 16, 38, 255));
+    mg_text_centered(eye, MG.game->title, TOP_W / 2, 6, 0.6f, -0.12f, MG_GOLD);
+    snprintf(buf, sizeof(buf), "Your run: %d%%     #%d of %d", MG.score, LB_POST.rank, LB_POST.total);
+    mg_text_centered(eye, buf, TOP_W / 2, 28, 0.45f, -0.06f, MG_WHITE);
+    gfx_gradient(0, TOP_H - 14, TOP_W, 14, RGBA(52, 30, 72, 0), RGBA(52, 30, 72, 255));
 }
 
 void mg_update(const Input *in, float dt)
@@ -366,6 +545,8 @@ void mg_update(const Input *in, float dt)
         break;
     }
     case MG_RESULT:
+        MG.rt += dt;
+        board_update();
         if ((in->down & (KEY_A_ | KEY_B_)) || touched(in, 90, 196, 140, 36))
             leave();
         break;
@@ -402,6 +583,10 @@ void mg_draw_top(int eye)
         }
         break;
     case MG_RESULT: {
+        if (MG.board_t0 >= 0) {
+            draw_board(eye);
+            break;
+        }
         snprintf(buf, sizeof(buf), "%s", g->title);
         card(eye, buf, "");
         snprintf(buf, sizeof(buf), "%d%%", MG.score);

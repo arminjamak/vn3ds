@@ -27,3 +27,6 @@ examples/music/snapshot_soundtrack_review.mp3
 
 # rendered playthrough videos
 renders/
+
+# real leaderboard key and server address (never commit)
+engine/source/leaderboard_secret.h

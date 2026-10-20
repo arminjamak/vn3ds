@@ -15,13 +15,15 @@
  * apart, and may set `name = ...` to override the player name (the 3DS
  * profile nickname; "Desktop" on the desktop build). */
 
-#define LB_TOP_MAX 10
+#define LB_TOP_MAX 10    /* rows in a menu top list */
+#define LB_BOARD_MAX 48  /* rows a post's reply can carry (the board around you) */
 #define LB_NAME_MAX 16
 
 typedef enum { LB_IDLE, LB_BUSY, LB_DONE, LB_FAILED } LbState;
 
 typedef struct {
-    int rank, score;
+    int rank, score;   /* rank 0 marks a gap ("...") in a board */
+    bool me;           /* boards: this console's entry */
     char name[LB_NAME_MAX + 1];
 } LbEntry;
 
@@ -30,7 +32,7 @@ typedef struct {
     char game[24];          /* the game this request is about */
     int score;              /* posts: the score sent */
     int rank, total;        /* posts, when done: rank of the player's best, entries */
-    LbEntry top[LB_TOP_MAX];/* top lists, when done */
+    LbEntry top[LB_BOARD_MAX]; /* top lists; for posts, the board around the player */
     int ntop;
     char error[80];         /* when failed: a short reason for the screen */
 } LbJob;

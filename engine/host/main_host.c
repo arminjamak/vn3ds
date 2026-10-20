@@ -198,7 +198,8 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
                 app_render();
                 dump(out, shots++, "result");
             }
-            if (result_frames > 120)
+            /* stay long enough for the online board to scroll to you */
+            if (result_frames > (MG.posted ? 480 : 120))
                 in.down = KEY_A_;
         }
         in.held |= in.down;   /* the bot may also hold keys (e.g. a stylus) */
@@ -207,7 +208,7 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
         if (rec && frame % 2 == 0)
             record_frame(rec);
         if (out && frame % every == 0 && E.screen == SCR_MINIGAME)
-            dump(out, shots++, MG.phase == MG_INTRO ? "intro" : "play");
+            dump(out, shots++, MG.phase == MG_INTRO ? "intro" : MG.phase == MG_RESULT ? "result" : "play");
         if (E.screen != SCR_MINIGAME)
             break;
     }
@@ -518,6 +519,30 @@ int main(int argc, char **argv)
                 }
             } else {
                 wait = 0;
+            }
+        } else if (E.screen == SCR_MINIGAME) {
+            /* a minigame started by the script: play it with its bot */
+            static int mg_frames;
+            mg_frames++;
+            if (MG.phase == MG_INTRO) {
+                if (mg_frames % 90 == 0)
+                    in.down = KEY_A_;
+            } else if (MG.phase == MG_PLAY) {
+                if (MG.game->bot)
+                    MG.game->bot(&in, MG.t);
+                else if (mg_frames % 30 == 0)
+                    in.down = KEY_A_;
+                in.held |= in.down;
+            } else if (MG.phase == MG_RESULT) {
+                if (mg_frames % 120 == 0) {
+                    printf("    [minigame] %s: %d%%%s%s\n", MG.game->id, MG.score,
+                           MG.verdict[0] ? " - " : "", MG.verdict);
+                    if (out) {
+                        app_render();
+                        dump(out, shots++, "minigame");
+                    }
+                    in.down = KEY_A_;
+                }
             }
         } else if (E.screen == SCR_GAME && E.tr.active && every > 0 && out &&
                    (int)(E.tr.t * 60) % every == every / 2) {

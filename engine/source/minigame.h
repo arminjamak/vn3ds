@@ -74,6 +74,11 @@ typedef struct {
     int score;
     int best_before;
     char verdict[128];
+    float rt;             /* seconds on the result screen */
+    float board_t0;       /* when the online board started scrolling (-1: not yet) */
+    float scroll;         /* board scroll position, in rows */
+    int scroll_ticks;
+    bool landed;
     s32 music_before;     /* story music to restore afterwards */
     bool music_loop_before;
     int pause_sel;
@@ -89,6 +94,9 @@ void mg_draw_top(int eye);
 void mg_draw_bottom(void);
 /* Best score for a game in the loaded game's save folder, -1 if none. */
 int mg_best(const char *id);
+/* Your own scores for a game: the first story run (-1 if not played yet)
+ * and the best free-play runs, best first (returns how many). */
+int mg_scores(const char *id, int *story, int *runs, int max);
 
 /* ---- helpers for games ---------------------------------------------------- */
 
