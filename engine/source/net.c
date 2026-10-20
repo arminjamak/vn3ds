@@ -477,13 +477,8 @@ static void live_path(const char *rel, char *out, size_t len)
 }
 
 /* True if the card already holds this exact file (same size and CRC-32). */
-static bool have_file(void)
+static bool file_matches(const char *full)
 {
-    if (!path_allowed(path))
-        return false;
-    note_game(path);
-    char full[400];
-    live_path(path, full, sizeof(full));   /* compare with what the game uses */
     struct stat st;
     if (stat(full, &st) != 0 || (u64)st.st_size != file_size)
         return false;   /* missing or a different size: no need to read it */
@@ -500,6 +495,25 @@ static bool have_file(void)
     }
     fclose(f);
     return total == file_size && (u32)crc == file_crc;
+}
+
+static bool have_file(void)
+{
+    if (!path_allowed(path))
+        return false;
+    note_game(path);
+    char live[400], target[400];
+    live_path(path, live, sizeof(live));
+    bool staged_before = NET.staged;
+    target_path(path, target, sizeof(target));
+    NET.staged = staged_before;   /* only asking where it would go */
+    if (strcmp(live, target) != 0) {
+        /* the game is open: an update for it may already be waiting */
+        if (file_matches(target))
+            return true;
+        remove(target);   /* stale: it would overwrite the live file on the next load */
+    }
+    return file_matches(live);
 }
 
 static void feed(const u8 *p, size_t n)
