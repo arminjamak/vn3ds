@@ -2,11 +2,14 @@
  * updates) straight onto the SD card.
  *
  * Protocol (TCP, little-endian), one connection per transfer:
- *   client: "VN3D" u32 version(1) u32 file_count u64 total_bytes
+ *   client: "VN3D" u32 version(1 or 2) u32 file_count u64 total_bytes
  *   per file: u16 path_len, path (relative to the vn3ds root, '/'
- *             separated), u64 size, data
+ *             separated), u64 size, [v2: u32 crc32], data
  *   server, after each file: u8 status (0 ok, 1 refused, 2 write error)
  *   server, at the end:      "DONE"
+ * Version 2 lets updates skip what the card already has: after a file's
+ * size and CRC the server answers 3 ("have it": no data follows, and that 3
+ * is the file's status) or 4 ("send it": data follows, then the status).
  *
  * Paths are restricted to games/<id>/... and the engine file itself, so a
  * client can't write anywhere else on the card. The main loop only accepts
@@ -26,6 +29,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <zlib.h>
 
 #ifdef __3DS__
 #include <3ds.h>
@@ -66,6 +70,9 @@ static size_t got, need;
 static char path[300];
 static u16 path_len;
 static u64 file_size, file_done;
+static u32 proto, file_crc;
+static void target_path(const char *rel, char *out, size_t len);
+static void live_path(const char *rel, char *out, size_t len);
 static FILE *out;
 static char tmp_path[400], final_path[400];
 
@@ -122,8 +129,19 @@ void net_soc_release(void)
 #endif
 }
 
+/* The game that is open right now: files for it are staged in
+ * updates/<id>/ instead of overwriting what it is reading. */
+static char live_game[64];
+
+void net_set_live_game(const char *id)
+{
+    snprintf(live_game, sizeof(live_game), "%s", id ? id : "");
+}
+
 bool net_start(int port)
 {
+    if (listen_fd >= 0)
+        return true;   /* already listening (in the background) */
     memset(&NET, 0, sizeof(NET));
     NET.port = port;
     if (!rx_soc) {
@@ -225,13 +243,7 @@ static void begin_file(void)
         NET.refused++;
         return;
     }
-    if (!strcmp(path, "vn3ds.3dsx")) {
-        /* the engine lives beside its folder: sdmc:/3ds/vn3ds.3dsx */
-        const char *slash = strrchr(E.root, '/');
-        int n = slash ? (int)(slash - E.root) : (int)strlen(E.root);
-        snprintf(final_path, sizeof(final_path), "%.*s/vn3ds.3dsx", n, E.root);
-    } else
-        snprintf(final_path, sizeof(final_path), "%s/%s", E.root, path);
+    target_path(path, final_path, sizeof(final_path));
     snprintf(tmp_path, sizeof(tmp_path), "%s.part", final_path);
     make_dirs(final_path);
     out = fopen(tmp_path, "wb");
@@ -323,6 +335,65 @@ static void end_file(void)
     reply(code);
 }
 
+static void finish_transfer(void)
+{
+    send(conn_fd, "DONE", 4, 0);
+    set_status("Done: %s", NET.last_game[0] ? NET.last_game : "vn3ds updated");
+    NET.receiving = false;
+    NET.completed++;
+}
+
+/* Where an incoming path ends up on the card. */
+static void live_path(const char *rel, char *out, size_t len);
+
+/* Where an incoming file is written: like live_path(), except that files of
+ * the game being played go to updates/<id>/ until it is restarted. */
+static void target_path(const char *rel, char *out, size_t len)
+{
+    size_t n = strlen(live_game);
+    if (n && !strncmp(rel, "games/", 6) && !strncmp(rel + 6, live_game, n) && rel[6 + n] == '/') {
+        snprintf(out, len, "%s/updates/%s/%s", E.root, live_game, rel + 7 + n);
+        NET.staged = true;
+        return;
+    }
+    live_path(rel, out, len);
+}
+
+/* Where a file lives on the card. */
+static void live_path(const char *rel, char *out, size_t len)
+{
+    if (!strcmp(rel, "vn3ds.3dsx")) {
+        /* the engine lives beside its folder: sdmc:/3ds/vn3ds.3dsx */
+        const char *slash = strrchr(E.root, '/');
+        int n = slash ? (int)(slash - E.root) : (int)strlen(E.root);
+        snprintf(out, len, "%.*s/vn3ds.3dsx", n, E.root);
+    } else {
+        snprintf(out, len, "%s/%s", E.root, rel);
+    }
+}
+
+/* True if the card already holds this exact file (same size and CRC-32). */
+static bool have_file(void)
+{
+    if (!path_allowed(path))
+        return false;
+    char full[400];
+    live_path(path, full, sizeof(full));   /* compare with what the game uses */
+    FILE *f = fopen(full, "rb");
+    if (!f)
+        return false;
+    static u8 buf[32 * 1024];
+    uLong crc = crc32(0L, Z_NULL, 0);
+    u64 total = 0;
+    size_t r;
+    while ((r = fread(buf, 1, sizeof(buf), f)) > 0) {
+        crc = crc32(crc, buf, (uInt)r);
+        total += r;
+    }
+    fclose(f);
+    return total == file_size && (u32)crc == file_crc;
+}
+
 static void feed(const u8 *p, size_t n)
 {
     while (n > 0) {
@@ -339,7 +410,8 @@ static void feed(const u8 *p, size_t n)
                 return;
             got = 0;
             if (state == ST_HEADER) {
-                if (memcmp(hdr, "VN3D", 4) != 0 || rd_u32(hdr + 4) != 1) {
+                proto = rd_u32(hdr + 4);
+                if (memcmp(hdr, "VN3D", 4) != 0 || (proto != 1 && proto != 2)) {
                     set_status("Unknown sender (update vn3ds-port?)", NULL);
                     close_conn();
                     return;
@@ -360,6 +432,22 @@ static void feed(const u8 *p, size_t n)
                 need = path_len;
             } else {
                 memcpy(&file_size, hdr, 8);
+                if (proto == 2) {
+                    file_crc = rd_u32(hdr + 8);
+                    path[path_len] = 0;
+                    if (have_file()) {   /* identical file already on the card */
+                        reply(3);
+                        NET.files_done++;
+                        NET.skipped++;
+                        NET.bytes_done += file_size;
+                        state = ST_PATHLEN;
+                        need = 2;
+                        if (NET.files_done + NET.refused >= NET.files_total)
+                            finish_transfer();
+                        break;
+                    }
+                    reply(4);
+                }
                 begin_file();
                 state = ST_DATA;
                 if (file_size == 0) {
@@ -380,7 +468,7 @@ static void feed(const u8 *p, size_t n)
                 return;
             got = 0;
             state = ST_SIZE;
-            need = 8;
+            need = proto == 2 ? 12 : 8;
             break;
         }
         case ST_DATA: {
@@ -395,12 +483,8 @@ static void feed(const u8 *p, size_t n)
                 end_file();
                 state = ST_PATHLEN;
                 need = 2;
-                if (NET.files_done + NET.refused >= NET.files_total) {
-                    send(conn_fd, "DONE", 4, 0);
-                    set_status("Done: %s", NET.last_game[0] ? NET.last_game : "vn3ds updated");
-                    NET.receiving = false;
-                    NET.completed++;
-                }
+                if (NET.files_done + NET.refused >= NET.files_total)
+                    finish_transfer();
             }
             break;
         }
@@ -472,7 +556,8 @@ void net_poll(void)
     state = ST_HEADER;
     got = 0;
     need = 20;
-    NET.files_done = NET.refused = 0;
+    NET.files_done = NET.refused = NET.skipped = 0;
+    NET.staged = false;
     NET.bytes_done = 0;
     NET.last_game[0] = 0;
     set_status("Connected", NULL);

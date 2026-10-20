@@ -1150,9 +1150,9 @@ static void draw_dot(int eye, const Dot *d)
 
 /* ---- Miso ---------------------------------------------------------------------------------- */
 
-#define FUR RGBA(150, 150, 162, 255)
-#define FUR_DARK RGBA(96, 96, 110, 255)
-#define FUR_WHITE RGBA(244, 244, 248, 255)
+#define FUR RGBA(236, 150, 62, 255)          /* orange, like the story sprites */
+#define FUR_DARK RGBA(196, 108, 38, 255)
+#define FUR_WHITE RGBA(252, 238, 214, 255)
 #define EAR_PINK RGBA(240, 160, 170, 255)
 
 static void draw_head(int eye, float hx, float hy, float k, float d, float f, int eyes)
@@ -1245,7 +1245,7 @@ static void draw_miso(int eye)
     }
 
     if (napping && !moving && S.pounce_t <= 0) {
-        /* curled up in a grey ball */
+        /* curled up in a ball */
         ell(eye, bx, by - 7 * k, 13 * k, 8.5f * k, d, FUR, 14);
         for (int i = -1; i <= 1; i++)
             mg_line(eye, bx + i * 5 * k, by - 15 * k, bx + i * 5 * k - f * 1.5f * k, by - 10 * k, 1.6f * k,

@@ -4,6 +4,10 @@
 #include "net.h"
 #include "video.h"
 
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 bool app_start_receiving;
 
 Engine E;
@@ -17,6 +21,7 @@ const int NUM_TEXT_SPEEDS = (int)ARRAY_LEN(TEXT_SPEEDS);
 #define CENTER_TEXT_W 340.0f
 
 static void run_vm(void);
+static void touch_buttons(const Input *in);
 
 /* ---- autoplay (testing in emulators) ------------------------------------
  * If <root>/autoplay.cfg exists the engine plays by itself:
@@ -147,17 +152,61 @@ static void unload_game(void)
     vm_free(&E.vm);
     game_free(&E.game);
     E.loaded = false;
+    net_set_live_game(NULL);
+}
+
+/* Moves everything under `src` into `dst` (same card), replacing files. */
+static void move_tree(const char *src, const char *dst)
+{
+    DIR *d = opendir(src);
+    if (!d)
+        return;
+    mkdir(dst, 0755);
+    struct dirent *e;
+    char from[512], to[512];
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.')
+            continue;
+        snprintf(from, sizeof(from), "%s/%s", src, e->d_name);
+        snprintf(to, sizeof(to), "%s/%s", dst, e->d_name);
+        struct stat st;
+        if (stat(from, &st) != 0)
+            continue;
+        if (S_ISDIR(st.st_mode)) {
+            move_tree(from, to);
+        } else if (!strstr(e->d_name, ".part")) {
+            remove(to);
+            rename(from, to);
+        }
+    }
+    closedir(d);
+    rmdir(src);
+}
+
+/* An update received while the game was open waits in updates/<id>/. */
+static void apply_staged_update(const char *id)
+{
+    char staged[400], live[400];
+    snprintf(staged, sizeof(staged), "%s/updates/%s", E.root, id);
+    struct stat st;
+    if (stat(staged, &st) != 0)
+        return;
+    snprintf(live, sizeof(live), "%s/games/%s", E.root, id);
+    LOG("applying the update received for %s", id);
+    move_tree(staged, live);
 }
 
 static bool load_game_dir(const char *dir, const char *id)
 {
     unload_game();
+    apply_staged_update(id);
     char err[256];
     if (!game_load(&E.game, dir, id, err, sizeof(err))) {
         app_error(err);
         return false;
     }
     E.loaded = true;
+    net_set_live_game(id);
     vm_init(&E.vm, &E.game);
     talk_load_bank();
     E.music_res = -1;
@@ -188,13 +237,18 @@ void app_init(const char *game_dir)
     if (game_dir) {
         const char *slash = strrchr(game_dir, '/');
         load_game_dir(game_dir, slash ? slash + 1 : game_dir);
+        if (!app_start_receiving)
+            net_start(NET_PORT);
         return;
     }
     app_rescan_games();
     if (app_start_receiving)
         app_receive_open();
-    else if (E.ngames == 1 && !AP.on)
-        app_load_game(0);
+    else {
+        net_start(NET_PORT);   /* listen in the background: games can arrive any time */
+        if (E.ngames == 1 && !AP.on)
+            app_load_game(0);
+    }
 }
 
 void app_rescan_games(void)
@@ -217,7 +271,7 @@ void app_receive_open(void)
 
 void app_receive_close(void)
 {
-    net_stop();
+    /* keep listening in the background */
     app_rescan_games();
     E.screen = SCR_GAMELIST;
 }
@@ -718,6 +772,83 @@ static void touch_buttons(const Input *in)
     }
 }
 
+/* ---- receiving while playing ------------------------------------------------ */
+
+static u32 rx_seen;
+static bool rx_paused_audio;
+
+static void rx_resume_audio(void)
+{
+    if (rx_paused_audio)
+        audio_pause(CH_MUSIC, false);
+    rx_paused_audio = false;
+}
+
+void app_rx_continue(void)
+{
+    E.rx_overlay = 0;
+    rx_resume_audio();
+}
+
+/* Save the story if one is running, then open the received game (or restart
+ * the open one with its update). */
+void app_rx_play(void)
+{
+    char id[64];
+    snprintf(id, sizeof(id), "%s", E.rx_game);
+    rx_resume_audio();
+    E.rx_overlay = 0;
+    if (E.loaded && E.screen == SCR_GAME && !E.rx_staged && save_write(SLOTS_PER_PAGE * SLOT_PAGES))
+        app_toast("Your story was saved in the last slot.");
+    for (int i = 0; i < E.ngames; i++)
+        if (!strcmp(E.games[i], id)) {
+            app_load_game(i);
+            return;
+        }
+}
+
+/* Called every frame: keeps the background receiver going and, when a
+ * transfer arrives outside the Receive screen, pauses everything under a
+ * progress overlay. Returns true while the overlay owns the frame. */
+static bool rx_overlay_update(const Input *in)
+{
+    net_poll();
+    if (NET.completed != rx_seen) {
+        rx_seen = NET.completed;
+        app_rescan_games();
+        if (E.screen != SCR_RECEIVE) {
+            snprintf(E.rx_game, sizeof(E.rx_game), "%s", NET.last_game);
+            E.rx_staged = NET.staged;
+            E.rx_engine = NET.engine_updated;
+            E.rx_overlay = 2;
+        }
+    }
+    if (E.screen == SCR_RECEIVE)
+        return false;
+    if (!E.rx_overlay && NET.receiving) {
+        E.rx_overlay = 1;
+        if (!rx_paused_audio) {
+            audio_pause(CH_MUSIC, true);
+            rx_paused_audio = true;
+        }
+        talk_end();
+    }
+    if (E.rx_overlay == 1 && !NET.receiving && NET.completed == rx_seen)
+        E.rx_overlay = 3;   /* the sender went away */
+    if (!E.rx_overlay)
+        return false;
+    touch_buttons(in);
+    if (E.rx_overlay >= 2) {
+        bool can_play = E.rx_overlay == 2 && E.rx_game[0] &&
+                        (!E.loaded || strcmp(E.rx_game, E.game.id) || E.rx_staged);
+        if ((in->down & KEY_A_) && can_play)
+            app_rx_play();
+        else if (in->down & (KEY_A_ | KEY_B_))
+            app_rx_continue();
+    }
+    return true;
+}
+
 void app_update(const Input *in_real, float dt)
 {
     Input in_copy = *in_real;
@@ -730,6 +861,8 @@ void app_update(const Input *in_real, float dt)
         E.toast_t -= dt;
     audio_update(dt);
     lb_poll();
+    if (rx_overlay_update(in))
+        return;   /* a transfer is on screen: the game waits */
 
     Screen before = E.screen;
     Overlay ov_before = E.overlay;
@@ -739,12 +872,6 @@ void app_update(const Input *in_real, float dt)
 
     switch (E.screen) {
     case SCR_RECEIVE: {
-        static u32 seen;
-        net_poll();
-        if (NET.completed != seen) {
-            seen = NET.completed;
-            app_rescan_games();
-        }
         if (in->down & (KEY_B_ | KEY_START_))
             app_receive_close();
         break;

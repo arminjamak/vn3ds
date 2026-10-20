@@ -21,6 +21,7 @@ import struct
 import subprocess
 import sys
 import time
+import zlib
 
 VN3DS_PORT = 5555
 
@@ -80,7 +81,15 @@ def _load_done(path):
         return 0
 
 
-def _send_batch(host, files, start, progress, port, timeout, state):
+def _crc32(path):
+    crc = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            crc = zlib.crc32(chunk, crc)
+    return crc & 0xFFFFFFFF
+
+
+def _send_batch(host, files, start, progress, port, timeout, state, proto=2):
     """Send files[start:] over one connection; progress["done"] counts the
     files the 3DS has confirmed so far (it survives an exception)."""
     batch = files[start:]
@@ -92,14 +101,26 @@ def _send_batch(host, files, start, progress, port, timeout, state):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 20)
     sock.settimeout(90)
     try:
-        sock.sendall(b"VN3D" + struct.pack("<IIQ", 1, len(batch), total))
+        sock.sendall(b"VN3D" + struct.pack("<IIQ", proto, len(batch), total))
         done = 0
         t0 = time.time()
         last = 0
         for remote, local in batch:
             size = os.path.getsize(local)
             name = remote.encode("utf-8")
-            sock.sendall(struct.pack("<H", len(name)) + name + struct.pack("<Q", size))
+            head = struct.pack("<H", len(name)) + name + struct.pack("<Q", size)
+            if proto == 2:
+                sock.sendall(head + struct.pack("<I", _crc32(local)))
+                if _recv_exact(sock, 1)[0] == 3:   # the 3DS already has this exact file
+                    progress["sent"] += 1
+                    progress["skipped"] = progress.get("skipped", 0) + 1
+                    progress["done"] += 1
+                    done += size
+                    with open(state, "w") as f:
+                        f.write(str(progress["done"]))
+                    continue
+            else:
+                sock.sendall(head)
             with open(local, "rb") as f:
                 while True:
                     chunk = f.read(64 * 1024)
@@ -141,10 +162,14 @@ def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8):
         say(f"resuming: the first {start} of {len(files)} files are already on the 3DS")
     else:
         start = 0
-    progress = {"done": start, "sent": 0, "refused": 0}
+    progress = {"done": start, "sent": 0, "refused": 0, "skipped": 0}
+    proto = 2
     for attempt in range(retries + 1):
+        before = progress["done"]
         try:
-            _send_batch(host, files, progress["done"], progress, port, timeout, state)
+            _send_batch(host, files, progress["done"], progress, port, timeout, state, proto)
+            if progress["skipped"]:
+                say(f"{progress['skipped']} unchanged files were already on the 3DS and skipped")
             try:
                 os.remove(state)
             except OSError:
@@ -152,6 +177,12 @@ def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8):
             return progress["sent"] + start, progress["refused"]
         except (OSError, ConnectionError) as e:
             print()
+            if proto == 2 and progress["done"] == before and isinstance(e, ConnectionError):
+                # an older vn3ds hangs up on protocol 2: send everything the old way
+                say("this vn3ds is older: sending every file (update it with --install)")
+                proto = 1
+                time.sleep(1)
+                continue
             if attempt == retries:
                 say(f"giving up after {retries} reconnects; run the same command again to resume")
                 raise
@@ -180,7 +211,7 @@ def install_via_3dslink(host, engine):
     # argv[0] tells vn3ds it was started over the network, so it opens its
     # receiver and can save itself to the SD card.
     cmd = [tool, engine, "-0", "3dslink:/vn3ds.3dsx", "-r", "10"] + (["-a", host] if host else [])
-    for attempt in range(30):
+    for attempt in range(90):   # about three minutes to open the netloader
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode == 0:
             say("vn3ds sent and started")

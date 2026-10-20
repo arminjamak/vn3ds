@@ -394,6 +394,23 @@ int main(int argc, char **argv)
     for (int frame = 0; frame < 60 * 60 * 60 * 12; frame++) { /* up to 12 hours of game time */
         memset(&in, 0, sizeof(in));
         host_now = frame * (double)dt;
+        if (E.rx_overlay) {
+            /* a transfer arrived mid-story: watch the overlay, then carry on */
+            static int rxf;
+            rxf++;
+            if (out && rxf % 30 == 1) {
+                app_render();
+                dump(out, shots++, "rx");
+            }
+            if (E.rx_overlay >= 2 && rxf > 150) {
+                printf("    [rx] received %s%s; continuing\n", E.rx_game, E.rx_staged ? " (staged update)" : "");
+                in.down = KEY_B_;
+                rxf = 0;
+            }
+            app_update(&in, dt);
+            app_render();
+            continue;
+        }
         if (stop_addr >= 0 && vm_watch_hit) {
             printf("== reached %s ==\n", stop_label);
             break;

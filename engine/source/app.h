@@ -101,6 +101,13 @@ typedef struct {
     int prefs_sel;
     int title_sel;
     int mg_sel;
+
+    /* A Wi-Fi transfer that arrives while playing: 0 none, 1 receiving,
+     * 2 finished, 3 the connection was lost. The game is paused meanwhile. */
+    int rx_overlay;
+    char rx_game[64];     /* the game that was received */
+    bool rx_staged;       /* it was an update to the open game (applies on restart) */
+    bool rx_engine;       /* vn3ds itself was updated */
     bool mg_board;   /* Minigames menu: the online leaderboard is showing */
     char toast[96];
     float toast_t;
@@ -120,6 +127,9 @@ void app_init(const char *game_dir);
 /* Wi-Fi receive screen (games and engine updates from vn3ds-port --3ds). */
 void app_receive_open(void);
 void app_receive_close(void);
+/* Buttons of the transfer overlay (ui.c draws them). */
+void app_rx_continue(void);
+void app_rx_play(void);
 void app_rescan_games(void);
 extern bool app_start_receiving; /* set before app_init, e.g. when launched via 3dslink */
 void app_update(const Input *in, float dt);

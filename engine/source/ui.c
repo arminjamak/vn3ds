@@ -7,7 +7,7 @@
 
 enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
-    B_MG = 60, B_MG_BACK = 90, B_MG_BOARD = 91,
+    B_MG = 60, B_MG_BACK = 90, B_RX_CONTINUE = 92, B_RX_PLAY = 93, B_MG_BOARD = 91,
     B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
     B_TO_TITLE = 30,
@@ -184,9 +184,44 @@ int ui_title_items(int *ids)
     return n;
 }
 
+/* Title of a game in the list by folder id. */
+static const char *game_title_of(const char *id)
+{
+    for (int i = 0; i < E.ngames; i++)
+        if (!strcmp(E.games[i], id))
+            return E.game_titles[i];
+    return id;
+}
+
+static bool rx_can_play(void)
+{
+    return E.rx_overlay == 2 && E.rx_game[0] &&
+           (!E.loaded || strcmp(E.rx_game, E.game.id) || E.rx_staged);
+}
+
 int ui_buttons(Button *b, int max)
 {
     int n = 0;
+    if (E.rx_overlay == 1)
+        return 0;
+    if (E.rx_overlay >= 2) {
+        static char play[80];
+        if (rx_can_play()) {
+            bool same = E.loaded && !strcmp(E.rx_game, E.game.id);
+            if (same)
+                snprintf(play, sizeof(play), "Restart with the update");
+            else
+                snprintf(play, sizeof(play), "%s %s", E.loaded && E.screen == SCR_GAME ? "Save & play" : "Play",
+                         game_title_of(E.rx_game));
+            n = add(b, n, max, 12, 196, 140, 36, same ? "B: Keep playing" : "B: Continue", B_RX_CONTINUE);
+            n = add(b, n, max, 160, 196, 148, 36, play, B_RX_PLAY);
+            b[n - 1].hot = true;
+        } else {
+            n = add(b, n, max, 90, 196, 140, 36, "A: Continue", B_RX_CONTINUE);
+            b[n - 1].hot = true;
+        }
+        return n;
+    }
     switch (E.screen) {
     case SCR_MGMENU: {
         static char labels[16][96];
@@ -377,6 +412,8 @@ void ui_activate(int id)
         break;
     case B_TITLE_QUIT: E.quit = true; break;
     case B_TITLE_MINI: E.screen = SCR_MGMENU; break;
+    case B_RX_CONTINUE: app_rx_continue(); break;
+    case B_RX_PLAY: app_rx_play(); break;
     case B_MG_BACK:
         if (E.mg_board)
             E.mg_board = false;
@@ -688,6 +725,85 @@ static void draw_title_top(int eye)
     }
 }
 
+static void header(const char *title);
+
+/* ---- the transfer overlay ------------------------------------------------- */
+
+static void rx_progress_text(char *out, size_t len)
+{
+    if (NET.skipped)
+        snprintf(out, len, "%u / %u files  (%u unchanged)\n%.1f / %.1f MB", (unsigned)NET.files_done,
+                 (unsigned)NET.files_total, (unsigned)NET.skipped, NET.bytes_done / 1048576.0,
+                 NET.bytes_total / 1048576.0);
+    else
+        snprintf(out, len, "%u / %u files\n%.1f / %.1f MB", (unsigned)NET.files_done,
+                 (unsigned)NET.files_total, NET.bytes_done / 1048576.0, NET.bytes_total / 1048576.0);
+}
+
+static const char *rx_headline(char *buf, size_t len)
+{
+    const char *title = game_title_of(E.rx_game);
+    if (E.rx_overlay == 1)
+        return "Receiving over Wi-Fi";
+    if (E.rx_overlay == 3)
+        return "The transfer was interrupted";
+    if (!E.rx_game[0] && E.rx_engine)
+        return "vn3ds was updated";
+    if (E.rx_staged)
+        snprintf(buf, len, "An update for %s arrived", title);
+    else
+        snprintf(buf, len, "%s is on your 3DS", title);
+    return buf;
+}
+
+static void draw_rx_top(int eye)
+{
+    char buf[200], head[160];
+    gfx_rect(0, 0, TOP_W, TOP_H, RGBA(8, 8, 16, 165));
+    float dx = shift(eye, -0.3f);
+    gfx_rect(50 + dx, 64, 300, 112, RGBA(30, 28, 52, 235));
+    gfx_rect(50 + dx, 64, 300, 3, RGBA(255, 210, 110, 255));
+    const char *h = rx_headline(head, sizeof(head));
+    text_centered(h, 200 + dx, 78, fit_scale(h, 0.62f, 280), RGBA(255, 210, 110, 255));
+    if (E.rx_overlay == 1) {
+        float p = NET.bytes_total ? (float)((double)NET.bytes_done / (double)NET.bytes_total) : 0;
+        gfx_rect(72 + dx, 112, 256, 10, RGBA(255, 255, 255, 40));
+        gfx_rect(72 + dx, 112, 256 * clampf(p, 0, 1), 10, RGBA(255, 210, 110, 255));
+        rx_progress_text(buf, sizeof(buf));
+        text_centered(buf, 200 + dx, 130, 0.45f, WHITE);
+    } else if (E.rx_overlay == 3) {
+        text_centered("Run the same command again\nto carry on where it stopped.", 200 + dx, 112, 0.45f, WHITE);
+    } else if (E.rx_staged) {
+        text_centered("Keep playing this version, or restart\nnow to use the update.", 200 + dx, 112, 0.45f,
+                      WHITE);
+    } else if (!E.rx_game[0] && E.rx_engine) {
+        text_centered("Restart vn3ds from the Homebrew\nLauncher to use the new version.", 200 + dx, 112, 0.45f,
+                      WHITE);
+    } else {
+        text_centered(E.loaded && E.screen == SCR_GAME ? "Keep playing, or save and play it now."
+                                                       : "Play it now, or carry on.", 200 + dx, 116, 0.45f, WHITE);
+    }
+}
+
+static void draw_rx_bottom(void)
+{
+    char buf[200], head[160];
+    gfx_rect(0, 0, BOT_W, BOT_H, RGBA(8, 8, 16, 190));
+    header(rx_headline(head, sizeof(head)));
+    if (E.rx_overlay == 1) {
+        float p = NET.bytes_total ? (float)((double)NET.bytes_done / (double)NET.bytes_total) : 0;
+        gfx_rect(20, 60, 280, 14, RGBA(255, 255, 255, 40));
+        gfx_rect(20, 60, 280 * clampf(p, 0, 1), 14, RGBA(255, 210, 110, 255));
+        rx_progress_text(buf, sizeof(buf));
+        gfx_text(buf, 20, 84, 0.45f, WHITE);
+        const char *cur = strrchr(NET.current, '/');
+        snprintf(buf, sizeof(buf), "%s", cur ? cur + 1 : NET.current);
+        gfx_text(buf, 20, 124, 0.42f, RGBA(180, 180, 210, 255));
+        gfx_text("Your game is paused and carries on\nwhen the transfer is done.", 20, 156, 0.42f,
+                 RGBA(180, 180, 210, 255));
+    }
+}
+
 void ui_draw_top(int eye)
 {
     switch (E.screen) {
@@ -764,6 +880,8 @@ void ui_draw_top(int eye)
         break;
     }
     }
+    if (E.rx_overlay)
+        draw_rx_top(eye);
     draw_toast(eye);
 }
 
@@ -895,6 +1013,13 @@ void ui_draw_bottom(void)
 {
     gfx_gradient(0, 0, BOT_W, BOT_H, RGBA(34, 34, 50, 255), RGBA(16, 16, 24, 255));
     Button b[48];
+    if (E.rx_overlay) {
+        draw_rx_bottom();
+        int nb = ui_buttons(b, 48);
+        for (int i = 0; i < nb; i++)
+            draw_button(&b[i]);
+        return;
+    }
     int n;
     switch (E.screen) {
     case SCR_RECEIVE:

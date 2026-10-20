@@ -20,3 +20,16 @@ screen vn3ds_minigame_stand_in(name):
             textbutton "Brilliantly" action Return(85)
             textbutton "All right" action Return(55)
             textbutton "Badly" action Return(25)
+
+# Lists every minigame Snapshot uses, so the title screen's Minigames menu has
+# them all from the start (the story reaches each one in its own chapter).
+# Nothing jumps here.
+label vn3ds_all_minigames:
+    $ _mg = vn3ds_minigame("quiz")
+    $ _mg = vn3ds_minigame("miso")
+    $ _mg = vn3ds_minigame("draw")
+    $ _mg = vn3ds_minigame("lantern")
+    $ _mg = vn3ds_minigame("snake")
+    $ _mg = vn3ds_minigame("tower")
+    $ _mg = vn3ds_minigame("invaders")
+    return
