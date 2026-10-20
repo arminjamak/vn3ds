@@ -15,7 +15,9 @@
 # $env:VN3DS_DOWNLOAD_URL replaces where the download comes from (for testing).
 # This file is plain ASCII on purpose (no byte order mark).
 
-param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GameArgs)
+# No param() block on purpose: with one, PowerShell would take options meant
+# for vn3ds-port (like -o) as its own common parameters (-OutVariable...).
+$GameArgs = @($args)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Windows PowerShell's progress bar makes downloads crawl
@@ -121,7 +123,7 @@ try {
 $pass = @()
 foreach ($a in $GameArgs) {
     if ($null -eq $a) { continue }
-    $p = $a.Trim()
+    $p = ([string]$a).Trim()
     if ($p.Length -ge 2 -and (($p[0] -eq '"' -and $p[-1] -eq '"') -or ($p[0] -eq "'" -and $p[-1] -eq "'"))) {
         $p = $p.Substring(1, $p.Length - 2)
     }

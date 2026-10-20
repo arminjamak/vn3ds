@@ -62,7 +62,9 @@ def main():
         path = os.path.join(dl, url.rsplit("/", 1)[1])
         if not (os.path.exists(path) and sha256(path) == want):
             print(f"downloading {url}", flush=True)
-            with urllib.request.urlopen(url) as r, open(path + ".part", "wb") as f:
+            # martin-riedl.de answers Python's default User-Agent with 403
+            req = urllib.request.Request(url, headers={"User-Agent": "vn3ds-build (fetch_ffmpeg.py)"})
+            with urllib.request.urlopen(req) as r, open(path + ".part", "wb") as f:
                 shutil.copyfileobj(r, f, 1 << 20)
             os.replace(path + ".part", path)
         got = sha256(path)
