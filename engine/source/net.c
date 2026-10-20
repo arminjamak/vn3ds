@@ -93,6 +93,7 @@ static uLong out_crc;
 static z_stream zs;
 static bool zs_ready, zs_ended;
 static void target_path(const char *rel, char *out, size_t len);
+static void crcl_write_all(void);
 static void live_path(const char *rel, char *out, size_t len);
 static FILE *out;
 static char tmp_path[400], final_path[400];
@@ -473,6 +474,7 @@ static void flag_prune(void)
 static void finish_transfer(void)
 {
     flag_prune();
+    crcl_write_all();
     send(conn_fd, "DONE", 4, 0);
     if (proto >= 3)
         send(conn_fd, (const char *)&mf_failed, 4, 0);
@@ -533,6 +535,166 @@ static bool file_matches(const char *full)
     return total == file_size && (u32)crc == file_crc;
 }
 
+/* ---- the checksum list --------------------------------------------------
+ * After a complete transfer each game folder gets files.crc: every file of
+ * that version with its size and CRC32. The next transfer compares the
+ * computer's list against it instead of reading every file back from the
+ * card (minutes for a big game). Files the receiver didn't write (an SD-card
+ * copy) aren't in it and are still read; the computer's SD sync removes it. */
+#define CRC_LIST "files.crc"
+typedef struct {
+    char game[64];
+    char *names;   /* sorted, NUL-separated is awkward to search: fixed slots */
+    u64 *size;
+    u32 *crc, n;
+} CrcList;
+enum { CRC_NAME = 64 };
+static CrcList crcl;
+
+static void crcl_free(void)
+{
+    free(crcl.names);
+    free(crcl.size);
+    free(crcl.crc);
+    memset(&crcl, 0, sizeof(crcl));
+}
+
+/* Loads games/<id>/files.crc of the live folder (once per game per transfer). */
+static void crcl_load(const char *id)
+{
+    if (!strcmp(crcl.game, id))
+        return;
+    crcl_free();
+    snprintf(crcl.game, sizeof(crcl.game), "%s", id);
+    char full[400];
+    snprintf(full, sizeof(full), "%s/games/%s/" CRC_LIST, E.root, id);
+    FILE *f = fopen(full, "rb");
+    if (!f)
+        return;
+    u8 head[8];
+    u32 n = 0;
+    if (fread(head, 1, 8, f) == 8 && !memcmp(head, "VNCR", 4))
+        n = rd_u32(head + 4);
+    if (n > 0 && n < 200000 && (crcl.names = malloc((size_t)n * CRC_NAME)) &&
+        (crcl.size = malloc(8 * (size_t)n)) && (crcl.crc = malloc(4 * (size_t)n))) {
+        for (u32 i = 0; i < n; i++) {
+            u8 e[14];
+            if (fread(e, 1, 14, f) != 14)
+                break;
+            u16 len = (u16)(e[0] | e[1] << 8);
+            char *slot = crcl.names + (size_t)i * CRC_NAME;
+            if (len >= CRC_NAME || fread(slot, 1, len, f) != len)
+                break;
+            slot[len] = 0;
+            memcpy(&crcl.size[i], e + 2, 8);
+            crcl.crc[i] = rd_u32(e + 10);
+            crcl.n = i + 1;
+        }
+    }
+    fclose(f);
+}
+
+static int crcl_cmp(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+/* 1: the list says this exact file is there; 0: it says it differs; -1: unknown. */
+static int crcl_says(const char *rel)
+{
+    if (strncmp(rel, "games/", 6) != 0)
+        return -1;
+    const char *id = rel + 6;
+    size_t n = strcspn(id, "/");
+    if (!id[n] || n >= sizeof(crcl.game))
+        return -1;
+    char game[64];
+    snprintf(game, sizeof(game), "%.*s", (int)n, id);
+    crcl_load(game);
+    if (!crcl.n)
+        return -1;
+    const char *in_game = id + n + 1;
+    const char *hit = bsearch(in_game, crcl.names, crcl.n, CRC_NAME, crcl_cmp);
+    if (!hit)
+        return -1;
+    u32 i = (u32)((hit - crcl.names) / CRC_NAME);
+    return crcl.size[i] == file_size && crcl.crc[i] == file_crc;
+}
+
+/* After a complete protocol-3+ transfer: write each game's list (staged with
+ * the rest of the update when the game is open). Entries are sorted. */
+static void crcl_write_all(void)
+{
+    if (proto < 3 || mf_failed || !mf_n)
+        return;
+    char *slots = malloc((size_t)mf_n * CRC_NAME);
+    u32 *order = malloc(4 * (size_t)mf_n);
+    if (!slots || !order) {
+        free(slots);
+        free(order);
+        return;
+    }
+    u32 start = 0;
+    while (start < mf_n) {
+        const char *p = mf_paths + mf_off[start];
+        if (strncmp(p, "games/", 6) != 0) {
+            start++;
+            continue;
+        }
+        size_t idn = strcspn(p + 6, "/");
+        char id[64];
+        snprintf(id, sizeof(id), "%.*s", (int)idn, p + 6);
+        u32 k = 0;
+        for (u32 i = start; i < mf_n; i++) {   /* this game's entries */
+            const char *q = mf_paths + mf_off[i];
+            if (strncmp(q + 6, id, idn) || q[6 + idn] != '/' || strlen(q + 7 + idn) >= CRC_NAME)
+                continue;
+            snprintf(slots + (size_t)k * CRC_NAME, CRC_NAME, "%s", q + 7 + idn);
+            order[k++] = i;
+        }
+        /* sort the names together with their manifest index */
+        for (u32 a = 1; a < k; a++)   /* insertion sort on indices: n is ~10^3-10^4 */
+            for (u32 b = a; b > 0 && strcmp(slots + (size_t)(b - 1) * CRC_NAME,
+                                            slots + (size_t)b * CRC_NAME) > 0; b--) {
+                char tmp[CRC_NAME];
+                memcpy(tmp, slots + (size_t)b * CRC_NAME, CRC_NAME);
+                memcpy(slots + (size_t)b * CRC_NAME, slots + (size_t)(b - 1) * CRC_NAME, CRC_NAME);
+                memcpy(slots + (size_t)(b - 1) * CRC_NAME, tmp, CRC_NAME);
+                u32 t = order[b];
+                order[b] = order[b - 1];
+                order[b - 1] = t;
+            }
+        char rel[128], full[400];
+        snprintf(rel, sizeof(rel), "games/%s/" CRC_LIST, id);
+        target_path(rel, full, sizeof(full));
+        make_dirs(full);
+        FILE *f = fopen(full, "wb");
+        if (f) {
+            u8 head[8] = {'V', 'N', 'C', 'R', (u8)k, (u8)(k >> 8), (u8)(k >> 16), (u8)(k >> 24)};
+            fwrite(head, 1, 8, f);
+            for (u32 j = 0; j < k; j++) {
+                const char *name = slots + (size_t)j * CRC_NAME;
+                u16 len = (u16)strlen(name);
+                u8 e[14];
+                e[0] = (u8)len;
+                e[1] = (u8)(len >> 8);
+                memcpy(e + 2, &mf_size[order[j]], 8);
+                memcpy(e + 10, &mf_crc[order[j]], 4);
+                fwrite(e, 1, 14, f);
+                fwrite(name, 1, len, f);
+            }
+            fclose(f);
+        }
+        /* skip past this game's entries */
+        while (start < mf_n && !strncmp(mf_paths + mf_off[start] + 6, id, idn) &&
+               (mf_paths + mf_off[start])[6 + idn] == '/')
+            start++;
+    }
+    free(slots);
+    free(order);
+    crcl_free();
+}
+
 static bool have_file(void)
 {
     if (!path_allowed(path))
@@ -549,6 +711,9 @@ static bool have_file(void)
             return true;
         remove(target);   /* stale: it would overwrite the live file on the next load */
     }
+    int says = crcl_says(path);
+    if (says >= 0)
+        return says == 1;
     return file_matches(live);
 }
 
