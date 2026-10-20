@@ -33,6 +33,7 @@
 #include "app.h"
 #include "net.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -94,6 +95,7 @@ static z_stream zs;
 static bool zs_ready, zs_ended;
 static void target_path(const char *rel, char *out, size_t len);
 static void crcl_write_all(void);
+static void list_forget(void);
 static void live_path(const char *rel, char *out, size_t len);
 static FILE *out;
 static char tmp_path[400], final_path[400];
@@ -473,6 +475,7 @@ static void flag_prune(void)
 
 static void finish_transfer(void)
 {
+    list_forget();
     flag_prune();
     crcl_write_all();
     send(conn_fd, "DONE", 4, 0);
@@ -709,6 +712,63 @@ static bool content_named(const char *rel)
     return base[16] == '.';
 }
 
+/* Which content-named files a folder holds, read once per folder: asking the
+ * card about each file separately costs about half a second per file in a
+ * folder of a thousand on a 3DS. Files are renamed into place only when
+ * complete, so a listed name is a complete file. */
+static char list_dir[400];
+static char *list_names;   /* sorted 24-byte slots */
+static u32 list_n;
+enum { LIST_NAME = 24 };
+
+static int list_cmp(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+static void list_forget(void)
+{
+    free(list_names);
+    list_names = NULL;
+    list_n = 0;
+    list_dir[0] = 0;
+}
+
+static bool listed(const char *full)
+{
+    const char *slash = strrchr(full, '/');
+    if (!slash || strlen(slash + 1) >= LIST_NAME)
+        return false;
+    size_t dl = (size_t)(slash - full);
+    if (dl >= sizeof(list_dir))
+        return false;
+    if (strncmp(list_dir, full, dl) || list_dir[dl]) {
+        list_forget();
+        memcpy(list_dir, full, dl);
+        list_dir[dl] = 0;
+        DIR *d = opendir(list_dir);
+        u32 cap = 0;
+        struct dirent *e;
+        while (d && (e = readdir(d))) {
+            if (strlen(e->d_name) >= LIST_NAME || strstr(e->d_name, ".part"))
+                continue;
+            if (list_n == cap) {
+                cap = cap ? cap * 2 : 1024;
+                char *grown = realloc(list_names, (size_t)cap * LIST_NAME);
+                if (!grown)
+                    break;
+                list_names = grown;
+            }
+            snprintf(list_names + (size_t)list_n++ * LIST_NAME, LIST_NAME, "%s", e->d_name);
+        }
+        if (d)
+            closedir(d);
+        if (list_n)
+            qsort(list_names, list_n, LIST_NAME, list_cmp);
+    }
+    return list_n && bsearch(slash + 1, list_names, list_n, LIST_NAME, list_cmp);
+}
+
 static bool have_file(void)
 {
     if (!path_allowed(path))
@@ -728,10 +788,8 @@ static bool have_file(void)
     int says = crcl_says(path);
     if (says >= 0)
         return says == 1;
-    if (content_named(path)) {   /* the name is the content: the right size is enough */
-        struct stat st;
-        return stat(live, &st) == 0 && (u64)st.st_size == file_size;
-    }
+    if (content_named(path))   /* the name is the content: being there is enough */
+        return listed(live);
     return file_matches(live);
 }
 
