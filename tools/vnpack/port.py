@@ -225,9 +225,21 @@ def report(summary, path):
                 lines.append(f"    {by_cat[name]:6d}  {name}   e.g. {examples[name][:110]}")
     else:
         lines.append("  Everything converted.")
+    grids = summary.get("music_grids") or []
+    if grids:
+        ok = sum(1 for g in grids if g[2])
+        lines.append(f"  Music: {ok} of {len(grids)} tracks got a measured tempo grid (music "
+                     f"changes land on the loop's end or a phrase); the rest crossfade.")
     text = "\n".join(lines)
     with open(path, "w") as f:
-        f.write(text + "\n\nAll warnings:\n")
+        f.write(text + "\n")
+        if grids:
+            f.write("\nMeasured music grids (confidence 0-1):\n")
+            for name, conf, e, why in grids:
+                f.write(f"  {name}: " + (f"{e['bpm']:g} bpm, {e['beats_per_bar']}/bar, phrase "
+                                         f"{e['phrase_bars']} bars, loop {e['bars'] or '?'} bars"
+                                         if e else f"no grid ({why})") + f", confidence {conf:.2f}\n")
+        f.write("\nAll warnings:\n")
         for (where, msg), n in summary["warnings"].items():
             f.write(f"{where + ': ' if where else ''}{msg}{f' (x{n})' if n > 1 else ''}\n")
     return text
@@ -247,16 +259,92 @@ def install(out_dir, game_id, sd, engine=None):
 
 
 # What each quality mode asks of the packager. Options the packager doesn't
-# know yet are left out, so this works while features are being added.
-# Wi-Fi: Opus audio, ffmpeg's trellis JPEG encoder, near-duplicate CGs as
-# patches, JPEG movie posters, H.264 at 100 kbps / 20 fps (Eternum: ~290 MB).
+# know yet are left out, so this works while features are being added. Both
+# keep the pictures, sounds and videos in pack files (the packager's default).
+# Wi-Fi, the smallest that still looks and sounds good: Opus audio (mono,
+# 14-20 kbps), ffmpeg's trellis JPEG at quantiser 5.5 decoded to RGB565,
+# near-duplicate CGs as patches, JPEG movie posters, H.264 at 100 kbps /
+# 20 fps (Eternum: ~290 MB).
+# SD card, close to the original: trellis JPEG at quantiser 2 (about 45 dB
+# PSNR, a third of the old zlib RGB8 size) decoded to RGB8 textures, CG
+# patches (no loss: the patch is the same JPEG as the whole picture would be),
+# the game's own Ogg Vorbis / Opus files untouched and anything else as Opus
+# at 96 kbps stereo, H.264 at 450 kbps / 30 fps.
 QUALITY = {
     "wifi": [("--audio-profile", "wifi"), ("--jpeg", "75"), ("--rgb565", None),
              ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "5.5"), ("--cg-patches", None),
              ("--jpeg-posters", None),
              ("--video-codec", "h264"), ("--video-kbps", "100"), ("--video-fps", "20")],
-    "sd": [("--video-codec", "h264"), ("--video-kbps", "900"), ("--video-fps", "30")],
+    "sd": [("--audio-profile", "sd"), ("--jpeg", "92"), ("--jpeg-rgb8", None),
+           ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "2"), ("--cg-patches", None),
+           ("--jpeg-posters", None),
+           ("--video-codec", "h264"), ("--video-kbps", "450"), ("--video-fps", "30")],
 }
+
+
+# Per-file sizes the presets come out at, measured on Eternum's Wi-Fi
+# edition (12,702 textures in 104 MiB) and Snapshot's pictures (sd's JPEG at
+# quantiser 2 is 1.7x the Wi-Fi one); audio and video by their length.
+EST_PICTURE = {"wifi": 8.4e3, "sd": 14.5e3}
+EST_AUDIO_BPS = {"wifi": 20e3 / 8, "sd": 96e3 / 8}     # transcoded audio
+EST_VIDEO_BPS = {"wifi": 100e3 / 8, "sd": 450e3 / 8}
+MOVIE_EXTS = (".webm", ".mp4", ".ogv", ".mkv", ".avi", ".mpg", ".mpeg", ".mov")
+
+
+def _seconds(data):
+    """Length of an audio or video file (in memory) by ffprobe, or None."""
+    exe = shutil.which("ffprobe")
+    if not exe:
+        return None
+    try:
+        with tempfile.NamedTemporaryFile() as f:   # (piped, many formats have no length)
+            f.write(data)
+            f.flush()
+            r = subprocess.run([exe, "-v", "error", "-show_entries", "format=duration", "-of",
+                                "default=nw=1:nk=1", f.name], capture_output=True, timeout=60)
+        return float(r.stdout.decode().strip().splitlines()[0])
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return None
+
+
+def estimate(primary, overlays):
+    """Roughly how big the converted game will be, per preset, from the
+    game's file list and the length of a sample of its sounds and movies
+    (a few seconds). {"wifi": bytes, "sd": bytes} or None."""
+    import random
+    from .assets import AUDIO_EXTS, IMAGE_EXTS, AssetFS
+    try:
+        fs = AssetFS(primary, lambda *a: None, overlay_dirs=overlays)
+    except OSError:
+        return None
+    keys = [k for k in fs.keys() if not k.startswith(("renpy/", "tl/", "gui/", "cache/"))]
+    pictures = sum(1 for k in keys if k.endswith(IMAGE_EXTS))
+    audio = [k for k in keys if k.endswith(tuple(AUDIO_EXTS))]
+    movies = [k for k in keys if k.endswith(MOVIE_EXTS)]
+    rnd = random.Random(1)
+
+    def seconds_per_byte(ks, n):
+        sample = rnd.sample(ks, min(n, len(ks)))
+        secs = byts = 0
+        for k in sample:
+            data = fs.read(k)
+            t = _seconds(data)
+            if t:
+                secs, byts = secs + t, byts + len(data)
+        return secs / byts if byts else 0.0
+    a_bytes = sum(fs.size(k) for k in audio)
+    a_secs = a_bytes * seconds_per_byte(audio, 12)
+    ogg_bytes = sum(fs.size(k) for k in audio if k.endswith((".ogg", ".opus", ".oga")))
+    other_secs = (a_bytes - ogg_bytes) * seconds_per_byte(
+        [k for k in audio if not k.endswith((".ogg", ".opus", ".oga"))] or audio, 6)
+    m_secs = sum(fs.size(k) for k in movies) * seconds_per_byte(movies, 6) if movies else 0
+    out = {}
+    for q in ("wifi", "sd"):
+        audio_q = a_secs * EST_AUDIO_BPS["wifi"] if q == "wifi" else \
+            ogg_bytes + other_secs * EST_AUDIO_BPS["sd"]
+        out[q] = int(pictures * EST_PICTURE[q] + audio_q + m_secs * EST_VIDEO_BPS[q] +
+                     len(movies) * EST_PICTURE[q])
+    return out
 
 
 def quality_args(mode):
@@ -329,6 +417,12 @@ def convert(opts, quality, ui):
             started=lambda n: ui.step("decompile", "active", f"{n} compiled scripts (unrpyc)"))
         ui.step("decompile", "done" if scripts else "skip",
                 "with unrpyc" if scripts else "")
+        est = estimate(primary, overlays) if getattr(opts, "estimate", True) else None
+        if est:
+            other = "sd" if quality == "wifi" else "wifi"
+            ui.log(f"projected size: about {est[quality] / 1e6:.0f} MB ({quality}); the "
+                   f"{other} preset would be about {est[other] / 1e6:.0f} MB "
+                   f"(--quality {other})")
         seen = set()
 
         def progress(step, state=None, done=None, total=None, **info):

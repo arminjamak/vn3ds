@@ -188,6 +188,15 @@ class AssetFS:
             f.seek(off)
             return prefix + f.read(length - len(prefix))
 
+    def size(self, key):
+        """The file's size in bytes, without reading it."""
+        e = self.files[key]
+        if e[0] == "disk":
+            return os.path.getsize(e[1])
+        if e[0] == "zip":
+            return self.zips[e[1]].getinfo(e[3]).file_size
+        return e[4]
+
     def display(self, key):
         e = self.files[key]
         return e[2]
@@ -513,14 +522,16 @@ def bleed_edges(arr, iterations=6):
 
 
 def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0,
-                jpeg_encoder="pillow", jpeg_qscale=5.0):
+                jpeg_encoder="pillow", jpeg_qscale=5.0, jpeg_rgb8=False):
     """Encode a PIL RGBA image (already at its on-screen size) as .ctex bytes.
 
     jpeg_quality > 0 stores opaque images as a baseline JPEG at that quality
     (decoded by the engine into an RGB565 texture); images with transparency
     are unaffected. With jpeg_encoder "ffmpeg" the JPEG comes from ffmpeg's
     trellis-quantising encoder at jpeg_qscale instead (jpeg_quality then only
-    switches JPEG on). Returns (bytes, opaque).
+    switches JPEG on). jpeg_rgb8 has the engine decode the JPEG into an RGB8
+    texture (no RGB565 banding, half as much memory again). Returns
+    (bytes, opaque).
     """
     w, h = img.size
     if w > MAX_TEX or h > MAX_TEX:
@@ -531,7 +542,7 @@ def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0,
     opaque = bool(arr[..., 3].min() == 255)
     if opaque and jpeg_quality > 0:
         return encode_jpeg_ctex(img, logical_w, logical_h, jpeg_quality,
-                                jpeg_encoder, jpeg_qscale), True
+                                jpeg_encoder, jpeg_qscale, rgb8=jpeg_rgb8), True
     if not opaque:
         arr = bleed_edges(arr)
     tw, th = next_pow2(w), next_pow2(h)
@@ -606,10 +617,12 @@ def ffmpeg_jpeg(rgb, qscale):
     return r.stdout
 
 
-def encode_jpeg_ctex(img, logical_w, logical_h, quality, encoder="pillow", qscale=5.0):
+def encode_jpeg_ctex(img, logical_w, logical_h, quality, encoder="pillow", qscale=5.0,
+                     rgb8=False):
     """An opaque image as a JPEG .ctex: the payload is a baseline JPEG of the
     image (not padded); the engine decodes it into a tex_w x tex_h RGB565
-    texture, repeating the edge pixels into the padding."""
+    (or, with rgb8, RGB8) texture, repeating the edge pixels into the
+    padding."""
     w, h = img.size
     tw, th = next_pow2(w), next_pow2(h)
     jpg = None
@@ -620,9 +633,10 @@ def encode_jpeg_ctex(img, logical_w, logical_h, quality, encoder="pillow", qscal
         img.convert("RGB").save(buf, "JPEG", quality=int(quality), optimize=True,
                                 progressive=False, subsampling=2 if quality < 90 else 0)
         jpg = buf.getvalue()
-    header = b"CTEX" + struct.pack("<HHHHHHffIII", 1, FMT_RGB565, tw, th, w, h,
+    fmt, bpp = (FMT_RGB8, 3) if rgb8 else (FMT_RGB565, 2)
+    header = b"CTEX" + struct.pack("<HHHHHHffIII", 1, fmt, tw, th, w, h,
                                    float(logical_w), float(logical_h), CTEX_JPEG,
-                                   tw * th * 2, len(jpg))
+                                   tw * th * bpp, len(jpg))
     return header + jpg
 
 
@@ -634,53 +648,84 @@ def is_ogg_vorbis(data):
     return data[:4] == b"OggS" and b"\x01vorbis" in data[:256]
 
 
-def convert_audio(data, name, out_path, warn, profile="sd"):
+# Opus bitrates of the sd profile, for audio that has to be transcoded anyway
+# (MP3, WAV, FLAC, a lossless master): around the point where listeners stop
+# telling Opus from the source.
+SD_OPUS_STEREO = "96k"
+SD_OPUS_MONO = "64k"
+# From a lossless master there are no earlier artifacts to carry: unconstrained
+# VBR at 80k nominal (about 90 kbps on Snapshot's score, against 115 kbps for
+# the Ogg Vorbis q5 files it ships) is Opus's usual transparent range.
+SD_MASTER_STEREO = "80k"
+SD_MASTER_MONO = "56k"
+
+
+def _probe(ffprobe, src):
+    """(channels, seconds) of an audio file; (2, None) if unknown."""
+    channels, seconds = 2, None
+    if ffprobe:
+        r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries",
+                            "stream=channels:format=duration", "-of", "default=nw=1", src],
+                           capture_output=True, text=True)
+        info = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
+        try:
+            channels = int(info.get("channels", 2))
+            seconds = float(info.get("duration", ""))
+        except ValueError:
+            pass
+    return channels, seconds
+
+
+def convert_audio(data, name, out_path, warn, profile="sd", master=None):
     """Write Ogg Vorbis or Ogg Opus to out_path, transcoding with ffmpeg when
     needed. The engine tells the two apart by their first Ogg page, so the
     packed file is called .ogg either way.
 
-    profile "sd": Ogg Vorbis and Ogg Opus files are copied as they are (best
-    quality); anything else becomes Ogg Vorbis, 32 kHz stereo, quality 3.
+    profile "sd": Ogg Vorbis and Ogg Opus files are copied as they are (they
+    are what the game shipped; transcoding would only lose quality); anything
+    else becomes Ogg Opus at a high bitrate (96 kbps stereo, 64 kbps mono,
+    VBR, 48 kHz).
     profile "wifi": everything is re-encoded small for Wi-Fi transfers as
     Ogg Opus with libopus, mixed to mono (the 3DS plays it on both sides):
     music at 19 kbps constrained VBR, sound effects (20 s or shorter) at
     20 kbps VBR, which spends its bits on transients, and voices (a voice/
     or vo/ folder) at 14 kbps VBR. In listening metrics that beats the old
     22 kHz Vorbis q1.5 (cut off at about 9.5 kHz) at 20-60% fewer bytes.
-    ffmpeg builds without libopus fall back to that Vorbis encode."""
+    ffmpeg builds without libopus fall back to Vorbis encodes.
+
+    `master`: the same sound as a lossless file (FLAC or WAV bytes), e.g. a
+    render of a game's own score: it is encoded instead of the shipped file,
+    so the 3DS copy is one generation from the source rather than two (sd:
+    Opus at 80 kbps nominal stereo; wifi: as above)."""
     def first_packet(magic):
         if data[:4] != b"OggS" or len(data) < 28:
             return False
         start = 27 + data[26]          # after the first page's segment table
         return data[start:start + len(magic)] == magic
     is_ogg = first_packet(b"\x01vorbis") or first_packet(b"OpusHead")
-    if is_ogg and profile != "wifi":
+    if is_ogg and profile != "wifi" and master is None:
         with open(out_path, "wb") as f:
             f.write(data)
         return True
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
+        if is_ogg:
+            with open(out_path, "wb") as f:
+                f.write(data)
+            return True
         warn(None, f"{name}: not Ogg Vorbis/Opus and ffmpeg is not installed; skipped")
         return False
-    ext = os.path.splitext(name)[1] or ".bin"
+    ext = ".flac" if master is not None and master[:4] == b"fLaC" else \
+        ".wav" if master is not None else (os.path.splitext(name)[1] or ".bin")
     bitexact = ["-fflags", "+bitexact", "-flags:a", "+bitexact"]
+    if master is not None:
+        return _encode_master(ffmpeg, master, ext, name, out_path, warn, profile, bitexact)
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "in" + ext)
         with open(src, "wb") as f:
             f.write(data)
+        channels, seconds = _probe(shutil.which("ffprobe"), src)
         if profile == "wifi":
-            channels, seconds = 2, None
-            ffprobe = shutil.which("ffprobe")
-            if ffprobe:
-                r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries",
-                                    "stream=channels:format=duration", "-of", "default=nw=1", src],
-                                   capture_output=True, text=True)
-                info = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
-                try:
-                    channels = int(info.get("channels", 2))
-                    seconds = float(info.get("duration", ""))
-                except ValueError:
-                    pass
             folders = name.replace("\\", "/").lower().split("/")[:-1]
             if any(d in ("voice", "voices", "vo") for d in folders):
                 rate = ["-b:a", "14k", "-vbr", "on"]            # speech: SILK/hybrid modes
@@ -704,17 +749,67 @@ def convert_audio(data, name, out_path, warn, profile="sd"):
                 warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
                 return False
             return True
-        cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-               *bitexact, "-c:a", "libvorbis", "-q:a", "3", out_path]
+        stereo = channels >= 2
+        cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-map_metadata", "-1",
+               "-ac", "2" if stereo else "1", "-ar", "48000", *bitexact, "-c:a", "libopus",
+               "-b:a", SD_OPUS_STEREO if stereo else SD_OPUS_MONO, "-vbr", "on",
+               "-application", "audio", "-compression_level", "10", "-f", "ogg", out_path]
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
+            # no libopus: Ogg Vorbis, 44.1 kHz, quality 5
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "44100",
+                   *bitexact, "-c:a", "libvorbis", "-q:a", "5", out_path]
+            r = subprocess.run(cmd, capture_output=True)
+        if r.returncode != 0:
             # Builds without libvorbis only have ffmpeg's experimental encoder.
-            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-                   *bitexact, "-c:a", "vorbis", "-strict", "-2", "-b:a", "112k", out_path]
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "44100",
+                   *bitexact, "-c:a", "vorbis", "-strict", "-2", "-b:a", "160k", out_path]
             r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
             return False
+    return True
+
+
+def _encode_master(ffmpeg, master, ext, name, out_path, warn, profile, bitexact, ceiling=0.985):
+    """A lossless master as Ogg Opus (convert_audio's bitrates for the
+    profile). Lossy coding can overshoot a limited master on a transient, so
+    the result is decoded again and, if it would clip, encoded a little
+    quieter (at most twice)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in" + ext)
+        with open(src, "wb") as f:
+            f.write(master)
+        channels, seconds = _probe(shutil.which("ffprobe"), src)
+        if profile == "wifi":
+            folders = name.replace("\\", "/").lower().split("/")[:-1]
+            if any(d in ("voice", "voices", "vo") for d in folders):
+                rate = ["-b:a", "14k", "-vbr", "on"]
+            elif seconds is not None and seconds <= 20:
+                rate = ["-b:a", "20k", "-vbr", "on"]
+            else:
+                rate = ["-b:a", "19k", "-vbr", "constrained"]
+            mix = "pan=mono|c0=0.5*c0+0.5*c1" if channels == 2 else "anull"
+            layout = ["-ac", "1"]
+        else:
+            rate = ["-b:a", SD_MASTER_STEREO if channels >= 2 else SD_MASTER_MONO, "-vbr", "on"]
+            mix, layout = "anull", ["-ac", "2" if channels >= 2 else "1"]
+        gain = 1.0
+        for _ in range(3):
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-map_metadata", "-1",
+                   "-af", f"{mix},volume={gain:.4f}", *layout, "-ar", "48000", *bitexact,
+                   "-c:a", "libopus", *rate, "-application", "audio", "-compression_level", "10",
+                   "-f", "ogg", out_path]
+            r = subprocess.run(cmd, capture_output=True)
+            if r.returncode != 0:
+                warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
+                return False
+            d = subprocess.run([ffmpeg, "-v", "error", "-i", out_path, "-f", "f32le", "-"],
+                               capture_output=True)
+            peak = float(np.abs(np.frombuffer(d.stdout, "<f4")).max()) if d.stdout else 0.0
+            if peak <= ceiling:
+                break
+            gain *= ceiling * 0.99 / peak
     return True
 
 

@@ -31,6 +31,7 @@ STEPS = {
     "decompile": "Decompiling scripts",
     "scripts": "Reading the scripts",
     "audio": "Audio",
+    "music": "Music tempo",
     "images": "Images",
     "video": "Video",
     "pack": "Packing",
@@ -38,7 +39,7 @@ STEPS = {
     "engine": "vn3ds",
     "game": "Your game",
 }
-CONVERT_STEPS = ("unpack", "decompile", "scripts", "audio", "images", "video", "pack")
+CONVERT_STEPS = ("unpack", "decompile", "scripts", "audio", "music", "images", "video", "pack")
 
 HINT_NETLOADER = [
     "1. On the 3DS, open the Homebrew Launcher.",

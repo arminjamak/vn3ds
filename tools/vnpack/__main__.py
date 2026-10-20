@@ -109,7 +109,8 @@ def _image_job(name):
         data, opaque = encode_ctex(small, lw, lh, allow_565=_W["rgb565"],
                                    jpeg_quality=_W.get("jpeg", 0),
                                    jpeg_encoder=_W.get("jpeg_encoder", "pillow"),
-                                   jpeg_qscale=_W.get("jpeg_qscale", 5.0))
+                                   jpeg_qscale=_W.get("jpeg_qscale", 5.0),
+                                   jpeg_rgb8=_W.get("jpeg_rgb8", False))
         full = img.width >= _W["gw"] * 0.95 and img.height >= _W["gh"] * 0.95
         if _W.get("cg_patches") and opaque and full and _W.get("jpeg", 0) > 0:
             # the picture as stored, for comparing with its neighbours (--cg-patches)
@@ -290,14 +291,31 @@ def main(argv=None, progress=None):
                          "--jpeg-qscale)")
     ap.add_argument("--jpeg-qscale", type=float, default=5.0, metavar="QS",
                     help="ffmpeg JPEG quantiser scale (2-31, lower is better; default 5)")
+    ap.add_argument("--jpeg-rgb8", action="store_true",
+                    help="decode JPEG pictures into RGB8 textures instead of RGB565 (no "
+                         "banding in gradients; textures take half as much memory again)")
     ap.add_argument("--jpeg-posters", action="store_true",
                     help="store movie poster frames as JPEG too (with --jpeg)")
     ap.add_argument("--cg-patches", action="store_true",
                     help="store pictures that differ from a recent one only in a region "
                          "as just that region (with --jpeg)")
+    ap.add_argument("--no-packs", dest="packs", action="store_false",
+                    help="leave the pictures and sounds as loose files in img/ and snd/ "
+                         "instead of a few pack files in pk/ (slower to open on a 3DS)")
+    ap.add_argument("--pack-mb", type=float, default=8.0, metavar="MB",
+                    help="typical pack file size (default 8; packs run from a quarter to "
+                         "twice this; a Wi-Fi update resends each pack that changed)")
+    ap.add_argument("--no-music-grids", dest="music_grids", action="store_false",
+                    help="don't measure the tempo of music tracks vn3ds.json has no grid for "
+                         "(without a grid the engine crossfades music changes)")
     ap.add_argument("--no-audio", action="store_true", help="skip audio")
     ap.add_argument("--audio-profile", choices=("sd", "wifi"), default="sd",
-                    help="sd: keep Ogg files as they are; wifi: re-encode everything small")
+                    help="sd: keep Ogg files as they are, the rest as Opus at a high bitrate; "
+                         "wifi: re-encode everything small")
+    ap.add_argument("--audio-masters", metavar="DIR",
+                    help="lossless masters of the game's audio (DIR/<path under audio/>.flac "
+                         "or .wav): encoded instead of the shipped files; also vn3ds.json "
+                         "\"audio_masters\" (relative to the game folder)")
     ap.add_argument("--no-video", action="store_true", help="skip Movie() animations")
     ap.add_argument("--video-codec", choices=("h264", "cvid"), default="h264",
                     help="h264: hardware-decoded on a New 3DS, the first frame elsewhere "
@@ -413,11 +431,11 @@ def main(argv=None, progress=None):
         os.path.splitext(os.path.basename(fallback))[0]
     game_id = args.id or cfg.get("id") or slug(title)
     out_dir = os.path.join(args.output, game_id)
-    for sub in ("img", "snd"):
+    for sub in ("img", "snd", "pk"):
         d = os.path.join(out_dir, sub)
         os.makedirs(d, exist_ok=True)
         for fn in os.listdir(d):
-            if fn.endswith((".ctex", ".ogg", ".cvid", ".cvh")):
+            if fn.endswith((".ctex", ".ogg", ".cvid", ".cvh", ".pak", ".tmp")):
                 os.remove(os.path.join(d, fn))
 
     depth_map = dict(DEFAULT_DEPTH_BY_TAG)
@@ -492,7 +510,8 @@ def main(argv=None, progress=None):
         h = max(1, int(round(logical_h)))
         data, opaque = encode_ctex(resize_rgba(img, w, h), logical_w, logical_h,
                                    allow_565=args.rgb565, jpeg_quality=args.jpeg,
-                                   jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale)
+                                   jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale,
+                                   jpeg_rgb8=args.jpeg_rgb8)
         idx = len(resources)
         rel = content_name("img", data, "ctex")
         with open(os.path.join(out_dir, rel), "wb") as f:
@@ -533,16 +552,41 @@ def main(argv=None, progress=None):
     # ffmpeg runs in its own process, so threads are enough to use every core
     from concurrent.futures import ThreadPoolExecutor
 
+    masters_dir = args.audio_masters or (
+        os.path.join(game_dir, cfg["audio_masters"]) if cfg.get("audio_masters") and
+        os.path.isdir(game_dir) else None)
+    if masters_dir and not os.path.isdir(masters_dir):
+        masters_dir = None   # not rendered here: the shipped files are used
+
+    def master_of(key):
+        """The lossless master of game file `key`, as bytes, or None."""
+        if not masters_dir:
+            return None
+        base = os.path.splitext(key[len("audio/"):] if key.startswith("audio/") else key)[0]
+        for ext in (".flac", ".wav"):
+            p = os.path.join(masters_dir, base + ext)
+            if os.path.isfile(p):
+                with open(p, "rb") as f:
+                    return f.read()
+        return None
+    masters_used = [0]
+
     def audio_job(job):
         key, rel = job
+        master = master_of(key)
+        if master is not None:
+            masters_used[0] += 1
         return convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn,
-                             args.audio_profile)
+                             args.audio_profile, master=master)
     progress("audio", done=0, total=len(audio_jobs))
     with ThreadPoolExecutor(max_workers=max(2, os.cpu_count() or 2)) as ex:
         for i, ok in enumerate(ex.map(audio_job, audio_jobs)):
             audio_count += 1 if ok else 0
             progress("audio", done=i + 1, total=len(audio_jobs))
     progress("audio", state="done", done=len(audio_jobs), total=len(audio_jobs))
+    if masters_used[0] and not args.quiet:
+        print(f"  audio: {masters_used[0]} files encoded from lossless masters in {masters_dir}",
+              file=sys.stderr)
     for i, rel in enumerate(resources):
         if os.path.exists(os.path.join(out_dir, rel)):
             resources[i] = rename_by_content(rel)
@@ -564,6 +608,41 @@ def main(argv=None, progress=None):
             music_meta.append((i, float(m["bpm"]), int(m.get("beats_per_bar", 4)),
                                int(m.get("phrase_bars", 4)), int(m.get("bars", 0))))
 
+    # Every other track the script plays as music gets its grid measured
+    # (tempo.py), so any game's music changes on the loop's end or a phrase.
+    # Grids the analysis isn't sure of, or whose first beat isn't at the
+    # start of the file (MUSM has no phase), are left out: those tracks
+    # crossfade. --no-music-grids or vn3ds.json "music_auto": false skip it.
+    music_auto = []
+    if args.music_grids and cfg.get("music_auto", True) and not args.no_audio:
+        from .packs import music_resources
+        from .tempo import analyse_file, music_entry
+        have = {m[0] for m in music_meta}
+        src_of = {int(rel[8:-4]): key for key, rel in audio_jobs}   # snd/tmp-NNNN.ogg
+        todo = [(i, src_of[i]) for i in sorted(music_resources(bytes(comp.code.b)))
+                if i not in have and i in src_of]
+        progress("music", done=0, total=len(todo))
+
+        def measure(job):
+            i, key = job
+            try:
+                master = master_of(key)
+                return i, key, analyse_file(master if master is not None else fs.read(key))
+            except (OSError, ValueError, MemoryError):
+                return i, key, None
+        with ThreadPoolExecutor(max_workers=max(2, min(6, os.cpu_count() or 2))) as ex:
+            for n, (i, key, r) in enumerate(ex.map(measure, todo)):
+                progress("music", done=n + 1, total=len(todo))
+                e = music_entry(r)
+                why = "no steady beat" if r and not e else "not decodable" if not r else ""
+                if e and abs(r.get("offset", 0.0)) > 0.1 * 60.0 / e["bpm"]:
+                    e, why = None, f"first beat {r['offset']:.2f} s into the file"
+                music_auto.append((fs.display(key), r, e, why))
+                if e:
+                    music_meta.append((i, float(e["bpm"]), int(e["beats_per_bar"]),
+                                       int(e["phrase_bars"]), int(e["bars"])))
+        progress("music", state="done", done=len(todo), total=len(todo))
+
     # Machine voices (vn3ds.json "voices"): a syllable bank plus a pitch per
     # character, played by the engine as text appears.
     voices = None
@@ -576,7 +655,8 @@ def main(argv=None, progress=None):
                 warn(None, f"voice syllable '{rel_src}' not found")
                 continue
             rel = f"snd/tmp-{len(resources):04d}.ogg"
-            if convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn):
+            if convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn,
+                             args.audio_profile, master=master_of(key)):
                 bank.append(len(resources))
                 resources.append(rename_by_content(rel))
         pitch = {}
@@ -601,7 +681,7 @@ def main(argv=None, progress=None):
               video_seconds=args.video_seconds, video_codec=args.video_codec,
               video_kbps=args.video_kbps, video_profile=args.video_profile)
     _W["jpeg"] = args.jpeg
-    _W.update(jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale,
+    _W.update(jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale, jpeg_rgb8=args.jpeg_rgb8,
               jpeg_posters=args.jpeg_posters, cg_patches=args.cg_patches)
     if args.cg_patches:
         # neighbouring variants of a CG next to each other: "cg 9", "cg 10"
@@ -686,7 +766,7 @@ def main(argv=None, progress=None):
                     pdata, _ = encode_ctex(Image.fromarray(pixels[y0:y1, x0:x1]).convert("RGBA"),
                                            (x1 - x0) * sx, (y1 - y0) * sy, allow_565=True,
                                            jpeg_quality=args.jpeg, jpeg_encoder=args.jpeg_encoder,
-                                           jpeg_qscale=args.jpeg_qscale)
+                                           jpeg_qscale=args.jpeg_qscale, jpeg_rgb8=args.jpeg_rgb8)
                     if len(pdata) < len(data) * PATCH_MAX_BYTES:
                         pres = write_res(pdata, "ctex")
                         patches[1] += len(data) - len(pdata)
@@ -756,7 +836,7 @@ def main(argv=None, progress=None):
             w, h = max(1, int(round(lw))), max(1, int(round(lh)))
             data, _ = encode_ctex(resize_rgba(part, w, h), lw, lh, allow_565=args.rgb565,
                                   jpeg_quality=args.jpeg, jpeg_encoder=args.jpeg_encoder,
-                                  jpeg_qscale=args.jpeg_qscale)
+                                  jpeg_qscale=args.jpeg_qscale, jpeg_rgb8=args.jpeg_rgb8)
             digest = hashlib.sha1(data).digest()
             res = by_hash.get(digest)
             if res is None:
@@ -796,6 +876,15 @@ def main(argv=None, progress=None):
     size = write_game(os.path.join(out_dir, "game.bin"), comp, meta, images, resources,
                       layer_records, voices, music=music_meta)
 
+    packs = None
+    if args.packs:
+        from .packs import make_packs
+        packs = make_packs(out_dir, target=int(args.pack_mb * (1 << 20)), quiet=args.quiet)
+    else:
+        try:
+            os.rmdir(os.path.join(out_dir, "pk"))
+        except OSError:
+            pass
     progress("pack", state="done", bytes=size + total_bytes)
     warn.report(limit=10**9 if args.all_warnings else 60)
     if not args.quiet:
@@ -808,6 +897,9 @@ def main(argv=None, progress=None):
     return dict(title=title, id=game_id, out_dir=out_dir, warnings=warn.items,
                 labels=len(comp.defined_labels), images=len(images),
                 texture_bytes=total_bytes, audio=audio_count, script_bytes=size,
+                packs=packs["packs"] if packs else 0,
+                music_grids=[(name, (r or {}).get("confidence", 0.0), e, why)
+                             for name, r, e, why in music_auto],
                 audio_refs=len(comp.resources), screen=(gw, gh))
 
 
