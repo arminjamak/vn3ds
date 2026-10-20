@@ -280,7 +280,8 @@ def vnpack_args(opts, quality, primary, overlays, scripts):
         if getattr(opts, flag):
             vargs.append("--" + flag.replace("_", "-"))
     vargs += quality_args(quality)
-    for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps)):
+    for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps),
+                      ("--video-fps", getattr(opts, "video_fps", None))):
         if val:   # after the quality preset, so these win
             vargs += [flag, str(val)]
     if opts.jpeg is not None:
@@ -430,6 +431,8 @@ def main(argv=None):
                     help="movie format (default h264: smooth on a New 3DS, a still elsewhere)")
     ap.add_argument("--video-kbps", type=int,
                     help="H.264 bitrate (default: 900 for the SD card, 260 for Wi-Fi)")
+    ap.add_argument("--video-fps", type=int,
+                    help="highest movie frame rate (default: 30 for the SD card, 24 for Wi-Fi)")
     ap.add_argument("--fit", action="store_true")
     ap.add_argument("-j", "--jobs", type=int, default=0)
     ap.add_argument("--quality", choices=("auto", "wifi", "sd"), default="auto",
@@ -453,6 +456,7 @@ def main(argv=None):
         id=args.id, title=args.title, rgb565=args.rgb565, jpeg=args.jpeg,
         no_audio=args.no_audio, no_video=args.no_video, video_codec=args.video_codec,
         video_kbps=args.video_kbps, fit=args.fit, jobs=args.jobs)
+    opts.video_fps = args.video_fps   # not in flow.Options: the app never sets it
     ui = flow.ConsoleUI()
     try:
         r = flow.run(opts, ui)

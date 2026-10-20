@@ -5,6 +5,9 @@
 #   sudo dkp-pacman -S 3ds-dev 3ds-zlib 3ds-libogg 3ds-libvorbisidec
 #   make
 #
+# libopus and opusfile are vendored in third_party/ and built here into
+# build/libvnopus.a with their own flags (third_party/opus.mk).
+#
 # For the desktop test build see Makefile.host.
 #---------------------------------------------------------------------------------
 .SUFFIXES:
@@ -27,11 +30,12 @@ ICON            := icon.png
 
 ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS   := -g -Wall -Wno-format-truncation -O2 -mword-relocations -ffunction-sections $(ARCH)
-CFLAGS   += $(INCLUDE) -D__3DS__ -std=gnu11
+CFLAGS   += $(INCLUDE) -D__3DS__ -std=gnu11 -DVN_HAVE_OPUS -DVN_HAVE_TREMOR
+CFLAGS   += -I$(TOPDIR)/third_party/opus/include -I$(TOPDIR)/third_party/opusfile/include
 ASFLAGS  := -g $(ARCH)
 LDFLAGS   = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS     := -lcitro2d -lcitro3d -lvorbisidec -logg -lz -lctru -lm
+LIBS     := -lcitro2d -lcitro3d -lvnopus -lvorbisidec -logg -lz -lctru -lm
 LIBDIRS  := $(PORTLIBS) $(CTRULIB)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
@@ -48,7 +52,7 @@ export OFILES   := $(CFILES:.c=.o)
 export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                    $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
                    -I$(CURDIR)/$(BUILD)
-export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib) -L$(CURDIR)/$(BUILD)
 
 export APP_ICON := $(TOPDIR)/$(ICON)
 export _3DSXDEPS := $(OUTPUT).smdh
@@ -72,8 +76,30 @@ DEPENDS := $(OFILES:.o=.d)
 
 $(OUTPUT).3dsx : $(OUTPUT).elf $(_3DSXDEPS)
 
-$(OUTPUT).elf : $(OFILES)
+$(OUTPUT).elf : $(OFILES) libvnopus.a
 
--include $(DEPENDS)
+#---------------------------------------------------------------------------------
+# third-party Opus decoder: its own defines and include paths, warnings off
+#---------------------------------------------------------------------------------
+TP_DIR    := $(TOPDIR)/third_party
+include $(TP_DIR)/opus.mk
+TP_OFILES := $(addprefix tp/,$(OPUS_SRC:.c=.o) $(OPUSFILE_SRC:.c=.o))
+TP_CFLAGS := -O2 -w -mword-relocations -ffunction-sections -fdata-sections $(ARCH) -std=gnu11
+
+tp/opus/%.o : $(TP_DIR)/opus/%.c
+	@mkdir -p $(dir $@)
+	@echo $(notdir $<)
+	@$(CC) -MMD -MP -MF $(@:.o=.d) $(TP_CFLAGS) $(OPUS_DEFS) $(OPUS_ARM_DEFS) $(OPUS_INCS) -c $< -o $@
+
+tp/opusfile/%.o : $(TP_DIR)/opusfile/%.c
+	@mkdir -p $(dir $@)
+	@echo $(notdir $<)
+	@$(CC) -MMD -MP -MF $(@:.o=.d) $(TP_CFLAGS) $(OPUSFILE_DEFS) $(OPUSFILE_INCS) -I$(PORTLIBS)/include -c $< -o $@
+
+libvnopus.a : $(TP_OFILES)
+	@rm -f $@
+	@$(AR) rcs $@ $^
+
+-include $(DEPENDS) $(TP_OFILES:.o=.d)
 
 endif

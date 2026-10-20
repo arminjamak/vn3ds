@@ -1,7 +1,13 @@
 /* Desktop test build: audio calls are only logged. With --audio-log they
  * are also written, timestamped, to a file that tools/vn3ds-record mixes
- * into a soundtrack. */
+ * into a soundtrack. Files the engine plays are checked with the same
+ * decoder the 3DS uses (Opus here; Vorbis needs Tremor, 3DS only), and
+ * --decode-audio renders a file through the 3DS's streaming path. */
 #include "../source/audio.h"
+#include "../source/audio_dec.h"
+#include "host.h"
+
+#include <time.h>
 
 static bool playing[CH_COUNT];
 FILE *host_audio_log;
@@ -17,10 +23,24 @@ void audio_play(int ch, const char *path, bool loop, float fadein, bool queue)
     printf("    [audio] %s ch%d %s%s fadein=%.1f\n", queue ? "queue" : "play", ch,
            name ? name + 1 : path, loop ? " (loop)" : "", fadein);
     FILE *f = fopen(path, "rb");
-    if (!f)
+    if (!f) {
         printf("    [audio] MISSING %s\n", path);
-    else
+    } else {
+        u8 head[512];
+        size_t n = fread(head, 1, sizeof(head), f);
         fclose(f);
+        int codec = adec_sniff(head, n);
+        ADec d;
+        if (codec == ADEC_NONE)
+            printf("    [audio] NOT OGG OPUS/VORBIS %s\n", path);
+#ifdef VN_HAVE_OPUS
+        else if (codec == ADEC_OPUS && !adec_open(&d, path))
+            printf("    [audio] BAD OPUS %s\n", path);
+        else if (codec == ADEC_OPUS)
+            adec_close(&d);
+#endif
+        (void)d;
+    }
     playing[ch] = ch == CH_MUSIC;
     if (host_audio_log)
         fprintf(host_audio_log, "%.4f play %d %d %.3f %d %s\n", host_now, ch, loop, fadein, queue, path);
@@ -99,4 +119,85 @@ void audio_sfx_play(int index, float volume, float rate)
 {
     if (host_audio_log && index >= 0 && index < sfx_loaded)
         fprintf(host_audio_log, "%.4f sfx %d %.3f %.3f\n", host_now, index, volume, rate);
+}
+
+/* ---- --decode-audio --------------------------------------------------------
+ * Decodes `in` the way the 3DS streams music: wave-buffer sized calls to
+ * adec_fill(), wrapping to the start for `loops` passes, into a 16-bit WAV.
+ * Prints the decoder's time per second of audio. */
+
+static void put_u32(FILE *f, u32 v) { fwrite(&v, 4, 1, f); }
+static void put_u16(FILE *f, u16 v) { fwrite(&v, 2, 1, f); }
+
+int host_decode_audio(const char *in, const char *out, int loops)
+{
+    ADec d;
+    if (!adec_open(&d, in)) {
+        fprintf(stderr, "%s: cannot decode (not Ogg Opus%s)\n", in,
+#ifdef VN_HAVE_TREMOR
+                " or Vorbis"
+#else
+                "; Vorbis is decoded on the 3DS only"
+#endif
+        );
+        return 1;
+    }
+    s64 len = adec_length(&d);
+    if (len <= 0 || loops < 1) {
+        fprintf(stderr, "%s: unknown length\n", in);
+        adec_close(&d);
+        return 1;
+    }
+    FILE *f = out ? fopen(out, "wb") : NULL;
+    if (out && !f) {
+        perror(out);
+        adec_close(&d);
+        return 1;
+    }
+    /* the 3DS's wave buffer size for this rate (audio_3ds.c) */
+    long chunk = d.rate / 6 < 4096 ? 4096 : d.rate / 6;
+    if (chunk > 8192 * 2 / d.channels)
+        chunk = 8192 * 2 / d.channels;
+    s64 total = len * loops, done = 0;
+    u32 bytes = (u32)(total * d.channels * 2);
+    if (f) {
+        fwrite("RIFF", 1, 4, f);
+        put_u32(f, 36 + bytes);
+        fwrite("WAVEfmt ", 1, 8, f);
+        put_u32(f, 16);
+        put_u16(f, 1);
+        put_u16(f, (u16)d.channels);
+        put_u32(f, (u32)d.rate);
+        put_u32(f, (u32)(d.rate * d.channels * 2));
+        put_u16(f, (u16)(d.channels * 2));
+        put_u16(f, 16);
+        fwrite("data", 1, 4, f);
+        put_u32(f, bytes);
+    }
+    s16 *pcm = malloc((size_t)chunk * d.channels * sizeof(s16));
+    double secs = 0;
+    bool ended = false;
+    while (pcm && done < total && !ended) {
+        long want = total - done < chunk ? (long)(total - done) : chunk;
+        struct timespec t0, t1;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        /* loop: the last pass is cut at the file's length like the others */
+        long got = adec_fill(&d, pcm, want, true, &ended);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        secs += (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) * 1e-9;
+        if (f)
+            fwrite(pcm, sizeof(s16) * d.channels, (size_t)got, f);
+        done += got;
+    }
+    free(pcm);
+    double audio = (double)done / (double)d.rate;
+    printf("%s: %s, %d ch, %ld Hz, %lld frames per pass, %d pass%s: %lld frames\n", in,
+           adec_codec_name(d.codec), d.channels, d.rate, (long long)len, loops,
+           loops == 1 ? "" : "es", (long long)done);
+    printf("decode: %.3f ms per second of audio (%.0fx real time)\n",
+           audio > 0 ? secs * 1000.0 / audio : 0.0, secs > 0 ? audio / secs : 0.0);
+    adec_close(&d);
+    if (f)
+        fclose(f);
+    return done == total ? 0 : 1;
 }

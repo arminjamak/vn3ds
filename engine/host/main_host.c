@@ -5,6 +5,8 @@
  *              [--record frames.rgb --audio-log audio.txt --pace --stop-label L]
  *              [--minigame id [--every N]]   (plays a minigame with its bot)
  *              [--leaderboard id]   (renders the Minigames menu's online top 10)
+ *   vn3ds-host --decode-audio in.ogg [out.wav] [--loops N]
+ *              (decodes through the 3DS streaming code, prints the decode cost)
  *
  * It presses A through dialogue, picks menu choices from --choices (0 when
  * the list runs out), prints a transcript, and writes one PNG per line of
@@ -41,6 +43,29 @@ static int read_frames(const char *text)
     float n = (float)strlen(text);
     float sec = 1.0f + n / 20.0f - n / 50.0f;
     return (int)(fminf(fmaxf(sec, 0.9f), 7.0f) * 60.0f);
+}
+
+/* --audio-log also gets the auto-player's input whenever it changes:
+ * "keys <down> <held> <tx> <ty> <cx> <cy>" (KEY_* bit masks), for
+ * tools/vn3ds-record's input timeline. */
+static void log_input(const Input *in)
+{
+    static u32 last_held;
+    static int last_tx = -1, last_ty = -1;
+    static float last_cx, last_cy;
+    if (!host_audio_log)
+        return;
+    bool touch = (in->held | in->down) & KEY_TOUCH_;
+    if (!in->down && in->held == last_held && in->cx == last_cx && in->cy == last_cy &&
+        (!touch || (in->tx == last_tx && in->ty == last_ty)))
+        return;
+    fprintf(host_audio_log, "%.4f keys %u %u %d %d %.3f %.3f\n", host_now, (unsigned)in->down,
+            (unsigned)in->held, touch ? in->tx : -1, touch ? in->ty : -1, in->cx, in->cy);
+    last_held = in->held;
+    last_tx = touch ? in->tx : -1;
+    last_ty = touch ? in->ty : -1;
+    last_cx = in->cx;
+    last_cy = in->cy;
 }
 
 /* One recorded frame: the top screen's left eye and the bottom screen side
@@ -256,6 +281,7 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
                 in.down = KEY_A_;
         }
         in.held |= in.down;   /* the bot may also hold keys (e.g. a stylus) */
+        log_input(&in);
         app_update(&in, dt);
         app_render();
         if (rec && frame % 2 == 0)
@@ -338,6 +364,14 @@ int main(int argc, char **argv)
     bool test_save = false, pace = false, home = false, ui_tour = false;
     FILE *rec = NULL;
     const char *stop_label = NULL, *minigame = NULL, *board = NULL;
+    if (argc >= 3 && !strcmp(argv[1], "--decode-audio")) {
+        const char *wav = argc >= 4 && strncmp(argv[3], "--", 2) ? argv[3] : NULL;
+        int loops = 1;
+        for (int i = 3; i + 1 < argc; i++)
+            if (!strcmp(argv[i], "--loops"))
+                loops = atoi(argv[i + 1]);
+        return host_decode_audio(argv[2], wav, loops);
+    }
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--out") && i + 1 < argc)
             out = argv[++i];
@@ -680,6 +714,7 @@ int main(int argc, char **argv)
             app_render();
             dump(out, shots++, "pause");
         }
+        log_input(&in);
         app_update(&in, dt);
         app_render();
         if (rec && frame % 2 == 0)

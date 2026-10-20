@@ -10,6 +10,11 @@
 
 #define ROOT "sdmc:/3ds/vn3ds"
 
+/* Main thread stack (libctru's default is 32 KiB). The Opus decoder keeps
+ * its scratch arrays on the stack, about 16 KiB per call for stereo, and
+ * it runs at the bottom of the frame's call chain. */
+u32 __stacksize__ = 96 * 1024;
+
 static FILE *log_file;
 
 const char *platform_root(void) { return ROOT; }

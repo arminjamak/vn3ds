@@ -4,9 +4,40 @@ CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-missing-fie
 SRC := $(wildcard source/*.c) host/gfx_soft.c host/audio_null.c host/main_host.c
 OUT := build-host/vn3ds-host
 
-$(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h
+# Opus: the vendored libopus + opusfile (third_party/), the same fixed-point
+# build as on the 3DS (minus the ARM assembly). opusfile needs libogg, found
+# with pkg-config (macOS: brew install libogg pkg-config). Without libogg the
+# desktop build still works, it just cannot check or decode Opus files.
+TP_DIR := third_party
+include third_party/opus.mk
+HAVE_OGG := $(shell pkg-config --exists ogg 2>/dev/null && echo 1)
+ifeq ($(HAVE_OGG),1)
+OGG_CFLAGS := $(shell pkg-config --cflags ogg)
+OPUS_LIB := build-host/libvnopus.a
+TP_OBJ := $(addprefix build-host/tp/,$(OPUS_SRC:.c=.o) $(OPUSFILE_SRC:.c=.o))
+AUDIO_CFLAGS := -DVN_HAVE_OPUS $(OPUS_ENGINE_INCS) $(OGG_CFLAGS)
+AUDIO_LIBS := $(OPUS_LIB) $(shell pkg-config --libs ogg)
+endif
+TP_CFLAGS := -O2 -g -std=gnu11 -w
+
+$(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h $(OPUS_LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ $(SRC) -lz -lm
+	$(CC) $(CFLAGS) $(AUDIO_CFLAGS) -o $@ $(SRC) $(AUDIO_LIBS) -lz -lm
+
+build-host/tp/opus/%.o: third_party/opus/%.c
+	@mkdir -p $(dir $@)
+	@$(CC) -MMD -MP $(TP_CFLAGS) $(OPUS_DEFS) $(OPUS_INCS) -c $< -o $@
+
+build-host/tp/opusfile/%.o: third_party/opusfile/%.c
+	@mkdir -p $(dir $@)
+	@$(CC) -MMD -MP $(TP_CFLAGS) $(OPUSFILE_DEFS) $(OPUSFILE_INCS) $(OGG_CFLAGS) -c $< -o $@
+
+$(OPUS_LIB): $(TP_OBJ)
+	@rm -f $@
+	@echo "ar $@"
+	@ar rcs $@ $^
+
+-include $(TP_OBJ:.o=.d)
 
 clean:
 	rm -rf build-host

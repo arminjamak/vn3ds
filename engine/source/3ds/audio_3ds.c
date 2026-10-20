@@ -1,28 +1,41 @@
-/* Ogg Vorbis streaming on NDSP, decoded with Tremor (libvorbisidec).
+/* Ogg Opus / Ogg Vorbis streaming on NDSP. Opus is decoded with opusfile
+ * (fixed-point libopus, 48 kHz), Vorbis with Tremor (libvorbisidec); see
+ * audio_dec.c. The codec is sniffed from the file, so both play anywhere:
+ * music, sounds, voices, the minigame sfx bank and the machine voices.
  *
- * Each channel keeps NBUF wave buffers that are refilled from the main loop;
- * at 32 kHz that is ~0.4 s of audio queued, enough to ride out a texture
- * load. NDSP needs sdmc:/3ds/dspfirm.cdc (dumped with DSP1); without it the
- * game runs silently. */
+ * Each channel keeps NBUF wave buffers that are refilled from the main loop,
+ * about half a second of audio queued, enough to ride out a texture load.
+ * A buffer is decoded a slice per frame (twice real time) instead of all
+ * at once, so the decoder's cost is spread evenly over the frames; only a
+ * channel that is about to run dry is filled in one go. NDSP needs
+ * sdmc:/3ds/dspfirm.cdc (dumped with DSP1); without it the game runs
+ * silently. */
 
 #include <3ds.h>
-#include <tremor/ivorbisfile.h>
 
 #include "../audio.h"
+#include "../audio_dec.h"
 
 #define NBUF 3
-#define BUF_FRAMES 4096
+/* Bytes per wave buffer: 8192 stereo frames. A stream uses at most
+ * max(4096, rate / 6) frames of it, so 48 kHz Opus queues 0.5 s. */
+#define BUF_BYTES (8192 * 2 * sizeof(s16))
 
 typedef struct {
     bool active, loop, ending, open;
-    OggVorbis_File vf;
+    ADec dec;
     int channels;
+    u32 buf_frames;  /* frames per wave buffer for this file */
+    int cur;         /* wave buffer being decoded into */
+    u32 filled;      /* frames already decoded into it */
     ndspWaveBuf wb[NBUF];
     s16 *pcm[NBUF];
     float vol, fade_in, fade_out;
     float user_vol;
     bool has_next, next_loop;
     char next[300];
+    u64 dec_ticks;   /* time spent decoding this file, for the log */
+    u64 dec_frames;
 } Stream;
 
 static Stream S[CH_COUNT];
@@ -57,17 +70,25 @@ bool audio_init(void)
     ndspSetOutputMode(NDSP_OUTPUT_STEREO);
     for (int ch = 0; ch < CH_COUNT; ch++)
         for (int i = 0; i < NBUF; i++)
-            S[ch].pcm[i] = linearAlloc(BUF_FRAMES * 2 * sizeof(s16));
+            S[ch].pcm[i] = linearAlloc(BUF_BYTES);
     return true;
 }
+
+static double ticks_ms(u64 t) { return (double)t * 1000.0 / SYSCLOCK_ARM11; }
 
 static void close_stream(int ch)
 {
     Stream *s = &S[ch];
     if (ndsp_ok)
         ndspChnWaveBufClear(ch);
+    /* the decoder's cost on this console, to check the CPU budget */
+    if (s->open && s->dec_frames >= (u64)s->dec.rate * 5)
+        LOG("audio ch%d: %s %d ch %ld Hz, %.2f ms CPU per second of audio (%.1f s decoded)", ch,
+            adec_codec_name(s->dec.codec), s->channels, s->dec.rate,
+            ticks_ms(s->dec_ticks) * s->dec.rate / (double)s->dec_frames,
+            (double)s->dec_frames / s->dec.rate);
     if (s->open)
-        ov_clear(&s->vf); /* also closes the FILE */
+        adec_close(&s->dec);
     s->open = false;
     s->active = false;
 }
@@ -89,42 +110,53 @@ void audio_exit(void)
     ndsp_ok = false;
 }
 
-static void fill(int ch)
+static bool wb_busy(const ndspWaveBuf *wb)
+{
+    return wb->status == NDSP_WBUF_QUEUED || wb->status == NDSP_WBUF_PLAYING;
+}
+
+/* Decodes into the free wave buffers in order and queues each one when it
+ * is full (or the file ended). `budget` caps the frames decoded in this
+ * call; it is ignored while fewer than two buffers are queued, so a
+ * channel that is running dry catches up at once. */
+static void fill(int ch, long budget)
 {
     Stream *s = &S[ch];
-    size_t frame_bytes = (size_t)s->channels * sizeof(s16);
-    for (int i = 0; i < NBUF; i++) {
-        ndspWaveBuf *wb = &s->wb[i];
-        if (s->ending || (wb->status != NDSP_WBUF_DONE && wb->status != NDSP_WBUF_FREE))
-            continue;
-        char *dst = (char *)s->pcm[i];
-        size_t want = BUF_FRAMES * frame_bytes, got = 0;
-        int empty_loops = 0;
-        while (got < want) {
-            int section;
-            long r = ov_read(&s->vf, dst + got, (int)(want - got), &section);
-            if (r > 0) {
-                got += (size_t)r;
-                empty_loops = 0;
-            } else if (r == 0) {
-                if (s->loop && empty_loops++ < 2) {
-                    ov_pcm_seek(&s->vf, 0);
-                    continue;
-                }
-                s->ending = true;
-                break;
-            } else if (r != OV_HOLE) {
-                s->ending = true;
-                break;
-            }
+    if (!s->open || !s->pcm[0])
+        return;
+    int queued = 0;
+    for (int i = 0; i < NBUF; i++)
+        queued += wb_busy(&s->wb[i]);
+    while (!s->ending && !wb_busy(&s->wb[s->cur])) {
+        bool hurry = queued < 2;
+        if (!hurry && budget <= 0)
+            break;
+        s16 *dst = s->pcm[s->cur];
+        long want = (long)(s->buf_frames - s->filled);
+        if (!hurry && want > budget)
+            want = budget;
+        bool ended = false;
+        u64 t0 = svcGetSystemTick();
+        long got = adec_fill(&s->dec, dst + s->filled * s->channels, want, s->loop, &ended);
+        s->dec_ticks += svcGetSystemTick() - t0;
+        s->dec_frames += (u64)got;
+        s->filled += (u32)got;
+        budget -= got;
+        if (ended)
+            s->ending = true;
+        if (s->filled < s->buf_frames && !ended)
+            continue; /* budget used up or a short read: more next time */
+        if (s->filled > 0) {
+            ndspWaveBuf *wb = &s->wb[s->cur];
+            memset(wb, 0, sizeof(*wb));
+            wb->data_vaddr = dst;
+            wb->nsamples = s->filled;
+            DSP_FlushDataCache(dst, s->filled * s->channels * sizeof(s16));
+            ndspChnWaveBufAdd(ch, wb);
+            queued++;
+            s->cur = (s->cur + 1) % NBUF;
         }
-        if (got < frame_bytes)
-            continue;
-        memset(wb, 0, sizeof(*wb));
-        wb->data_vaddr = dst;
-        wb->nsamples = (u32)(got / frame_bytes);
-        DSP_FlushDataCache(dst, (u32)got);
-        ndspChnWaveBufAdd(ch, wb);
+        s->filled = 0;
     }
 }
 
@@ -132,26 +164,21 @@ static bool open_stream(int ch, const char *path, bool loop, float fadein)
 {
     Stream *s = &S[ch];
     close_stream(ch);
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        LOG("audio: cannot open %s", path);
-        return false;
-    }
-    if (ov_open(f, &s->vf, NULL, 0) < 0) {
-        LOG("audio: %s is not Ogg Vorbis", path);
-        fclose(f);
+    if (!adec_open(&s->dec, path)) {
+        LOG("audio: cannot play %s (missing, or not Ogg Opus / Vorbis)", path);
         return false;
     }
     s->open = true;
-    vorbis_info *vi = ov_info(&s->vf, -1);
-    if (!vi || vi->channels < 1 || vi->channels > 2) {
-        close_stream(ch);
-        return false;
-    }
-    s->channels = vi->channels;
+    s->channels = s->dec.channels;
+    u32 frames = (u32)(s->dec.rate / 6);
+    u32 cap = (u32)(BUF_BYTES / (s->channels * sizeof(s16)));
+    s->buf_frames = frames < 4096 ? 4096 : frames > cap ? cap : frames;
+    s->cur = 0;
+    s->filled = 0;
+    s->dec_ticks = s->dec_frames = 0;
     ndspChnReset(ch);
     ndspChnSetInterp(ch, NDSP_INTERP_LINEAR);
-    ndspChnSetRate(ch, (float)vi->rate);
+    ndspChnSetRate(ch, (float)s->dec.rate);
     ndspChnSetFormat(ch, s->channels == 2 ? NDSP_FORMAT_STEREO_PCM16 : NDSP_FORMAT_MONO_PCM16);
     memset(s->wb, 0, sizeof(s->wb));
     for (int i = 0; i < NBUF; i++)
@@ -163,7 +190,7 @@ static bool open_stream(int ch, const char *path, bool loop, float fadein)
     s->fade_in = fadein > 0 ? 1.0f / fadein : 0;
     s->vol = fadein > 0 ? 0.0f : 1.0f;
     apply_mix(ch);
-    fill(ch);
+    fill(ch, 0);
     return true;
 }
 
@@ -246,7 +273,8 @@ void audio_update(float dt)
             }
             apply_mix(ch);
         }
-        fill(ch);
+        /* twice real time per frame (at least a 60th of a second) */
+        fill(ch, (long)(s->dec.rate * 2 * (dt > 1.0f / 60 ? (dt < 0.25f ? dt : 0.25f) : 1.0f / 60)));
         if (s->ending && !ndspChnIsPlaying(ch)) {
             bool all_done = true;
             for (int i = 0; i < NBUF; i++)
@@ -275,39 +303,20 @@ void audio_vox_free(void)
     nvox = 0;
 }
 
-/* Decodes a short Ogg into mono PCM16 in linear memory (at most `seconds`). */
+/* Decodes a short clip (Opus or Vorbis) into mono PCM16 in linear memory
+ * (at most `seconds`). */
 static s16 *decode_short(const char *path, float seconds, u32 *frames_out, long *rate_out)
 {
-    FILE *f = fopen(path, "rb");
-    OggVorbis_File vf;
-    if (!f)
-        return NULL;
-    if (ov_open(f, &vf, NULL, 0) < 0) {
-        fclose(f);
-        return NULL;
-    }
-    vorbis_info *vi = ov_info(&vf, -1);
-    int chans = vi ? vi->channels : 1;
-    long rate = vi ? vi->rate : 32000;
-    size_t cap = (size_t)(rate * seconds) * 2 * chans, got = 0;
-    s16 *tmp = malloc(cap);
-    while (tmp && got < cap) {
-        int section;
-        long r = ov_read(&vf, (char *)tmp + got, (int)(cap - got), &section);
-        if (r <= 0)
-            break;
-        got += (size_t)r;
-    }
-    ov_clear(&vf);
-    u32 frames = (u32)(got / (2 * chans));
-    s16 *pcm = frames ? linearAlloc(frames * 2) : NULL;
+    u32 frames = 0;
+    long rate = 0;
+    s16 *tmp = adec_load_mono(path, seconds, &frames, &rate);
+    s16 *pcm = tmp ? linearAlloc(frames * sizeof(s16)) : NULL;
     if (pcm) {
-        for (u32 k = 0; k < frames; k++)
-            pcm[k] = chans == 2 ? (s16)((tmp[2 * k] + tmp[2 * k + 1]) / 2) : tmp[k];
-        DSP_FlushDataCache(pcm, frames * 2);
+        memcpy(pcm, tmp, frames * sizeof(s16));
+        DSP_FlushDataCache(pcm, frames * sizeof(s16));
     }
     free(tmp);
-    *frames_out = frames;
+    *frames_out = pcm ? frames : 0;
     *rate_out = rate;
     return pcm;
 }
@@ -317,6 +326,7 @@ void audio_vox_load(const char **paths, int n)
     audio_vox_free();
     if (!ndsp_ok)
         return;
+    u64 t0 = svcGetSystemTick();
     for (int i = 0; i < n && nvox < VOX_MAX; i++) {
         u32 frames;
         long rate;
@@ -331,7 +341,7 @@ void audio_vox_load(const char **paths, int n)
     ndspChnReset(VOX_CH);
     ndspChnSetInterp(VOX_CH, NDSP_INTERP_LINEAR);
     ndspChnSetFormat(VOX_CH, NDSP_FORMAT_MONO_PCM16);
-    LOG("voice bank: %d syllables", nvox);
+    LOG("voice bank: %d syllables, decoded in %.0f ms", nvox, ticks_ms(svcGetSystemTick() - t0));
 }
 
 void audio_vox_play(int index, float rate, float volume)
@@ -377,6 +387,7 @@ void audio_sfx_load(const char **paths, int n)
     audio_sfx_free();
     if (!ndsp_ok)
         return;
+    u64 t0 = svcGetSystemTick();
     for (int i = 0; i < n && nsfx < SFX_MAX; i++) {
         /* keep indices aligned with `paths` even if one fails */
         sfx_pcm[nsfx] = decode_short(paths[i], 3.0f, &sfx_len[nsfx], &sfx_rate[nsfx]);
@@ -387,7 +398,7 @@ void audio_sfx_load(const char **paths, int n)
         ndspChnSetInterp(SFX_CH0 + v, NDSP_INTERP_LINEAR);
         ndspChnSetFormat(SFX_CH0 + v, NDSP_FORMAT_MONO_PCM16);
     }
-    LOG("sfx bank: %d clips", nsfx);
+    LOG("sfx bank: %d clips, decoded in %.0f ms", nsfx, ticks_ms(svcGetSystemTick() - t0));
 }
 
 void audio_sfx_play(int index, float volume, float rate)

@@ -589,45 +589,82 @@ def is_ogg_vorbis(data):
 
 
 def convert_audio(data, name, out_path, warn, profile="sd"):
-    """Write Ogg Vorbis to out_path, transcoding with ffmpeg when needed.
+    """Write Ogg Vorbis or Ogg Opus to out_path, transcoding with ffmpeg when
+    needed. The engine tells the two apart by their first Ogg page, so the
+    packed file is called .ogg either way.
 
-    profile "sd": Ogg Vorbis files are copied as they are (best quality).
-    profile "wifi": everything is re-encoded small for Wi-Fi transfers:
-    22 kHz, mixed to mono and written as identical stereo channels (Vorbis
-    stores the zero difference almost for free), quality 1.5: about 20 kbps."""
-    if is_ogg_vorbis(data) and profile != "wifi":
+    profile "sd": Ogg Vorbis and Ogg Opus files are copied as they are (best
+    quality); anything else becomes Ogg Vorbis, 32 kHz stereo, quality 3.
+    profile "wifi": everything is re-encoded small for Wi-Fi transfers as
+    Ogg Opus with libopus, mixed to mono (the 3DS plays it on both sides):
+    music at 19 kbps constrained VBR, sound effects (20 s or shorter) at
+    20 kbps VBR, which spends its bits on transients, and voices (a voice/
+    or vo/ folder) at 14 kbps VBR. In listening metrics that beats the old
+    22 kHz Vorbis q1.5 (cut off at about 9.5 kHz) at 20-60% fewer bytes.
+    ffmpeg builds without libopus fall back to that Vorbis encode."""
+    def first_packet(magic):
+        if data[:4] != b"OggS" or len(data) < 28:
+            return False
+        start = 27 + data[26]          # after the first page's segment table
+        return data[start:start + len(magic)] == magic
+    is_ogg = first_packet(b"\x01vorbis") or first_packet(b"OpusHead")
+    if is_ogg and profile != "wifi":
         with open(out_path, "wb") as f:
             f.write(data)
         return True
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        warn(None, f"{name}: not Ogg Vorbis and ffmpeg is not installed; skipped")
+        warn(None, f"{name}: not Ogg Vorbis/Opus and ffmpeg is not installed; skipped")
         return False
     ext = os.path.splitext(name)[1] or ".bin"
+    bitexact = ["-fflags", "+bitexact", "-flags:a", "+bitexact"]
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "in" + ext)
         with open(src, "wb") as f:
             f.write(data)
         if profile == "wifi":
-            mono = ["-af", "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1", "-ar", "22050"]
-            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *mono, "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis",
-                   "-strict", "-2", "-q:a", "1.5", out_path]
+            channels, seconds = 2, None
+            ffprobe = shutil.which("ffprobe")
+            if ffprobe:
+                r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries",
+                                    "stream=channels:format=duration", "-of", "default=nw=1", src],
+                                   capture_output=True, text=True)
+                info = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
+                try:
+                    channels = int(info.get("channels", 2))
+                    seconds = float(info.get("duration", ""))
+                except ValueError:
+                    pass
+            folders = name.replace("\\", "/").lower().split("/")[:-1]
+            if any(d in ("voice", "voices", "vo") for d in folders):
+                rate = ["-b:a", "14k", "-vbr", "on"]            # speech: SILK/hybrid modes
+            elif seconds is not None and seconds <= 20:
+                rate = ["-b:a", "20k", "-vbr", "on"]            # sound effects
+            else:
+                rate = ["-b:a", "19k", "-vbr", "constrained"]   # music
+            mono = ["-af", "pan=mono|c0=0.5*c0+0.5*c1"] if channels == 2 else ["-ac", "1"]
+            cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-map_metadata", "-1", *mono,
+                   "-ar", "48000", *bitexact, "-c:a", "libopus", *rate, "-application", "audio",
+                   "-frame_duration", "20", "-compression_level", "10", "-f", "ogg", out_path]
             r = subprocess.run(cmd, capture_output=True)
-            if r.returncode != 0:   # mono sources: pan needs two channels
-                cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "22050",
-                       "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis", "-strict", "-2", "-q:a", "1.5", out_path]
+            if r.returncode != 0:
+                # no libopus in this ffmpeg: the old Vorbis encode, 22 kHz dual mono
+                dual = (["-af", "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1"] if channels == 2
+                        else ["-ac", "2"])
+                cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *dual, "-ar", "22050", *bitexact,
+                       "-c:a", "vorbis", "-strict", "-2", "-q:a", "1.5", "-f", "ogg", out_path]
                 r = subprocess.run(cmd, capture_output=True)
             if r.returncode != 0:
                 warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
                 return False
             return True
         cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-               "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "libvorbis", "-q:a", "3", out_path]
+               *bitexact, "-c:a", "libvorbis", "-q:a", "3", out_path]
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             # Builds without libvorbis only have ffmpeg's experimental encoder.
             cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "32000",
-                   "-fflags", "+bitexact", "-flags:a", "+bitexact", "-c:a", "vorbis", "-strict", "-2", "-b:a", "112k", out_path]
+                   *bitexact, "-c:a", "vorbis", "-strict", "-2", "-b:a", "112k", out_path]
             r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
