@@ -631,17 +631,18 @@ def main(argv=None, progress=None):
                 return i, key, analyse_file(master if master is not None else fs.read(key))
             except (OSError, ValueError, MemoryError):
                 return i, key, None
-        with ThreadPoolExecutor(max_workers=max(2, min(6, os.cpu_count() or 2))) as ex:
-            for n, (i, key, r) in enumerate(ex.map(measure, todo)):
-                progress("music", done=n + 1, total=len(todo))
-                e = music_entry(r)
-                why = "no steady beat" if r and not e else "not decodable" if not r else ""
-                if e and abs(r.get("offset", 0.0)) > 0.1 * 60.0 / e["bpm"]:
-                    e, why = None, f"first beat {r['offset']:.2f} s into the file"
-                music_auto.append((fs.display(key), r, e, why))
-                if e:
-                    music_meta.append((i, float(e["bpm"]), int(e["beats_per_bar"]),
-                                       int(e["phrase_bars"]), int(e["bars"])))
+        # One track at a time: forking ffmpeg from several threads while numpy's
+        # OpenBLAS threads are busy deadlocks in OpenBLAS's fork handler.
+        for n, (i, key, r) in enumerate(map(measure, todo)):
+            progress("music", done=n + 1, total=len(todo))
+            e = music_entry(r)
+            why = "no steady beat" if r and not e else "not decodable" if not r else ""
+            if e and abs(r.get("offset", 0.0)) > 0.1 * 60.0 / e["bpm"]:
+                e, why = None, f"first beat {r['offset']:.2f} s into the file"
+            music_auto.append((fs.display(key), r, e, why))
+            if e:
+                music_meta.append((i, float(e["bpm"]), int(e["beats_per_bar"]),
+                                   int(e["phrase_bars"]), int(e["bars"])))
         progress("music", state="done", done=len(todo), total=len(todo))
 
     # Machine voices (vn3ds.json "voices"): a syllable bank plus a pitch per
