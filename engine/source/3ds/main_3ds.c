@@ -20,6 +20,7 @@ static FILE *log_file;
 const char *platform_root(void) { return ROOT; }
 bool platform_mkdir(const char *path) { return mkdir(path, 0777) == 0; }
 u32 platform_time(void) { return (u32)time(NULL); }
+u64 platform_ms(void) { return osGetTime(); }
 
 void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void *ud)
 {

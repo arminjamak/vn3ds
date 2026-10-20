@@ -159,6 +159,29 @@ static void unload_game(void)
     net_set_live_game(NULL);
 }
 
+/* Opening a game can take a while on a 3DS card (an update to apply, the
+ * script, the voices, the title art): each step is timed in the log, and once
+ * the whole thing has taken longer than a moment a "Preparing" card is drawn
+ * between steps, so the console never just sits on a still screen. */
+static u64 opening_t0, opening_last, opening_drawn;
+
+static void opening_step(const char *step, float frac)
+{
+    if (!E.opening)
+        return;
+    u64 now = platform_ms();
+    if (strcmp(step, E.opening_step) != 0) {
+        LOG("open %s: %s after %u ms", E.opening_title, step, (unsigned)(now - opening_t0));
+        snprintf(E.opening_step, sizeof(E.opening_step), "%s", step);
+    }
+    E.opening_frac = frac;
+    opening_last = now;
+    if (now - opening_t0 > 150 && now - opening_drawn > 100) {   /* ~10 fps is plenty */
+        opening_drawn = now;
+        app_render();
+    }
+}
+
 /* Moves everything under `src` into `dst` (same card), replacing files. */
 static void move_tree(const char *src, const char *dst)
 {
@@ -178,9 +201,12 @@ static void move_tree(const char *src, const char *dst)
             continue;
         if (S_ISDIR(st.st_mode)) {
             move_tree(from, to);
-        } else if (!strstr(e->d_name, ".part")) {
+        } else if (strstr(e->d_name, ".part")) {
+            remove(from);   /* a transfer that never finished: nothing will complete it */
+        } else {
             remove(to);
             rename(from, to);
+            opening_step("Applying the update", -1);
         }
     }
     closedir(d);
@@ -256,6 +282,13 @@ static void prune_run(void *arg)
         char path[460];
         snprintf(path, sizeof(path), "%s/%s", job->dir, doomed + (size_t)i * PRUNE_NAME);
         remove(path);
+        /* each delete holds the card for a moment: space them out so a game
+         * reading its pictures and music never waits behind a queue of them */
+#ifdef __3DS__
+        svcSleepThread(40 * 1000000LL);
+#else
+        usleep(1000);
+#endif
     }
     char flag[460];
     snprintf(flag, sizeof(flag), "%s/prune.flag", job->dir);
@@ -328,24 +361,39 @@ static void prune_game(const char *dir, const Game *g)
 
 static bool load_game_dir(const char *dir, const char *id)
 {
+    E.opening = true;
+    opening_t0 = opening_drawn = platform_ms();
+    if (!E.opening_title[0])
+        snprintf(E.opening_title, sizeof(E.opening_title), "%.63s", id);
+    E.opening_step[0] = 0;
+    opening_step("Closing the last game", -1);
     unload_game();
+    opening_step("Applying the update", -1);
     apply_staged_update(id);
+    opening_step("Reading the story", 0.2f);
     char err[256];
     if (!game_load(&E.game, dir, id, err, sizeof(err))) {
+        E.opening = false;
         app_error(err);
         return false;
     }
     E.loaded = true;
     prune_game(dir, &E.game);
     net_set_live_game(id);
+    opening_step("Looking for your saves", 0.45f);
     {
         SlotInfo info;
         E.has_resume = save_peek(id, RESUME_SLOT, &info);
     }
     vm_init(&E.vm, &E.game);
+    opening_step("Tuning the voices", 0.6f);
     talk_load_bank();
     E.music_res = -1;
+    opening_step("Setting the stage", 0.85f);
     app_to_title();
+    LOG("open %s: ready after %u ms", E.opening_title, (unsigned)(platform_ms() - opening_t0));
+    E.opening = false;
+    E.opening_title[0] = 0;
     return true;
 }
 
@@ -374,6 +422,8 @@ bool app_load_game(int index)
     }
     char dir[400];
     snprintf(dir, sizeof(dir), "%s/games/%s", E.root, E.games[index]);
+    snprintf(E.opening_title, sizeof(E.opening_title), "%.63s",
+             E.game_titles[index][0] ? E.game_titles[index] : E.games[index]);
     return load_game_dir(dir, E.games[index]);
 }
 
@@ -596,7 +646,7 @@ static void preload(const Stage *st, const char *tag)
         return;
     const ImageDef *im = &E.game.images[st->s[i].image];
     if (!(im->flags & IMG_VIDEO))
-        texcache_get(im->res);
+        texcache_image(im);
     for (int k = 0; k < im->nlayers; k++)
         texcache_get(im->layers[k].res);
 }
@@ -1301,6 +1351,16 @@ void app_render(void)
         thumb_valid = gfx_snapshot_read(thumb, THUMB_W, THUMB_H);
         snap_pending = false;
     }
+    /* keep a snapshot of each new line (or choice) for the home screen. Like the
+     * captures below it is drawn before the screens: drawn after the bottom
+     * screen it could flash the top picture onto the bottom on a real 3DS. */
+    if (!E.opening && E.screen == SCR_GAME && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
+        ((E.vm.state == VM_SAY && E.text_done) || E.vm.state == VM_MENU)) {
+        snapped_serial = E.say_serial;
+        gfx_target_snapshot(0x000000FF);
+        ui_draw_top(EYE_LEFT);
+        snap_pending = true;
+    }
     if (E.screen == SCR_GAME && E.tr.active && E.tr.need_capture) {
         for (int eye = 0; eye < 2; eye++) {
             gfx_target_capture(eye, 0x000000FF);
@@ -1318,20 +1378,15 @@ void app_render(void)
     gfx_target_top(EYE_LEFT, 0x000000FF);
     ui_draw_top(EYE_LEFT);
     ui_draw_rx_icon(EYE_LEFT);
+    ui_draw_opening(EYE_LEFT);
     if (strength > 0) {
         gfx_target_top(EYE_RIGHT, 0x000000FF);
         ui_draw_top(EYE_RIGHT);
         ui_draw_rx_icon(EYE_RIGHT);
+        ui_draw_opening(EYE_RIGHT);
     }
     gfx_target_bottom(0x1A1A24FF);
     ui_draw_bottom();
-    /* keep a snapshot of each new line (or choice) for the home screen */
-    if (E.screen == SCR_GAME && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
-        ((E.vm.state == VM_SAY && E.text_done) || E.vm.state == VM_MENU)) {
-        snapped_serial = E.say_serial;
-        gfx_target_snapshot(0x000000FF);
-        ui_draw_top(EYE_LEFT);
-        snap_pending = true;
-    }
+    ui_draw_opening(-1);
     gfx_frame_end();
 }

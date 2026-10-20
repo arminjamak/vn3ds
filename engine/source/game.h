@@ -17,7 +17,8 @@ enum {
 
 /* One depth layer of a layered illustration; x/y/w/h are in the image's
  * logical 3DS pixels, depth is absolute (positive = behind the screen). */
-enum { ANIM_NONE, ANIM_SWAY, ANIM_PULSE, ANIM_BREATHE, ANIM_FALL, ANIM_RISE, ANIM_STARS };
+enum { ANIM_NONE, ANIM_SWAY, ANIM_PULSE, ANIM_BREATHE, ANIM_FALL, ANIM_RISE, ANIM_STARS,
+       ANIM_PATCH /* a = x, b = y in texels: see ImageDef.patch_res */ };
 
 typedef struct {
     s32 res;
@@ -35,6 +36,12 @@ typedef struct {
     float depth;
     ImageLayer *layers; /* NULL for ordinary images */
     int nlayers;
+    /* An image stored as an earlier picture (res) plus an opaque JPEG patch
+     * at texel (patch_x, patch_y), both JPEG .ctex; the two are put together
+     * into one texture when loaded (texcache_image), so it draws exactly
+     * like an ordinary image. -1 when not patched. */
+    s32 patch_res;
+    int patch_x, patch_y;
     /* name split into words */
     char *words;
     const char *tag;

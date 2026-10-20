@@ -89,6 +89,12 @@ static void record_frame(FILE *f)
 const char *platform_root(void) { return root_dir; }
 bool platform_mkdir(const char *path) { return mkdir(path, 0755) == 0; }
 u32 platform_time(void) { return (u32)time(NULL); }
+u64 platform_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (u64)ts.tv_sec * 1000 + (u64)(ts.tv_nsec / 1000000);
+}
 void platform_keep_awake(bool on) { (void)on; }
 void platform_screens(bool on) { (void)on; }
 

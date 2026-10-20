@@ -230,7 +230,7 @@ void render_sprite(const Sprite *s, int eye, int rank, float dx, float dy)
         gfx_rect(r.x + shift, r.y, aw, ah, rgba_alpha(im->color, r.alpha));
         return;
     }
-    GfxTex *tex = (im->flags & IMG_VIDEO) ? video_tex(im->res) : texcache_get(im->res);
+    GfxTex *tex = (im->flags & IMG_VIDEO) ? video_tex(im->res) : texcache_image(im);
     if (tex)
         gfx_image(tex, r.x + shift, r.y, r.w, r.h, r.angle, r.alpha);
 }

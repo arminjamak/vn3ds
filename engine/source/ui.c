@@ -930,6 +930,31 @@ void ui_draw_rx_icon(int eye)
     download_glyph(cx, cy - 0.5f, 0.75f, WHITE);
 }
 
+void ui_draw_opening(int eye)
+{
+    if (!E.opening)
+        return;
+    if (eye < 0) {   /* bottom screen: just dim it */
+        gfx_rect(0, 0, 320, 240, RGBA(0, 0, 0, 170));
+        return;
+    }
+    gfx_rect(0, 0, TOP_W, TOP_H, RGBA(0, 0, 0, 190));
+    float dx = shift(eye, ui_depth() - 0.15f);
+    ui_rrect(70 + dx, 78, 260, 84, 14, FILL1);
+    char line[96];
+    snprintf(line, sizeof(line), "Preparing %s", E.opening_title);
+    text_centered(line, 200 + dx, 90, fit_scale(line, 0.6f, 240), WHITE);
+    text_centered(E.opening_step, 200 + dx, 116, fit_scale(E.opening_step, 0.45f, 240), INK2);
+    float bx = 95 + dx, by = 144, bw = 210;
+    if (E.opening_frac >= 0) {
+        progress_bar(bx, by, bw, 5, E.opening_frac, FILL3, WHITE);
+    } else {   /* unknown length: a sliding segment */
+        float p = fmodf((float)(platform_ms() % 100000) / 900.0f, 1.0f);
+        gfx_rect(bx, by, bw, 5, FILL3);
+        gfx_rect(bx + p * (bw - 50), by, 50, 5, WHITE);
+    }
+}
+
 void ui_draw_top(int eye)
 {
     switch (E.screen) {

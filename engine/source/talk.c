@@ -87,7 +87,7 @@ void talk_begin(void)
     F.talk = talk;
     F.t = 0;
     F.open = false;
-    texcache_get(g->images[talk].res);
+    texcache_image(&g->images[talk]);
 }
 
 /* Pitch movement near the end of a sentence: falls before '.', rises before '?'. */

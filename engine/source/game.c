@@ -165,6 +165,7 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
         im->h = rd_f32(e + 16);
         im->flags = rd_u32(e + 20);
         im->depth = rd_f32(e + 24);
+        im->patch_res = -1;
         split_words(im);
     }
 
@@ -190,6 +191,16 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
                     im->layers[k].a = rd_f32(l + 28);
                     im->layers[k].b = rd_f32(l + 32);
                     im->layers[k].period = rd_f32(l + 36);
+                }
+                /* base picture + patch: an ordinary image with a composite texture */
+                if (nl == 2 && im->layers[1].anim == ANIM_PATCH && im->layers[0].res == im->res &&
+                    im->layers[1].res >= 0 && im->layers[1].a >= 0 && im->layers[1].b >= 0) {
+                    im->patch_res = im->layers[1].res;
+                    im->patch_x = (int)im->layers[1].a;
+                    im->patch_y = (int)im->layers[1].b;
+                    free(im->layers);
+                    im->layers = NULL;
+                    im->nlayers = 0;
                 }
             }
             e += 40 * nl;

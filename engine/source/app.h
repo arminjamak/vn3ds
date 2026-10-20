@@ -73,6 +73,10 @@ typedef struct {
     SlotInfo game_resume[MAX_GAMES];
     float autosave_t;
     bool has_resume;      /* the loaded game has a resume save (title: Continue) */
+    /* opening a game: a "Preparing ..." card once it takes longer than a moment */
+    bool opening;
+    char opening_title[64], opening_step[64];
+    float opening_frac;   /* 0..1, or < 0 when unknown */
 
     Game game;
     bool loaded;
@@ -180,6 +184,7 @@ void ui_mg_board(void);
 void ui_overlay_input(const Input *in);
 void ui_draw_top(int eye);
 void ui_draw_rx_icon(int eye);   /* corner icon while a transfer runs */
+void ui_draw_opening(int eye);   /* "Preparing ..." while a game opens (eye -1: bottom) */
 /* A filled rounded rectangle (buttons, cards, panels). */
 void ui_rrect(float x, float y, float w, float h, float r, u32 c);
 void ui_draw_bottom(void);
@@ -200,6 +205,8 @@ void talk_load_bank(void);
 
 /* texcache.c */
 GfxTex *texcache_get(s32 res);
+/* An image's texture (its base picture with its patch put in, if any). */
+GfxTex *texcache_image(const ImageDef *im);
 void texcache_clear(void);
 
 /* save.c */
