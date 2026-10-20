@@ -695,6 +695,20 @@ static void crcl_write_all(void)
     crcl_free();
 }
 
+/* Packed files are named after their contents (16 hex digits of a SHA-1,
+ * see vnpack), and they are only renamed into place once complete, so one
+ * that exists with the right size is the right file. */
+static bool content_named(const char *rel)
+{
+    const char *base = strrchr(rel, '/');
+    base = base ? base + 1 : rel;
+    int i = 0;
+    for (; i < 16; i++)
+        if (!((base[i] >= '0' && base[i] <= '9') || (base[i] >= 'a' && base[i] <= 'f')))
+            return false;
+    return base[16] == '.';
+}
+
 static bool have_file(void)
 {
     if (!path_allowed(path))
@@ -714,6 +728,10 @@ static bool have_file(void)
     int says = crcl_says(path);
     if (says >= 0)
         return says == 1;
+    if (content_named(path)) {   /* the name is the content: the right size is enough */
+        struct stat st;
+        return stat(live, &st) == 0 && (u64)st.st_size == file_size;
+    }
     return file_matches(live);
 }
 
