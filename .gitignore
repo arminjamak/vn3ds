@@ -1,0 +1,29 @@
+# build output
+/build/
+engine/build/
+engine/build-host/
+engine/*.elf
+engine/*.smdh
+engine/*.map
+engine/vn3ds.3dsx
+host_root/
+*.part
+__pycache__/
+*.pyc
+.DS_Store
+
+# Ren'Py caches and saves inside example projects
+examples/*/game/cache/
+examples/*/game/saves/
+examples/*/game/*.rpyc
+examples/*/game/*.rpyb
+examples/*/game/log.txt
+examples/*/game/errors.txt
+examples/*/game/traceback.txt
+
+# large renders: published as release downloads instead
+examples/music/build/
+examples/music/snapshot_soundtrack_review.mp3
+
+# rendered playthrough videos
+renders/

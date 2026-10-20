@@ -1,0 +1,14 @@
+# Desktop test build (macOS / Linux): make -f Makefile.host
+CC ?= cc
+CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+SRC := $(wildcard source/*.c) host/gfx_soft.c host/audio_null.c host/main_host.c
+OUT := build-host/vn3ds-host
+
+$(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $(SRC) -lz -lm
+
+clean:
+	rm -rf build-host
+
+.PHONY: clean

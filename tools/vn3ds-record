@@ -1,0 +1,4 @@
+#!/bin/sh
+# Render a paced playthrough of a ported game as a 1080p video:
+#   tools/vn3ds-record build/<game> -o playthrough.mp4 [--until LABEL] [--choices 0,1]
+PYTHONPATH="$(cd "$(dirname "$0")" && pwd)${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vnpack.record "$@"

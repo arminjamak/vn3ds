@@ -1,0 +1,3632 @@
+{
+ "depth": {
+  "cg": 0.3,
+  "aron": 0.0,
+  "mira": 0.0,
+  "seraph": -0.08,
+  "patron": -0.15,
+  "ember": -0.1,
+  "pim": 0.05,
+  "dross": 0.1,
+  "miso": -0.12
+ },
+ "layers": {
+  "bg room": [
+   {
+    "file": "layers/bg room/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg room/1-clouds.png",
+    "depth": 1.25,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 0,
+     "period": 18
+    }
+   },
+   {
+    "file": "layers/bg room/2-window.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg room/3-bookshelf.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg room/4-plant.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 40
+    }
+   }
+  ],
+  "bg park": [
+   {
+    "file": "layers/bg park/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg park/1-clouds.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 0,
+     "period": 25
+    }
+   },
+   {
+    "file": "layers/bg park/2-far hill.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg park/3-near hill.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg park/4-trees.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg park/5-grass.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 4
+    }
+   }
+  ],
+  "bg bedroom": [
+   {
+    "file": "layers/bg bedroom/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bedroom/1-dawn.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg bedroom/2-bed.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg bedroom/3-clock.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/bg bedroom/4-dust.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 30
+    }
+   }
+  ],
+  "bg kitchen": [
+   {
+    "file": "layers/bg kitchen/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen/1-bird.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/bg kitchen/2-counter.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg kitchen/3-coffee.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg kitchen/4-steam.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "rise",
+     "a": 140,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg kitchen/5-indicator.png",
+    "depth": 0.24,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   }
+  ],
+  "bg street": [
+   {
+    "file": "layers/bg street/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street/1-buildings.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 15
+    }
+   },
+   {
+    "file": "layers/bg street/2-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street/3-wire.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg street/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg desk": [
+   {
+    "file": "layers/bg desk/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg desk/1-notes.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg desk/2-strings.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg desk/3-table.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg desk/4-lamplight.png",
+    "depth": 0.28,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg desk/5-lamp.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg desk/6-notebook.png",
+    "depth": -0.2
+   },
+   {
+    "file": "layers/bg desk/7-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg ward": [
+   {
+    "file": "layers/bg ward/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ward/1-bars.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg ward/2-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ward/3-bed.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg ward/4-monitor.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/bg ward/5-heartbeat.png",
+    "depth": 0.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward/6-fluorescent.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.35
+    }
+   }
+  ],
+  "bg rooftop": [
+   {
+    "file": "layers/bg rooftop/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg rooftop/1-stars.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg rooftop/2-twinkle.png",
+    "depth": 1.45,
+    "anim": {
+     "type": "pulse",
+     "a": 0.1,
+     "period": 2.3
+    }
+   },
+   {
+    "file": "layers/bg rooftop/3-moonglow.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg rooftop/4-moon.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg rooftop/5-city.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg rooftop/6-roof.png",
+    "depth": -0.15
+   }
+  ],
+  "bg command": [
+   {
+    "file": "layers/bg command/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg command/1-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg command/2-worlds.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg command/3-alarm.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.15,
+     "period": 1.4
+    }
+   },
+   {
+    "file": "layers/bg command/4-radiance.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 7
+    }
+   }
+  ],
+  "bg purgatorium": [
+   {
+    "file": "layers/bg purgatorium/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg purgatorium/1-lanterns.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg purgatorium/2-glow0.png",
+    "depth": 0.72,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg purgatorium/3-glow1.png",
+    "depth": 0.72,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg purgatorium/4-glow2.png",
+    "depth": 0.72,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg purgatorium/5-mist.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 8,
+     "y": 0,
+     "period": 14
+    }
+   },
+   {
+    "file": "layers/bg purgatorium/6-table.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg purgatorium/7-front mist.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "sway",
+     "x": 14,
+     "y": 0,
+     "period": 11
+    }
+   }
+  ],
+  "bg council": [
+   {
+    "file": "layers/bg council/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg council/1-orbglow.png",
+    "depth": 0.75,
+    "anim": {
+     "type": "pulse",
+     "a": 0.55,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg council/2-planet.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "breathe",
+     "a": 0.02,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg council/3-tethers.png",
+    "depth": 0.35,
+    "anim": {
+     "type": "pulse",
+     "a": 0.4,
+     "period": 2.2
+    }
+   },
+   {
+    "file": "layers/bg council/4-thrones.png",
+    "depth": -0.1
+   }
+  ],
+  "bg watch": [
+   {
+    "file": "layers/bg watch/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg watch/1-round window.png",
+    "depth": 0.85
+   },
+   {
+    "file": "layers/bg watch/2-aron's window.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg watch/3-his light.png",
+    "depth": 0.88,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 3.5
+    }
+   },
+   {
+    "file": "layers/bg watch/4-beams.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg watch/5-floor.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg watch/6-boxes.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg watch/7-embers.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 18
+    }
+   }
+  ],
+  "bg cafe": [
+   {
+    "file": "layers/bg cafe/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg cafe/1-lamps.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe/2-lampglow0.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe/3-lampglow1.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe/4-lampglow2.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe/5-lampglow3.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe/6-lampglow4.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe/7-lampglow5.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe/8-lampglow6.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe/9-floor.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg cafe/10-tables.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg cafe/11-steam.png",
+    "depth": 0.1,
+    "anim": {
+     "type": "rise",
+     "a": 200,
+     "period": 6
+    }
+   }
+  ],
+  "bg night": [
+   {
+    "file": "layers/bg night/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg night/1-buildings.png",
+    "depth": 0.75
+   },
+   {
+    "file": "layers/bg night/2-far rain.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.6
+    }
+   },
+   {
+    "file": "layers/bg night/3-street.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg night/4-lampglow0.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg night/5-lampglow1.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg night/6-lamps.png",
+    "depth": 0.28
+   },
+   {
+    "file": "layers/bg night/7-near rain.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 0.9
+    }
+   }
+  ],
+  "bg mirror": [
+   {
+    "file": "layers/bg mirror/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg mirror/1-mirror.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg mirror/2-echo0.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 3,
+     "y": 1,
+     "period": 2.5
+    }
+   },
+   {
+    "file": "layers/bg mirror/3-echo1.png",
+    "depth": 0.45,
+    "anim": {
+     "type": "sway",
+     "x": 5,
+     "y": 1,
+     "period": 3.5
+    }
+   },
+   {
+    "file": "layers/bg mirror/4-echo2.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "sway",
+     "x": 7,
+     "y": 1,
+     "period": 4.5
+    }
+   },
+   {
+    "file": "layers/bg mirror/5-echo3.png",
+    "depth": 0.35,
+    "anim": {
+     "type": "sway",
+     "x": 9,
+     "y": 1,
+     "period": 5.5
+    }
+   },
+   {
+    "file": "layers/bg mirror/6-sink.png",
+    "depth": -0.15
+   }
+  ],
+  "bg clinic": [
+   {
+    "file": "layers/bg clinic/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg clinic/1-shelf.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg clinic/2-floor.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg clinic/3-desk.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg clinic/4-plant.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "breathe",
+     "a": 0.02,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg clinic/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg earth": [
+   {
+    "file": "layers/bg earth/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg earth/1-stars.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg earth/2-twinkle.png",
+    "depth": 1.45,
+    "anim": {
+     "type": "pulse",
+     "a": 0.1,
+     "period": 2.8
+    }
+   },
+   {
+    "file": "layers/bg earth/3-atmosphere.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg earth/4-earth.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "breathe",
+     "a": 0.006,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg earth/5-cage.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.25,
+     "period": 4
+    }
+   }
+  ],
+  "bg blueprint": [
+   {
+    "file": "layers/bg blueprint/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg blueprint/1-links.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg blueprint/2-world0.png",
+    "depth": 0.2,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg blueprint/3-world1.png",
+    "depth": 0.08000000000000002,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg blueprint/4-world2.png",
+    "depth": -0.03999999999999998,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg blueprint/5-world3.png",
+    "depth": -0.15999999999999998,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg blueprint/6-world4.png",
+    "depth": -0.27999999999999997,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 9
+    }
+   }
+  ],
+  "bg office": [
+   {
+    "file": "layers/bg office/0-back.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg office/1-view.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg office/2-clouds.png",
+    "depth": 1.25,
+    "anim": {
+     "type": "sway",
+     "x": 10,
+     "y": 0,
+     "period": 30
+    }
+   },
+   {
+    "file": "layers/bg office/3-glass wall.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg office/4-floor.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg office/5-table.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg office/6-model world.png",
+    "depth": 0.05,
+    "anim": {
+     "type": "breathe",
+     "a": 0.03,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg office/7-lamp.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg office/8-lamplight.png",
+    "depth": -0.12,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 6
+    }
+   }
+  ],
+  "bg goldlight": [
+   {
+    "file": "layers/bg goldlight/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg goldlight/1-beams.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "pulse",
+     "a": 0.55,
+     "period": 3.5
+    }
+   },
+   {
+    "file": "layers/bg goldlight/2-source.png",
+    "depth": 0.75,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg goldlight/3-forms.png",
+    "depth": 0.0,
+    "anim": {
+     "type": "breathe",
+     "a": 0.05,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg goldlight/4-motes far.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 14
+    }
+   },
+   {
+    "file": "layers/bg goldlight/5-motes near.png",
+    "depth": -0.35,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 9
+    }
+   }
+  ],
+  "bg worlds": [
+   {
+    "file": "layers/bg worlds/0-back.png",
+    "depth": 1.6
+   },
+   {
+    "file": "layers/bg worlds/1-lattice4.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "sway",
+     "x": 16,
+     "y": 2,
+     "period": 22
+    }
+   },
+   {
+    "file": "layers/bg worlds/2-lattice3.png",
+    "depth": 0.9000000000000001,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 2,
+     "period": 19
+    }
+   },
+   {
+    "file": "layers/bg worlds/3-lattice2.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 8,
+     "y": 2,
+     "period": 16
+    }
+   },
+   {
+    "file": "layers/bg worlds/4-lattice1.png",
+    "depth": 0.10000000000000003,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 2,
+     "period": 13
+    }
+   }
+  ],
+  "cg static": [
+   {
+    "file": "layers/cg static/0-back.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 3,
+     "period": 0.15
+    }
+   },
+   {
+    "file": "layers/cg static/1-scanlines.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 4,
+     "period": 0.2
+    }
+   }
+  ],
+  "cg together morning": [
+   {
+    "file": "layers/cg together morning/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg together morning/1-sunlight.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/cg together morning/2-headboard.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/cg together morning/3-pillows.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/cg together morning/4-mira.png",
+    "depth": 0.2,
+    "anim": {
+     "type": "breathe",
+     "a": 0.008,
+     "period": 4.2
+    }
+   },
+   {
+    "file": "layers/cg together morning/5-aron.png",
+    "depth": 0.12,
+    "anim": {
+     "type": "breathe",
+     "a": 0.008,
+     "period": 5.1
+    }
+   },
+   {
+    "file": "layers/cg together morning/6-sheet.png",
+    "depth": -0.2
+   }
+  ],
+  "cg together night": [
+   {
+    "file": "layers/cg together night/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg together night/1-rain.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.8
+    }
+   },
+   {
+    "file": "layers/cg together night/2-streetlight.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/cg together night/3-headboard.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/cg together night/4-pillows.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/cg together night/5-mira.png",
+    "depth": 0.2,
+    "anim": {
+     "type": "breathe",
+     "a": 0.008,
+     "period": 4.2
+    }
+   },
+   {
+    "file": "layers/cg together night/6-aron.png",
+    "depth": 0.12,
+    "anim": {
+     "type": "breathe",
+     "a": 0.008,
+     "period": 5.1
+    }
+   },
+   {
+    "file": "layers/cg together night/7-sheet.png",
+    "depth": -0.2
+   }
+  ],
+  "bg bedroom night": [
+   {
+    "file": "layers/bg bedroom night/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bedroom night/1-dawn.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg bedroom night/2-bed.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg bedroom night/3-clock.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/bg bedroom night/4-dust.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 30
+    }
+   },
+   {
+    "file": "layers/bg bedroom night/5-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg bedroom night/6-light0.png",
+    "depth": 0.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   }
+  ],
+  "bg kitchen night": [
+   {
+    "file": "layers/bg kitchen night/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen night/1-bird.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/bg kitchen night/2-counter.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg kitchen night/3-coffee.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg kitchen night/4-steam.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "rise",
+     "a": 140,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg kitchen night/5-indicator.png",
+    "depth": 0.24,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg kitchen night/6-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg kitchen night/7-light0.png",
+    "depth": 0.24,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   }
+  ],
+  "bg room night": [
+   {
+    "file": "layers/bg room night/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg room night/1-clouds.png",
+    "depth": 1.25,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 0,
+     "period": 18
+    }
+   },
+   {
+    "file": "layers/bg room night/2-window.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg room night/3-bookshelf.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg room night/4-plant.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room night/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 40
+    }
+   },
+   {
+    "file": "layers/bg room night/6-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room night/7-light0.png",
+    "depth": 0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   }
+  ],
+  "bg street rain": [
+   {
+    "file": "layers/bg street rain/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street rain/1-buildings.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg street rain/2-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street rain/3-wire.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg street rain/4-rain far.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.5
+    }
+   },
+   {
+    "file": "layers/bg street rain/5-rain near.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 0.85
+    }
+   }
+  ],
+  "bg street dusk": [
+   {
+    "file": "layers/bg street dusk/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street dusk/1-buildings.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 14
+    }
+   },
+   {
+    "file": "layers/bg street dusk/2-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street dusk/3-wire.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg street dusk/4-sunset.png",
+    "depth": 1.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg street dusk/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg street snow": [
+   {
+    "file": "layers/bg street snow/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street snow/1-buildings.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg street snow/2-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street snow/3-wire.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg street snow/4-snow far.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg street snow/5-snow near.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 6
+    }
+   }
+  ],
+  "bg park night": [
+   {
+    "file": "layers/bg park night/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg park night/1-clouds.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 0,
+     "period": 25
+    }
+   },
+   {
+    "file": "layers/bg park night/2-far hill.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg park night/3-near hill.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg park night/4-trees.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg park night/5-grass.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg park night/6-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg park night/7-light0.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg park night/8-light1.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg park night/9-fireflies.png",
+    "depth": 0.0,
+    "anim": {
+     "type": "sway",
+     "x": 10,
+     "y": 6,
+     "period": 5
+    }
+   }
+  ],
+  "bg park autumn": [
+   {
+    "file": "layers/bg park autumn/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg park autumn/1-clouds.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 0,
+     "period": 25
+    }
+   },
+   {
+    "file": "layers/bg park autumn/2-far hill.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg park autumn/3-near hill.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg park autumn/4-trees.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg park autumn/5-grass.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg park autumn/6-leaves.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 10
+    }
+   }
+  ],
+  "bg ward night": [
+   {
+    "file": "layers/bg ward night/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ward night/1-bars.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg ward night/2-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ward night/3-bed.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg ward night/4-monitor.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/bg ward night/5-heartbeat.png",
+    "depth": 0.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward night/6-fluorescent.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.35
+    }
+   },
+   {
+    "file": "layers/bg ward night/7-monitor glow.png",
+    "depth": 0.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.4,
+     "period": 1.1
+    }
+   }
+  ],
+  "bg rooftop dawn": [
+   {
+    "file": "layers/bg rooftop dawn/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg rooftop dawn/1-stars.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg rooftop dawn/2-twinkle.png",
+    "depth": 1.45,
+    "anim": {
+     "type": "pulse",
+     "a": 0.1,
+     "period": 2.3
+    }
+   },
+   {
+    "file": "layers/bg rooftop dawn/3-moonglow.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg rooftop dawn/4-moon.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg rooftop dawn/5-city.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg rooftop dawn/6-roof.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg rooftop dawn/7-dawn.png",
+    "depth": 1.2,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 12
+    }
+   }
+  ],
+  "bg corridor": [
+   {
+    "file": "layers/bg corridor/0-back.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg corridor/1-walls.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 15
+    }
+   },
+   {
+    "file": "layers/bg corridor/2-floor.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg corridor/3-tubes.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 0.3
+    }
+   },
+   {
+    "file": "layers/bg corridor/4-gurney.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg corridor/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg therapy": [
+   {
+    "file": "layers/bg therapy/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg therapy/1-window light.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg therapy/2-chairs.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg therapy/3-whiteboard.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg therapy/4-tissues.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg therapy/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg pharmacy": [
+   {
+    "file": "layers/bg pharmacy/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg pharmacy/1-shelves.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 12
+    }
+   },
+   {
+    "file": "layers/bg pharmacy/2-sign.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg pharmacy/3-counter.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg pharmacy/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg theo": [
+   {
+    "file": "layers/bg theo/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg theo/1-lava.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "breathe",
+     "a": 0.04,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg theo/2-lavaglow.png",
+    "depth": 0.52,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg theo/3-couch.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg theo/4-mess.png",
+    "depth": -0.15
+   }
+  ],
+  "bg club": [
+   {
+    "file": "layers/bg club/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg club/1-laser0.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 60,
+     "y": 0,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg club/2-strobe0.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.05,
+     "period": 0.5
+    }
+   },
+   {
+    "file": "layers/bg club/3-laser1.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 60,
+     "y": 0,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg club/4-strobe1.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.05,
+     "period": 0.8
+    }
+   },
+   {
+    "file": "layers/bg club/5-laser2.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 60,
+     "y": 0,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg club/6-strobe2.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.05,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg club/7-crowd.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 6,
+     "period": 0.55
+    }
+   }
+  ],
+  "bg bus": [
+   {
+    "file": "layers/bg bus/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg bus/1-city passing.png",
+    "depth": 1.2,
+    "anim": {
+     "type": "sway",
+     "x": 80,
+     "y": 0,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg bus/2-bus.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg bus/3-seats.png",
+    "depth": -0.15,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 2,
+     "period": 0.8
+    }
+   }
+  ],
+  "bg subway": [
+   {
+    "file": "layers/bg subway/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg subway/1-tunnel.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg subway/2-headlight.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg subway/3-sign.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg subway/4-platform.png",
+    "depth": 0.1
+   },
+   {
+    "file": "layers/bg subway/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg beach": [
+   {
+    "file": "layers/bg beach/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg beach/1-sun.png",
+    "depth": 1.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg beach/2-sea.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 2,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg beach/3-lighthouse.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg beach/4-beam.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 1.2
+    }
+   },
+   {
+    "file": "layers/bg beach/5-sand.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg beach/6-foam.png",
+    "depth": 0.45,
+    "anim": {
+     "type": "sway",
+     "x": 20,
+     "y": 3,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg beach/7-shells.png",
+    "depth": -0.2
+   }
+  ],
+  "bg staircase": [
+   {
+    "file": "layers/bg staircase/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg staircase/1-stars.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg staircase/2-sea.png",
+    "depth": 1.1,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 1,
+     "period": 12
+    }
+   },
+   {
+    "file": "layers/bg staircase/3-lighthouse.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg staircase/4-three flickers.png",
+    "depth": 1.2,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 1.0
+    }
+   },
+   {
+    "file": "layers/bg staircase/5-step0.png",
+    "depth": -0.3
+   },
+   {
+    "file": "layers/bg staircase/6-step1.png",
+    "depth": -0.12999999999999998
+   },
+   {
+    "file": "layers/bg staircase/7-step2.png",
+    "depth": 0.040000000000000036
+   },
+   {
+    "file": "layers/bg staircase/8-step3.png",
+    "depth": 0.21000000000000002
+   },
+   {
+    "file": "layers/bg staircase/9-step4.png",
+    "depth": 0.38000000000000006
+   },
+   {
+    "file": "layers/bg staircase/10-step5.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg staircase/11-step6.png",
+    "depth": 0.72
+   },
+   {
+    "file": "layers/bg staircase/12-step7.png",
+    "depth": 0.8900000000000001
+   },
+   {
+    "file": "layers/bg staircase/13-step8.png",
+    "depth": 1.06
+   }
+  ],
+  "bg lighthouse": [
+   {
+    "file": "layers/bg lighthouse/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg lighthouse/1-stars.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg lighthouse/2-beam.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 260,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg lighthouse/3-tower.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg lighthouse/4-lamp.png",
+    "depth": 0.38,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 1.0
+    }
+   },
+   {
+    "file": "layers/bg lighthouse/5-rocks.png",
+    "depth": -0.2
+   }
+  ],
+  "bg studio": [
+   {
+    "file": "layers/bg studio/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg studio/1-window.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg studio/2-daylight.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg studio/3-desk.png",
+    "depth": 0.25,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 15
+    }
+   },
+   {
+    "file": "layers/bg studio/4-radio.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg studio/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg supermarket": [
+   {
+    "file": "layers/bg supermarket/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg supermarket/1-aisle0.8.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg supermarket/2-aisle0.4.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg supermarket/3-aisle0.0.png",
+    "depth": 0.0
+   },
+   {
+    "file": "layers/bg supermarket/4-tubes.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 0.4
+    }
+   },
+   {
+    "file": "layers/bg supermarket/5-cart.png",
+    "depth": -0.2
+   },
+   {
+    "file": "layers/bg supermarket/6-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg bridge": [
+   {
+    "file": "layers/bg bridge/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg bridge/1-stars.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg bridge/2-far shore.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bridge/3-river.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "sway",
+     "x": 10,
+     "y": 1,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg bridge/4-railing.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg bridge/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg forest": [
+   {
+    "file": "layers/bg forest/0-back.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg forest/1-trees1.0.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg forest/2-trees0.6.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg forest/3-trees0.2.png",
+    "depth": 0.2,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg forest/4-sunbeams.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg forest/5-pollen.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "sway",
+     "x": 20,
+     "y": 10,
+     "period": 11
+    }
+   }
+  ],
+  "bg balcony": [
+   {
+    "file": "layers/bg balcony/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg balcony/1-sunset.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg balcony/2-roofs.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg balcony/3-railing.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg balcony/4-plants.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 5
+    }
+   }
+  ],
+  "bg barracks": [
+   {
+    "file": "layers/bg barracks/0-back.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg barracks/1-columns.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg barracks/2-ranks.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg barracks/3-halo light.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg barracks/4-banner.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 0,
+     "period": 4
+    }
+   }
+  ],
+  "bg spawning": [
+   {
+    "file": "layers/bg spawning/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg spawning/1-pools.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg spawning/2-poolglow0.png",
+    "depth": 0.52,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg spawning/3-forming0.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "rise",
+     "a": 80,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg spawning/4-poolglow1.png",
+    "depth": 0.52,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg spawning/5-forming1.png",
+    "depth": 0.25,
+    "anim": {
+     "type": "rise",
+     "a": 80,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg spawning/6-poolglow2.png",
+    "depth": 0.52,
+    "anim": {
+     "type": "pulse",
+     "a": 0.5,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg spawning/7-forming2.png",
+    "depth": 0.19999999999999998,
+    "anim": {
+     "type": "rise",
+     "a": 80,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg spawning/8-wisps.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 16
+    }
+   }
+  ],
+  "bg archive": [
+   {
+    "file": "layers/bg archive/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg archive/1-shelves1.2.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg archive/2-shelves0.7.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg archive/3-shelves0.25.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg archive/4-candle.png",
+    "depth": 0.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 2.5
+    }
+   },
+   {
+    "file": "layers/bg archive/5-desk.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg archive/6-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 30
+    }
+   }
+  ],
+  "bg trial": [
+   {
+    "file": "layers/bg trial/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg trial/1-judgement.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg trial/2-bench.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 13
+    }
+   },
+   {
+    "file": "layers/bg trial/3-dock.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg trial/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg ashveil": [
+   {
+    "file": "layers/bg ashveil/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ashveil/1-fireplace.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ashveil/2-flames.png",
+    "depth": 0.58,
+    "anim": {
+     "type": "breathe",
+     "a": 0.08,
+     "period": 0.7
+    }
+   },
+   {
+    "file": "layers/bg ashveil/3-fireglow.png",
+    "depth": 0.55,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 0.9
+    }
+   },
+   {
+    "file": "layers/bg ashveil/4-globe.png",
+    "depth": 0.2,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 0,
+     "period": 1
+    }
+   },
+   {
+    "file": "layers/bg ashveil/5-chair.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg ashveil/6-wine.png",
+    "depth": -0.25
+   }
+  ],
+  "bg foundry": [
+   {
+    "file": "layers/bg foundry/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg foundry/1-pattern0.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "breathe",
+     "a": 0.01,
+     "period": 3.0
+    }
+   },
+   {
+    "file": "layers/bg foundry/2-pattern1.png",
+    "depth": 0.5499999999999999,
+    "anim": {
+     "type": "breathe",
+     "a": 0.01,
+     "period": 3.5
+    }
+   },
+   {
+    "file": "layers/bg foundry/3-pattern2.png",
+    "depth": 0.39999999999999997,
+    "anim": {
+     "type": "breathe",
+     "a": 0.01,
+     "period": 4.0
+    }
+   },
+   {
+    "file": "layers/bg foundry/4-pattern3.png",
+    "depth": 0.25,
+    "anim": {
+     "type": "breathe",
+     "a": 0.01,
+     "period": 4.5
+    }
+   },
+   {
+    "file": "layers/bg foundry/5-scan.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg foundry/6-data.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 7
+    }
+   }
+  ],
+  "bg coma": [
+   {
+    "file": "layers/bg coma/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg coma/1-window.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg coma/2-bed.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg coma/3-monitor.png",
+    "depth": 0.1
+   },
+   {
+    "file": "layers/bg coma/4-heartbeat.png",
+    "depth": 0.09,
+    "anim": {
+     "type": "pulse",
+     "a": 0.15,
+     "period": 1.2
+    }
+   },
+   {
+    "file": "layers/bg coma/5-empty chair.png",
+    "depth": -0.1
+   }
+  ],
+  "cg umbrella": [
+   {
+    "file": "layers/cg umbrella/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/cg umbrella/1-buildings.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/cg umbrella/2-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/cg umbrella/3-wire.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/cg umbrella/4-rain far.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.5
+    }
+   },
+   {
+    "file": "layers/cg umbrella/5-rain near.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 0.85
+    }
+   },
+   {
+    "file": "layers/cg umbrella/6-stranger.png",
+    "depth": 0.1
+   },
+   {
+    "file": "layers/cg umbrella/7-aron.png",
+    "depth": -0.05
+   },
+   {
+    "file": "layers/cg umbrella/8-umbrella.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 3,
+     "period": 3
+    }
+   }
+  ],
+  "cg hands": [
+   {
+    "file": "layers/cg hands/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg hands/1-warmth.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/cg hands/2-his hand.png",
+    "depth": 0.0,
+    "anim": {
+     "type": "breathe",
+     "a": 0.006,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/cg hands/3-her hand.png",
+    "depth": -0.05,
+    "anim": {
+     "type": "breathe",
+     "a": 0.006,
+     "period": 4.4
+    }
+   }
+  ],
+  "cg pills": [
+   {
+    "file": "layers/cg pills/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg pills/1-morning.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/cg pills/2-organiser.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/cg pills/3-water.png",
+    "depth": -0.2
+   },
+   {
+    "file": "layers/cg pills/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "cg notebook": [
+   {
+    "file": "layers/cg notebook/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg notebook/1-lamp.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/cg notebook/2-page.png",
+    "depth": 0.1
+   },
+   {
+    "file": "layers/cg notebook/3-words.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/cg notebook/4-pen.png",
+    "depth": -0.25
+   },
+   {
+    "file": "layers/cg notebook/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "cg flicker": [
+   {
+    "file": "layers/cg flicker/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/cg flicker/1-lamp.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/cg flicker/2-one.png",
+    "depth": 0.28,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.9
+    }
+   },
+   {
+    "file": "layers/cg flicker/3-two.png",
+    "depth": 0.26,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.9
+    }
+   },
+   {
+    "file": "layers/cg flicker/4-three.png",
+    "depth": 0.24,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.9
+    }
+   }
+  ],
+  "pov ceiling": [
+   {
+    "file": "layers/pov ceiling/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/pov ceiling/1-ceiling.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/pov ceiling/2-dawn.png",
+    "depth": 0.85,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/pov ceiling/3-lamp.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/pov ceiling/4-clock.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/pov ceiling/5-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov ceiling/6-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov ceiling/7-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 6
+    }
+   }
+  ],
+  "pov hands": [
+   {
+    "file": "layers/pov hands/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/pov hands/1-room blur.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/pov hands/2-hand-1.png",
+    "depth": -0.15,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 3,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/pov hands/3-hand1.png",
+    "depth": -0.15,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 3,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/pov hands/4-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov hands/5-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov hands/6-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 9
+    }
+   }
+  ],
+  "pov mirror": [
+   {
+    "file": "layers/pov mirror/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/pov mirror/1-mirror.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/pov mirror/2-echo0.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 3,
+     "y": 1,
+     "period": 2.5
+    }
+   },
+   {
+    "file": "layers/pov mirror/3-echo1.png",
+    "depth": 0.45,
+    "anim": {
+     "type": "sway",
+     "x": 5,
+     "y": 1,
+     "period": 3.5
+    }
+   },
+   {
+    "file": "layers/pov mirror/4-echo2.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "sway",
+     "x": 7,
+     "y": 1,
+     "period": 4.5
+    }
+   },
+   {
+    "file": "layers/pov mirror/5-echo3.png",
+    "depth": 0.35,
+    "anim": {
+     "type": "sway",
+     "x": 9,
+     "y": 1,
+     "period": 5.5
+    }
+   },
+   {
+    "file": "layers/pov mirror/6-sink.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/pov mirror/7-reflection.png",
+    "depth": 0.55,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 1,
+     "period": 3.1
+    }
+   },
+   {
+    "file": "layers/pov mirror/8-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov mirror/9-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov mirror/10-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 6
+    }
+   }
+  ],
+  "pov birds": [
+   {
+    "file": "layers/pov birds/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/pov birds/1-rooftops.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 15
+    }
+   },
+   {
+    "file": "layers/pov birds/2-wire.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/pov birds/3-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov birds/4-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov birds/5-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/pov birds/6-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "pov sky": [
+   {
+    "file": "layers/pov sky/0-back.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/pov sky/1-stars.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/pov sky/2-twinkle.png",
+    "depth": 1.45,
+    "anim": {
+     "type": "pulse",
+     "a": 0.1,
+     "period": 2.3
+    }
+   },
+   {
+    "file": "layers/pov sky/3-moonglow.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/pov sky/4-moon.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/pov sky/5-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov sky/6-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov sky/7-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 9
+    }
+   }
+  ],
+  "pov cup": [
+   {
+    "file": "layers/pov cup/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/pov cup/1-bird.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/pov cup/2-counter.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/pov cup/3-cup.png",
+    "depth": -0.25
+   },
+   {
+    "file": "layers/pov cup/4-cupsteam.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 220,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/pov cup/5-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov cup/6-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov cup/7-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 9
+    }
+   }
+  ],
+  "bg kitchen table": [
+   {
+    "file": "layers/bg kitchen table/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen table/1-window.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg kitchen table/2-chair.png",
+    "depth": 0.45,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 13
+    }
+   },
+   {
+    "file": "layers/bg kitchen table/3-table.png",
+    "depth": -0.05
+   },
+   {
+    "file": "layers/bg kitchen table/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg bedroom door": [
+   {
+    "file": "layers/bg bedroom door/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bedroom door/1-doorway.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 14
+    }
+   },
+   {
+    "file": "layers/bg bedroom door/2-hall light.png",
+    "depth": 0.75,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg bedroom door/3-frame.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg bedroom door/4-blanket.png",
+    "depth": -0.3
+   },
+   {
+    "file": "layers/bg bedroom door/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg ward window": [
+   {
+    "file": "layers/bg ward window/0-back.png",
+    "depth": 1.3
+   },
+   {
+    "file": "layers/bg ward window/1-sky.png",
+    "depth": 1.25,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg ward window/2-tree.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "sway",
+     "x": 3,
+     "y": 0,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg ward window/3-bars.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg ward window/4-sill.png",
+    "depth": -0.15
+   }
+  ],
+  "bg rooftop edge": [
+   {
+    "file": "layers/bg rooftop edge/0-back.png",
+    "depth": 1.6
+   },
+   {
+    "file": "layers/bg rooftop edge/1-street below.png",
+    "depth": 1.5
+   },
+   {
+    "file": "layers/bg rooftop edge/2-cars.png",
+    "depth": 1.48,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 120,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg rooftop edge/3-walls.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg rooftop edge/4-ledge.png",
+    "depth": -0.35
+   },
+   {
+    "file": "layers/bg rooftop edge/5-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/bg rooftop edge/6-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/bg rooftop edge/7-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 9
+    }
+   }
+  ],
+  "bg cafe window": [
+   {
+    "file": "layers/bg cafe window/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg cafe window/1-lamps.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe window/2-lampglow0.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe window/3-lampglow1.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe window/4-lampglow2.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe window/5-lampglow3.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe window/6-lampglow4.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe window/7-lampglow5.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe window/8-lampglow6.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe window/9-floor.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg cafe window/10-tables.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg cafe window/11-steam.png",
+    "depth": 0.1,
+    "anim": {
+     "type": "rise",
+     "a": 200,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg cafe window/12-glass.png",
+    "depth": -0.05
+   },
+   {
+    "file": "layers/bg cafe window/13-window frame.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg cafe window/14-rain.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.0
+    }
+   }
+  ],
+  "pov ambulance": [
+   {
+    "file": "layers/pov ambulance/0-back.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/pov ambulance/1-ceiling rails.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "sway",
+     "x": 0,
+     "y": 3,
+     "period": 0.9
+    }
+   },
+   {
+    "file": "layers/pov ambulance/2-siren.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 0.7
+    }
+   },
+   {
+    "file": "layers/pov ambulance/3-figures.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 4,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/pov ambulance/4-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov ambulance/5-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov ambulance/6-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 6
+    }
+   }
+  ],
+  "pov restraint": [
+   {
+    "file": "layers/pov restraint/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/pov restraint/1-ceiling.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/pov restraint/2-lamp.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 1.6
+    }
+   },
+   {
+    "file": "layers/pov restraint/3-staff.png",
+    "depth": 0.0,
+    "anim": {
+     "type": "sway",
+     "x": 10,
+     "y": 6,
+     "period": 2.2
+    }
+   },
+   {
+    "file": "layers/pov restraint/4-gloved hand.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "sway",
+     "x": 4,
+     "y": 2,
+     "period": 1.3
+    }
+   },
+   {
+    "file": "layers/pov restraint/5-strap.png",
+    "depth": -0.5
+   },
+   {
+    "file": "layers/pov restraint/6-vignette.png",
+    "depth": -0.45
+   },
+   {
+    "file": "layers/pov restraint/7-nose.png",
+    "depth": -0.7
+   },
+   {
+    "file": "layers/pov restraint/8-eyelids.png",
+    "depth": -0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.0,
+     "period": 6
+    }
+   }
+  ],
+  "bg isolation": [
+   {
+    "file": "layers/bg isolation/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg isolation/1-door.png",
+    "depth": 0.75
+   },
+   {
+    "file": "layers/bg isolation/2-watcher.png",
+    "depth": 0.74,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg isolation/3-floor.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg isolation/4-bed.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg isolation/5-hum.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.4
+    }
+   }
+  ]
+ },
+ "max_shift": 8.0,
+ "camera": {
+  "drift": 4.5,
+  "period": 19,
+  "zoom": 0.015
+ },
+ "voices": {
+  "bank": [
+   "audio/vox/syl00.ogg",
+   "audio/vox/syl01.ogg",
+   "audio/vox/syl02.ogg",
+   "audio/vox/syl03.ogg",
+   "audio/vox/syl04.ogg",
+   "audio/vox/syl05.ogg",
+   "audio/vox/syl06.ogg",
+   "audio/vox/syl07.ogg",
+   "audio/vox/syl08.ogg",
+   "audio/vox/syl09.ogg",
+   "audio/vox/syl10.ogg",
+   "audio/vox/syl11.ogg",
+   "audio/vox/syl12.ogg",
+   "audio/vox/syl13.ogg",
+   "audio/vox/syl14.ogg",
+   "audio/vox/syl15.ogg",
+   "audio/vox/syl16.ogg",
+   "audio/vox/syl17.ogg",
+   "audio/vox/syl18.ogg",
+   "audio/vox/syl19.ogg",
+   "audio/vox/syl20.ogg",
+   "audio/vox/syl21.ogg",
+   "audio/vox/syl22.ogg",
+   "audio/vox/syl23.ogg"
+  ],
+  "pitch": {
+   "a": 1.0,
+   "m": 1.34,
+   "th": 0.86,
+   "dr": 0.78,
+   "nu": 1.22,
+   "se": 1.55,
+   "pi": 1.85,
+   "dro": 0.62,
+   "em": 1.42,
+   "pa": 0.52,
+   "council": 0.45,
+   "stranger": 0.95,
+   "radio": 1.1
+  },
+  "volume": 0.32,
+  "duck": 0.8
+ }
+}

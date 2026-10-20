@@ -1,0 +1,55 @@
+Snapshot - soundtrack review
+
+Cues in story order; each loops about twice (or ~90 s), 3 s crossfades.
+
+
+Tutorial
+  00:00.0  theme                 40.0 s loop  - the tutorial / calibration
+
+Chapter 1 - The Morning Render
+  01:20.0  morning_render        49.2 s loop  - Aron wakes at 7:07
+  02:58.5  kitchen_talk          43.6 s loop  - coffee, the bird on the wire, Mira's small talk
+  04:25.7  questions             53.3 s loop  - thinking through Bostrom
+  05:55.7  miso                  35.6 s loop  - explaining it all to Miso ("Meow.")
+  07:06.8  purgatorium_shift     52.8 s loop  - cut: Pim and Dross on kitchen-talk shift 7
+  08:36.8  angel_ops             49.6 s loop  - cut: Seraphiel's ops room
+  10:16.1  umbrella_rain         43.6 s loop  - the umbrella for a stranger
+  11:43.3  notebook              54.9 s loop  - the notebook's first line
+  13:13.3  voices                32.0 s loop  - the transmissions
+  14:17.3  unraveling            60.0 s loop  - no sleep, the mirror, the rain
+  15:47.3  ambulance_transfer    53.3 s loop  - the ambulance ride: transfer complete
+
+Chapter 2 - Fog
+  17:17.3  closed_ward           45.0 s loop  - the ward
+  18:47.3  fog                   60.0 s loop  - life on the medication
+  20:17.3  group_therapy         50.5 s loop  - group therapy
+  21:47.3  mira_visits           54.9 s loop  - Mira's visits
+  23:17.3  theo_nights           47.6 s loop  - nights at Theo's
+  24:52.5  club_speed            61.0 s loop  - the speed night
+  26:22.5  crash                 48.0 s loop  - the comedown
+  27:58.5  council               64.0 s loop  - cut: the Council meets
+  29:28.5  lantern_watch         53.3 s loop  - cut: the Lantern Watch's attic
+  30:58.5  rooftop_mission       62.6 s loop  - the rooftop, three flickers, the mission
+
+Chapter 3 - Snapshot
+  32:28.5  protected_world       39.0 s loop  - the too-perfect protected world
+  33:46.6  the_leak              42.7 s loop  - the leak glitches
+  35:11.9  cafe                  46.8 s loop  - the cafe with Mira
+  36:45.6  fight                 36.9 s loop  - the fight
+  37:59.4  together_night        58.2 s loop  - together at night
+  39:29.4  real_world_vigil      48.0 s loop  - cut: the real Mira at his bedside
+  41:05.4  ember_trial           50.5 s loop  - cut: Ember's trial
+  42:35.4  ashveil_offer         55.7 s loop  - Ashveil's offer
+
+Chapter 4 - Chief Architect
+  44:05.4  deepest_layer         64.0 s loop  - the deepest layer: LOOM, ORCHARD, MERIDIAN, TIDEWATER
+  45:35.4  captured_earth        61.0 s loop  - the captured Earth
+  47:05.4  blueprint             60.0 s loop  - the architect at the blueprint
+  48:35.4  starving              49.7 s loop  - Ashveil starves himself
+  50:14.7  office                38.4 s loop  - the office presentation
+  51:31.5  ovation               55.4 s loop  - coda: the ovation
+  53:01.5  worlds_upon_worlds    60.0 s loop  - coda: worlds upon worlds
+  54:31.5  goldlight             53.3 s loop  - coda: the light technique
+  56:01.5  the_record            64.0 s loop  - the record closes
+
+  57:35.5  end

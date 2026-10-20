@@ -1,0 +1,3 @@
+#!/bin/sh
+# Port a Ren'Py game to the 3DS:  tools/vn3ds-port path/to/game [--sd /Volumes/3DS]
+PYTHONPATH="$(cd "$(dirname "$0")" && pwd)${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vnpack.port "$@"
