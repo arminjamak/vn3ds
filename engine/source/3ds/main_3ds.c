@@ -63,6 +63,17 @@ static u32 map_keys(u32 k)
     return o;
 }
 
+/* HOME, sleep (closing the lid) or the power menu: save where we are first,
+ * so the home screen can carry on from exactly here. */
+static aptHookCookie apt_cookie;
+
+static void on_apt(APT_HookType type, void *param)
+{
+    (void)param;
+    if (type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP || type == APTHOOK_ONEXIT)
+        app_autosave();
+}
+
 int main(int argc, char **argv)
 {
     /* Started over Wi-Fi from the Homebrew Launcher (3dslink): go straight to
@@ -77,6 +88,7 @@ int main(int argc, char **argv)
     audio_init();
     srand((unsigned)time(NULL));
     app_init(NULL);
+    aptHook(&apt_cookie, on_apt, NULL);
 
     u64 last = osGetTime();
     while (aptMainLoop()) {
@@ -107,6 +119,7 @@ int main(int argc, char **argv)
         app_render();
     }
 
+    aptUnhook(&apt_cookie);
     app_shutdown();
     audio_exit();
     gfx_exit();

@@ -67,6 +67,12 @@ typedef struct {
     char games[MAX_GAMES][64];
     char game_titles[MAX_GAMES][96];
     int ngames, game_sel;
+    /* the home screen's coverflow: where each game was left */
+    float cf_pos;
+    GfxTex *game_thumb[MAX_GAMES];
+    SlotInfo game_resume[MAX_GAMES];
+    float autosave_t;
+    bool has_resume;      /* the loaded game has a resume save (title: Continue) */
 
     Game game;
     bool loaded;
@@ -129,6 +135,14 @@ void app_receive_open(void);
 void app_receive_close(void);
 /* Buttons of the transfer overlay (ui.c draws them). */
 void app_rx_continue(void);
+/* Resume: slot 0 is the automatic save (on HOME, quitting, leaving a game,
+ * and every two minutes), with a snapshot of the screen for the home menu. */
+#define RESUME_SLOT 0
+#define THUMB_W 200
+#define THUMB_H 120
+void app_autosave(void);
+void app_play_game(int index);   /* carry on where you left off */
+bool app_has_resume(void);       /* for the loaded game */
 void app_rx_play(void);
 void app_rescan_games(void);
 extern bool app_start_receiving; /* set before app_init, e.g. when launched via 3dslink */
@@ -180,6 +194,7 @@ void texcache_clear(void);
 
 /* save.c */
 bool save_write(int slot);
+bool save_peek(const char *game_id, int slot, SlotInfo *info);
 bool save_read(int slot);
 void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE]);
 void settings_load(void);

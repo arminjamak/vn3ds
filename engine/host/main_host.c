@@ -282,7 +282,7 @@ int main(int argc, char **argv)
     bool talk_frames = false;
     u32 talk_serial = 0;
     setvbuf(stdout, NULL, _IOLBF, 0);
-    bool test_save = false, pace = false;
+    bool test_save = false, pace = false, home = false;
     FILE *rec = NULL;
     const char *stop_label = NULL, *minigame = NULL, *board = NULL;
     for (int i = 1; i < argc; i++) {
@@ -310,6 +310,8 @@ int main(int argc, char **argv)
             minigame = argv[++i];
         else if (!strcmp(argv[i], "--leaderboard") && i + 1 < argc)
             board = argv[++i];
+        else if (!strcmp(argv[i], "--home"))
+            home = true;
         else if (!strcmp(argv[i], "--pace"))
             pace = true;
         else if (!strcmp(argv[i], "--stop-label") && i + 1 < argc)
@@ -352,6 +354,28 @@ int main(int argc, char **argv)
         app_render();
         dump(".", 0, "receive");
         return NET.completed ? 0 : 1;
+    }
+    if (home) {
+        /* render the home screen (coverflow) of --root's games, a few positions */
+        mkdir(root_dir, 0755);
+        gfx_init();
+        audio_init();
+        app_init(NULL);
+        if (E.loaded)
+            app_receive_close();   /* one game opens itself: back to the list */
+        E.screen = SCR_GAMELIST;
+        Input none;
+        memset(&none, 0, sizeof(none));
+        for (int k = 0; k < E.ngames && k < 4; k++) {
+            E.game_sel = k;
+            for (int f = 0; f < 40; f++)
+                app_update(&none, 1.0f / 60.0f);
+            app_render();
+            if (out)
+                dump(out, k, "home");
+        }
+        printf("home: %d games\n", E.ngames);
+        return 0;
     }
     if (!game) {
         fprintf(stderr, "usage: %s <game folder> [--out dir] [--choices 0,1,...] [--slider 0..1] "

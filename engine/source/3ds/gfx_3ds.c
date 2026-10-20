@@ -19,7 +19,9 @@ struct GfxTex {
     Tex3DS_SubTexture sub;
 };
 
-static C3D_RenderTarget *top_t[2], *bottom_t, *cap_t[2];
+static C3D_RenderTarget *top_t[2], *bottom_t, *cap_t[2], *snap_t;
+static C3D_Tex snap_tex;   /* in linear memory, so the CPU can read it back */
+static bool snap_ok;
 static C3D_Tex cap_tex[2];
 static bool cap_ok[2];
 static Tex3DS_SubTexture cap_sub;
@@ -51,6 +53,11 @@ bool gfx_init(void)
             cap_ok[i] = cap_t[i] != NULL;
         }
     }
+    snap_ok = C3D_TexInit(&snap_tex, 512, 256, GPU_RGBA8);
+    if (snap_ok) {
+        snap_t = C3D_RenderTargetCreateFromTex(&snap_tex, GPU_TEXFACE_2D, 0, GPU_RB_DEPTH16);
+        snap_ok = snap_t != NULL;
+    }
     cap_sub.width = TOP_W;
     cap_sub.height = TOP_H;
     cap_sub.left = 0.0f;
@@ -76,6 +83,10 @@ void gfx_exit(void)
     npending = cap_pending = 0;
     C2D_TextBufDelete(textbuf);
     C2D_TextBufDelete(measurebuf);
+    if (snap_t)
+        C3D_RenderTargetDelete(snap_t);
+    if (snap_ok)
+        C3D_TexDelete(&snap_tex);
     for (int i = 0; i < 2; i++) {
         if (cap_t[i])
             C3D_RenderTargetDelete(cap_t[i]);
@@ -217,6 +228,55 @@ void gfx_target_capture(int eye, u32 clear)
         return;
     C2D_TargetClear(cap_t[eye], col(clear));
     C2D_SceneBegin(cap_t[eye]);
+}
+
+void gfx_target_snapshot(u32 clear)
+{
+    if (!snap_ok)
+        return;
+    C2D_TargetClear(snap_t, col(clear));
+    C2D_SceneBegin(snap_t);
+}
+
+static int morton8(int x, int y)
+{
+    return (x & 1) | ((y & 1) << 1) | ((x & 2) << 1) | ((y & 2) << 2) | ((x & 4) << 2) | ((y & 4) << 3);
+}
+
+bool gfx_snapshot_read(u16 *out, int w, int h)
+{
+    if (!snap_ok)
+        return false;
+    GSPGPU_InvalidateDataCache(snap_tex.data, snap_tex.size);
+    const u8 *px = snap_tex.data;
+    for (int y = 0; y < h; y++) {
+        int sy = y * TOP_H / h;
+        for (int x = 0; x < w; x++) {
+            int sx = x * TOP_W / w;
+            /* tiled RGBA8, bytes A,B,G,R; scene row 0 is the first tile row */
+            const u8 *p = px + (((sy / 8) * (512 / 8) + sx / 8) * 64 + morton8(sx & 7, sy & 7)) * 4;
+            out[y * w + x] = (u16)(((p[3] >> 3) << 11) | ((p[2] >> 2) << 5) | (p[1] >> 3));
+        }
+    }
+    return true;
+}
+
+GfxTex *gfx_tex_from_rgb565(const u16 *px, int w, int h)
+{
+    int tw = 8, th = 8;
+    while (tw < w)
+        tw *= 2;
+    while (th < h)
+        th *= 2;
+    GfxTex *t = gfx_tex_create(tw, th, 2, w, h);
+    if (!t)
+        return NULL;
+    u16 *d = t->tex.data;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            d[((y / 8) * (tw / 8) + x / 8) * 64 + morton8(x & 7, y & 7)] = px[y * w + x];
+    C3D_TexFlush(&t->tex);
+    return t;
 }
 
 void gfx_draw_capture(int eye, float alpha)

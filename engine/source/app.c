@@ -143,6 +143,7 @@ static void unload_game(void)
 {
     if (!E.loaded)
         return;
+    app_autosave();
     for (int ch = 0; ch < CH_COUNT; ch++)
         audio_stop(ch, 0);
     talk_end();
@@ -207,6 +208,10 @@ static bool load_game_dir(const char *dir, const char *id)
     }
     E.loaded = true;
     net_set_live_game(id);
+    {
+        SlotInfo info;
+        E.has_resume = save_peek(id, RESUME_SLOT, &info);
+    }
     vm_init(&E.vm, &E.game);
     talk_load_bank();
     E.music_res = -1;
@@ -221,6 +226,87 @@ void app_load_game(int index)
     char dir[400];
     snprintf(dir, sizeof(dir), "%s/games/%s", E.root, E.games[index]);
     load_game_dir(dir, E.games[index]);
+}
+
+/* ---- resume: autosave and snapshots ------------------------------------------ */
+
+static u16 thumb[THUMB_W * THUMB_H];
+static bool thumb_valid, snap_pending;
+static u32 snapped_serial;
+
+static void thumb_path(const char *id, char *out, size_t len)
+{
+    snprintf(out, len, "%s/saves/%s/slot%02d.thm", E.root, id, RESUME_SLOT);
+}
+
+void app_autosave(void)
+{
+    if (!E.loaded || E.screen != SCR_GAME)
+        return;
+    E.autosave_t = E.time;
+    if (!save_write(RESUME_SLOT))
+        return;
+    E.has_resume = true;
+    if (!thumb_valid)
+        return;
+    char path[400];
+    thumb_path(E.game.id, path, sizeof(path));
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        u16 wh[2] = {THUMB_W, THUMB_H};
+        fwrite("THM1", 1, 4, f);
+        fwrite(wh, 2, 2, f);
+        fwrite(thumb, 2, THUMB_W * THUMB_H, f);
+        fclose(f);
+    }
+}
+
+bool app_has_resume(void) { return E.loaded && E.has_resume; }
+
+/* The story reached its end: next time, Play starts at the title. */
+static void drop_resume(void)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.sav", E.root, E.game.id, RESUME_SLOT);
+    remove(path);
+    thumb_path(E.game.id, path, sizeof(path));
+    remove(path);
+    E.has_resume = false;
+}
+
+/* The home screen's cards: each game's resume snapshot and line. */
+static void home_refresh(void)
+{
+    static u16 buf[THUMB_W * THUMB_H];
+    for (int i = 0; i < MAX_GAMES; i++) {
+        gfx_tex_free(E.game_thumb[i]);
+        E.game_thumb[i] = NULL;
+    }
+    for (int i = 0; i < E.ngames; i++) {
+        save_peek(E.games[i], RESUME_SLOT, &E.game_resume[i]);
+        char path[400];
+        thumb_path(E.games[i], path, sizeof(path));
+        FILE *f = fopen(path, "rb");
+        if (!f)
+            continue;
+        char magic[4];
+        u16 wh[2];
+        if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "THM1", 4) && fread(wh, 2, 2, f) == 2 &&
+            wh[0] == THUMB_W && wh[1] == THUMB_H &&
+            fread(buf, 2, THUMB_W * THUMB_H, f) == THUMB_W * THUMB_H)
+            E.game_thumb[i] = gfx_tex_from_rgb565(buf, THUMB_W, THUMB_H);
+        fclose(f);
+    }
+}
+
+void app_play_game(int index)
+{
+    if (index < 0 || index >= E.ngames)
+        return;
+    bool resume = E.game_resume[index].used;
+    app_load_game(index);
+    if (resume && E.loaded)
+        app_load_slot(RESUME_SLOT);
 }
 
 void app_init(const char *game_dir)
@@ -259,6 +345,7 @@ void app_rescan_games(void)
     platform_list_dirs(games, add_game, NULL);
     if (E.game_sel >= E.ngames)
         E.game_sel = 0;
+    home_refresh();
 }
 
 void app_receive_open(void)
@@ -278,6 +365,7 @@ void app_receive_close(void)
 
 void app_shutdown(void)
 {
+    app_autosave();
     lb_shutdown();
     settings_save();
     unload_game();
@@ -285,6 +373,7 @@ void app_shutdown(void)
 
 void app_to_title(void)
 {
+    app_autosave();   /* only does something when leaving a running story */
     talk_end();
     for (int ch = 0; ch < CH_COUNT; ch++)
         audio_stop(ch, 0.5f);
@@ -560,6 +649,8 @@ static void run_vm(void)
     switch (vm->state) {
     case VM_SAY: {
         E.say_serial++;
+        if (E.time - E.autosave_t > 120.0f)
+            app_autosave();
         if (AP.on)
             LOG("say: %s%s%s", vm->say_who, vm->say_who[0] ? ": " : "", vm->say_text);
         prepare_text();
@@ -597,6 +688,8 @@ static void run_vm(void)
         break;
     }
     case VM_ENDED:
+        drop_resume();
+        E.screen = SCR_TITLE;   /* (so app_to_title doesn't autosave the ending) */
         app_to_title();
         break;
     case VM_ERROR: {
@@ -748,6 +841,8 @@ static void game_update(const Input *in, float dt)
         break;
     }
     case VM_ENDED:
+        drop_resume();
+        E.screen = SCR_TITLE;   /* (so app_to_title doesn't autosave the ending) */
         app_to_title();
         break;
     default:
@@ -864,6 +959,8 @@ void app_update(const Input *in_real, float dt)
     if (rx_overlay_update(in))
         return;   /* a transfer is on screen: the game waits */
 
+    E.cf_pos += ((float)E.game_sel - E.cf_pos) * fminf(1.0f, dt * 9.0f);
+
     Screen before = E.screen;
     Overlay ov_before = E.overlay;
     touch_buttons(in);
@@ -886,12 +983,14 @@ void app_update(const Input *in_real, float dt)
                 E.quit = true;
             break;
         }
-        if (in->down & KEY_UP_)
-            E.game_sel = (E.game_sel + E.ngames - 1) % E.ngames;
-        if (in->down & KEY_DOWN_)
-            E.game_sel = (E.game_sel + 1) % E.ngames;
+        if ((in->down & (KEY_LEFT_ | KEY_UP_)) && E.game_sel > 0)
+            E.game_sel--;
+        if ((in->down & (KEY_RIGHT_ | KEY_DOWN_)) && E.game_sel < E.ngames - 1)
+            E.game_sel++;
         if (in->down & KEY_A_)
-            app_load_game(E.game_sel);
+            app_play_game(E.game_sel);   /* carry on where you left off */
+        else if (in->down & KEY_X_)
+            app_load_game(E.game_sel);   /* its title screen */
         if (in->down & KEY_START_)
             E.quit = true;
         break;
@@ -966,7 +1065,11 @@ void app_minigame_done(int score)
 void app_render(void)
 {
     float strength = app_strength();
-    gfx_frame_begin();
+    gfx_frame_begin();   /* (waits for the previous frame's GPU work) */
+    if (snap_pending) {
+        thumb_valid = gfx_snapshot_read(thumb, THUMB_W, THUMB_H);
+        snap_pending = false;
+    }
     if (E.screen == SCR_GAME && E.tr.active && E.tr.need_capture) {
         for (int eye = 0; eye < 2; eye++) {
             gfx_target_capture(eye, 0x000000FF);
@@ -989,5 +1092,13 @@ void app_render(void)
     }
     gfx_target_bottom(0x1A1A24FF);
     ui_draw_bottom();
+    /* keep a snapshot of each new line (or choice) for the home screen */
+    if (E.screen == SCR_GAME && !E.rx_overlay && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
+        ((E.vm.state == VM_SAY && E.text_done) || E.vm.state == VM_MENU)) {
+        snapped_serial = E.say_serial;
+        gfx_target_snapshot(0x000000FF);
+        ui_draw_top(EYE_LEFT);
+        snap_pending = true;
+    }
     gfx_frame_end();
 }

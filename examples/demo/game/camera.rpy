@@ -52,7 +52,7 @@ transform doc_close(a=0.5):
 
 # the camera operator reacts: a fast zoom-in on something that lands
 transform doc_punch(a=0.5):
-    ease 0.25 zoom 1.7 xoffset ((a - 0.5) * 1280 * 1.7) yoffset (-260)
+    ease 0.25 zoom 1.7 xoffset ((a - 0.5) * 1280 * 1.7) yoffset (-200)
     doc_sway(0.6)
 
 # filming through a doorway / from across the room: slightly off-axis

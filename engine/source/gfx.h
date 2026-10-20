@@ -29,6 +29,14 @@ void gfx_target_bottom(u32 clear);
 void gfx_target_capture(int eye, u32 clear);
 void gfx_draw_capture(int eye, float alpha);
 
+/* Save snapshots: render the top screen into an off-screen picture, then
+ * (on a later frame, once the GPU is done) read it back shrunk to w x h as
+ * RGB565, top row first. */
+void gfx_target_snapshot(u32 clear);
+bool gfx_snapshot_read(u16 *out, int w, int h);
+/* Make a texture from RGB565 pixels (top row first), e.g. a save snapshot. */
+GfxTex *gfx_tex_from_rgb565(const u16 *px, int w, int h);
+
 /* Draw a texture into the box (x, y, |w|, |h|); negative w/h mirror it.
  * `angle` (radians) rotates about the box centre. */
 void gfx_image(GfxTex *t, float x, float y, float w, float h, float angle, float alpha);

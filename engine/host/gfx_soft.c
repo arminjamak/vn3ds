@@ -21,7 +21,7 @@ struct GfxTex {
     int tw, th, fmt;
 };
 
-static Surf top_s[2], bot_s, cap_s[2];
+static Surf top_s[2], bot_s, cap_s[2], snap_s;
 static Surf *cur;
 float host_slider_value = 1.0f;
 
@@ -39,6 +39,7 @@ bool gfx_init(void)
     surf_init(&cap_s[0], TOP_W, TOP_H);
     surf_init(&cap_s[1], TOP_W, TOP_H);
     surf_init(&bot_s, BOT_W, BOT_H);
+    surf_init(&snap_s, TOP_W, TOP_H);
     cur = &top_s[0];
     return true;
 }
@@ -204,6 +205,40 @@ void gfx_target_bottom(u32 c)
 {
     cur = &bot_s;
     clear(cur, c);
+}
+
+void gfx_target_snapshot(u32 c)
+{
+    cur = &snap_s;
+    clear(cur, c);
+}
+
+bool gfx_snapshot_read(u16 *out, int w, int h)
+{
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const u8 *p = snap_s.px + ((y * TOP_H / h) * TOP_W + x * TOP_W / w) * 4;
+            out[y * w + x] = (u16)(((p[0] >> 3) << 11) | ((p[1] >> 2) << 5) | (p[2] >> 3));
+        }
+    return true;
+}
+
+GfxTex *gfx_tex_from_rgb565(const u16 *px, int w, int h)
+{
+    GfxTex *t = calloc(1, sizeof(GfxTex));
+    if (!t)
+        return NULL;
+    t->w = w;
+    t->h = h;
+    t->px = malloc((size_t)(w * h * 4));
+    for (int i = 0; i < w * h; i++) {
+        u16 v = px[i];
+        t->px[i * 4 + 0] = (u8)(((v >> 11) & 31) * 255 / 31);
+        t->px[i * 4 + 1] = (u8)(((v >> 5) & 63) * 255 / 63);
+        t->px[i * 4 + 2] = (u8)((v & 31) * 255 / 31);
+        t->px[i * 4 + 3] = 255;
+    }
+    return t;
 }
 
 void gfx_target_capture(int eye, u32 c)

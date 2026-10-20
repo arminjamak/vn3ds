@@ -92,6 +92,27 @@ static bool read_header(FILE *f, SlotInfo *info)
     return true;
 }
 
+/* A slot's header for any game folder, without loading that game (the
+ * game's CRC isn't checked here; loading still checks it). */
+bool save_peek(const char *game_id, int slot, SlotInfo *info)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.sav", E.root, game_id, slot);
+    memset(info, 0, sizeof(*info));
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return false;
+    char magic[4];
+    u32 version, crc;
+    bool ok = rdf(f, magic, 4) && !memcmp(magic, SAVE_MAGIC, 4) && rdf(f, &version, 4) &&
+              version == SAVE_VERSION && rdf(f, &crc, 4) && rdf(f, &info->time, 4) &&
+              rdf(f, info->preview, sizeof(info->preview));
+    fclose(f);
+    info->preview[sizeof(info->preview) - 1] = 0;
+    info->used = ok;
+    return ok;
+}
+
 void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE])
 {
     for (int i = 0; i < SLOTS_PER_PAGE; i++) {

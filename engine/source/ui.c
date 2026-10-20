@@ -7,6 +7,7 @@
 
 enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
+    B_TITLE_CONTINUE = 6, B_HOME_PLAY = 50, B_HOME_PREV, B_HOME_NEXT, B_HOME_TITLE,
     B_MG = 60, B_MG_BACK = 90, B_RX_CONTINUE = 92, B_RX_PLAY = 93, B_MG_BOARD = 91,
     B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
@@ -175,6 +176,8 @@ static int slot_buttons(Button *b, int n, int max)
 int ui_title_items(int *ids)
 {
     int n = 0;
+    if (app_has_resume())
+        ids[n++] = B_TITLE_CONTINUE;
     ids[n++] = B_TITLE_START;
     ids[n++] = B_TITLE_LOAD;
     if (E.loaded && E.game.nminigames > 0)
@@ -246,13 +249,17 @@ int ui_buttons(Button *b, int max)
     case SCR_MINIGAME:   /* minigame.c handles its own touch areas */
         break;
     case SCR_GAMELIST: {
-        n = add(b, n, max, 170, 200, 146, 34, "Receive (Y)", B_RECEIVE);
-        int vis = E.ngames < 4 ? E.ngames : 4;
-        int first = list_window(E.game_sel, E.ngames, vis);
-        for (int i = first; i < first + vis; i++) {
-            n = add(b, n, max, 20, 40 + (i - first) * 36, 280, 32, E.game_titles[i], B_GAME + i);
-            b[n - 1].hot = i == E.game_sel;
+        if (E.ngames > 0) {
+            bool resume = E.game_resume[E.game_sel].used;
+            n = add(b, n, max, 70, 84, 180, 48, resume ? "A: Play (continue)" : "A: Play", B_HOME_PLAY);
+            b[n - 1].hot = true;
+            n = add(b, n, max, 14, 90, 48, 36, "<", B_HOME_PREV);
+            b[n - 1].disabled = E.game_sel == 0;
+            n = add(b, n, max, 258, 90, 48, 36, ">", B_HOME_NEXT);
+            b[n - 1].disabled = E.game_sel >= E.ngames - 1;
+            n = add(b, n, max, 10, 200, 146, 34, "X: Title screen", B_HOME_TITLE);
         }
+        n = add(b, n, max, 164, 200, 146, 34, "Y: Receive", B_RECEIVE);
         break;
     }
     case SCR_TITLE:
@@ -260,9 +267,9 @@ int ui_buttons(Button *b, int max)
             return slot_buttons(b, n, max);
         {
             int ids[6], cnt = ui_title_items(ids);
-            float step = cnt > 4 ? 36 : 44;
+            float step = cnt > 5 ? 30 : cnt > 4 ? 36 : 44;
             for (int i = 0; i < cnt; i++) {
-                const char *label = ids[i] == B_TITLE_START ? "Start" : ids[i] == B_TITLE_LOAD ? "Load"
+                const char *label = ids[i] == B_TITLE_CONTINUE ? "Continue" : ids[i] == B_TITLE_START ? "Start" : ids[i] == B_TITLE_LOAD ? "Load"
                                   : ids[i] == B_TITLE_MINI ? "Minigames" : ids[i] == B_TITLE_GAMES
                                   ? "Game list" : "Quit";
                 n = add(b, n, max, 60, 32 + i * step, 200, step - 6, label, ids[i]);
@@ -412,6 +419,11 @@ void ui_activate(int id)
         break;
     case B_TITLE_QUIT: E.quit = true; break;
     case B_TITLE_MINI: E.screen = SCR_MGMENU; break;
+    case B_TITLE_CONTINUE: app_load_slot(RESUME_SLOT); break;
+    case B_HOME_PLAY: app_play_game(E.game_sel); break;
+    case B_HOME_TITLE: app_load_game(E.game_sel); break;
+    case B_HOME_PREV: if (E.game_sel > 0) E.game_sel--; break;
+    case B_HOME_NEXT: if (E.game_sel < E.ngames - 1) E.game_sel++; break;
     case B_RX_CONTINUE: app_rx_continue(); break;
     case B_RX_PLAY: app_rx_play(); break;
     case B_MG_BACK:
@@ -727,6 +739,76 @@ static void draw_title_top(int eye)
 
 static void header(const char *title);
 
+/* ---- home screen: coverflow of where each game was left -------------------- */
+
+static void draw_card(int eye, int i, float o)
+{
+    float a = fabsf(o);
+    float side = o < 0 ? -1.0f : 1.0f;
+    float x = 200 + side * (fminf(a, 1.0f) * 128 + fmaxf(a - 1.0f, 0) * 58);
+    float k = a < 1 ? 1.0f - 0.4f * a : 0.6f - 0.08f * fminf(a - 1.0f, 2.0f);
+    float depth = -0.28f + 0.55f * fminf(a, 1.6f);
+    float w = THUMB_W * k, h = THUMB_H * k;
+    float cx = x + shift(eye, depth), cy = 98 - (1 - fminf(a, 1)) * 6;
+    float fade = clampf(1.6f - (a - 1.0f), 0, 1);
+    u32 frame = a < 0.5f ? RGBA(255, 210, 110, 255) : RGBA(255, 255, 255, 90);
+    gfx_rect(cx - w / 2 - 3, cy - h / 2 - 3, w + 6, h + 6, rgba_alpha(frame, fade));
+    if (E.game_thumb[i]) {
+        gfx_image(E.game_thumb[i], cx - w / 2, cy - h / 2, w, h, 0, fade);
+    } else {
+        gfx_gradient(cx - w / 2, cy - h / 2, w, h, rgba_alpha(RGBA(60, 50, 110, 255), fade),
+                     rgba_alpha(RGBA(110, 60, 120, 255), fade));
+        text_centered(E.game_titles[i], cx, cy - 10, fit_scale(E.game_titles[i], 0.55f * k, w - 12),
+                      rgba_alpha(WHITE, fade));
+    }
+    if (a > 0.5f)   /* side cards sit back and darker */
+        gfx_rect(cx - w / 2, cy - h / 2, w, h, RGBA(10, 8, 30, (u8)(110 * fminf(a, 1) * fade)));
+    /* a soft reflection under each card */
+    gfx_gradient(cx - w / 2, cy + h / 2 + 4, w, 18, rgba_alpha(RGBA(255, 255, 255, 40), fade),
+                 RGBA(255, 255, 255, 0));
+}
+
+static void draw_coverflow(int eye)
+{
+    gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(20, 22, 50, 255), RGBA(64, 36, 84, 255));
+    for (int i = 0; i < 18; i++) {   /* far-away specks */
+        float x = (float)((i * 89 + 23) % TOP_W), y = (float)((i * 53 + 7) % TOP_H);
+        gfx_rect(x + shift(eye, 1.0f), y, 2, 2, RGBA(255, 255, 255, 60));
+    }
+    if (E.ngames == 0) {
+        text_centered("vn3ds", 200 + shift(eye, -0.4f), 60, 1.2f, WHITE);
+        text_centered("No games yet: send one from your computer.\nvn3ds is listening for it.",
+                      200 + shift(eye, -0.2f), 130, 0.5f, RGBA(255, 230, 200, 255));
+        return;
+    }
+    /* far cards first, the chosen one last (nearest) */
+    int order[MAX_GAMES], n = E.ngames;
+    for (int i = 0; i < n; i++)
+        order[i] = i;
+    for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+            if (fabsf(order[j] - E.cf_pos) > fabsf(order[i] - E.cf_pos)) {
+                int t = order[i];
+                order[i] = order[j];
+                order[j] = t;
+            }
+    for (int k = 0; k < n; k++)
+        if (fabsf(order[k] - E.cf_pos) < 3.2f)
+            draw_card(eye, order[k], (float)order[k] - E.cf_pos);
+    /* the chosen game: its name and where you are */
+    int sel = E.game_sel;
+    float dx = shift(eye, -0.2f);
+    const char *t = E.game_titles[sel];
+    text_centered(t, 200 + dx, 176, fit_scale(t, 0.62f, 360), WHITE);
+    const SlotInfo *r = &E.game_resume[sel];
+    char line[160];
+    if (r->used)
+        snprintf(line, sizeof(line), "%.80s", r->preview);
+    else
+        snprintf(line, sizeof(line), "Not started yet");
+    text_centered(line, 200 + shift(eye, -0.1f), 200, fit_scale(line, 0.45f, 370), RGBA(220, 210, 255, 255));
+}
+
 /* ---- the transfer overlay ------------------------------------------------- */
 
 static void rx_progress_text(char *out, size_t len)
@@ -807,18 +889,9 @@ static void draw_rx_bottom(void)
 void ui_draw_top(int eye)
 {
     switch (E.screen) {
-    case SCR_GAMELIST: {
-        gfx_gradient(0, 0, TOP_W, TOP_H, RGBA(25, 30, 60, 255), RGBA(70, 40, 90, 255));
-        for (int i = 0; i < 6; i++) {
-            float dx = shift(eye, 1.0f - i * 0.3f);
-            gfx_rect(40 + i * 56 + dx, 150 - i * 12, 40, 40, RGBA(255, 255, 255, 30 + i * 20));
-        }
-        float dx = shift(eye, -0.5f);
-        text_centered("vn3ds", 200 + dx, 50, 1.2f, WHITE);
-        const char *sub = E.ngames ? E.game_titles[E.game_sel] : "No games found";
-        text_centered(sub, 200 + shift(eye, -0.25f), 110, fit_scale(sub, 0.6f, 360), RGBA(255, 230, 200, 255));
+    case SCR_GAMELIST:
+        draw_coverflow(eye);
         break;
-    }
     case SCR_TITLE:
         draw_title_top(eye);
         break;
@@ -1035,7 +1108,17 @@ void ui_draw_bottom(void)
         }
         break;
     case SCR_GAMELIST:
-        header("vn3ds  -  choose a game");
+        header("vn3ds");
+        if (E.ngames > 0) {
+            char pos[48];
+            snprintf(pos, sizeof(pos), "%d / %d", E.game_sel + 1, E.ngames);
+            gfx_text(pos, 160 - gfx_text_width(pos, 0.45f) / 2, 40, 0.45f, RGBA(190, 190, 215, 255));
+        }
+        if (NET.listening) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "Listening for games on %s", NET.address);
+            gfx_text(msg, 160 - gfx_text_width(msg, 0.4f) / 2, 160, 0.4f, RGBA(160, 200, 170, 255));
+        }
         if (E.ngames == 0) {
             char msg[400], wrapped[500];
             snprintf(msg, sizeof(msg),
