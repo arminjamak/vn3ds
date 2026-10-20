@@ -281,6 +281,8 @@ class Compiler:
         self.screen_bodies = {}      # screen name -> its lines (ported minigames)
         self.py_classes = {}         # init python class name -> ast.ClassDef
         self.ported = None           # ported.Ported: screens rebuilt as native minigames
+        self.dropped = 0             # statements/conditions skipped as unsupported so far
+        self.loop_guards = 0
 
     # -- tables ---------------------------------------------------------
 
@@ -527,12 +529,88 @@ class Compiler:
                 addr = self.end_stub
             struct.pack_into("<I", code.b, pos, addr)
 
+    def checkpoint(self):
+        return len(self.code.b), len(self.code.fixups), len(self.defined_labels)
+
+    def rollback(self, cp):
+        """Drops the code emitted since checkpoint cp, so a statement that
+        turned out to be unsupported half-way leaves no stray stack pushes,
+        jumps or an unfinished menu behind. Code that defined a label is kept
+        (something may jump there)."""
+        pos, nfix, nlabels = cp
+        if len(self.defined_labels) != nlabels:
+            return
+        del self.code.b[pos:]
+        del self.code.fixups[nfix:]
+
     def c_block(self, nodes, top=False):
         for n in nodes:
+            cp = self.checkpoint()
             try:
                 self.c_node(n, top)
             except Unsupported as e:
+                self.rollback(cp)
+                self.dropped += 1
                 self.warn(n.line, str(e))
+
+    def c_cond(self, src, line, assume):
+        """Compiles a condition. One the engine cannot evaluate (a python
+        function, a list, a screen's state...) becomes the constant `assume`
+        instead of dropping the whole statement: dropping an `if` whose `else`
+        leaves a `label x: ... jump x` loop made the story spin forever."""
+        cp = self.checkpoint()
+        try:
+            self.c_expr(src, line)
+        except Unsupported as e:
+            self.rollback(cp)
+            self.dropped += 1
+            self.warn(line, f"condition '{src}' cannot be evaluated ({e}); "
+                            f"it is taken as {assume}")
+            self.code.op("PUSH_TRUE" if assume else "PUSH_FALSE")
+
+    LOOP_LIMIT = 1000
+
+    def c_while(self, n):
+        """A `while` loop. When something in it had to be skipped (its exit
+        may depend on that), it also counts its rounds and gives up after
+        LOOP_LIMIT, so the approximation cannot hang the story."""
+        code = self.code
+        top_ref, end = Ref(), Ref()
+        guard = "_vn3ds_loop%d" % self.loop_guards
+        reset_at = code.here()
+        code.op("PUSH_NUM")          # guard = 0, NOPped out below when unneeded
+        code.f64(0.0)
+        code.op("STORE")
+        code.u32(self.var(guard))
+        reset_end = code.here()
+        dropped = self.dropped
+        code.mark(top_ref)
+        self.c_cond(n.cond, n.line, False)
+        code.op("JZ")
+        code.ref(end)
+        self.c_block(n.block)
+        if self.dropped != dropped:
+            self.loop_guards += 1
+            self.warn(n.line, "this while loop skips unsupported statements; it stops "
+                              f"after {self.LOOP_LIMIT} rounds in case its exit depends on them")
+            code.op("LOAD")
+            code.u32(self.var(guard))
+            code.op("PUSH_NUM")
+            code.f64(1.0)
+            code.op("ADD")
+            code.op("DUP")
+            code.op("STORE")
+            code.u32(self.var(guard))
+            code.op("PUSH_NUM")
+            code.f64(float(self.LOOP_LIMIT))
+            code.op("GE")
+            code.op("JNZ")
+            code.ref(end)
+        else:
+            code.b[reset_at:reset_end] = bytes([OP["NOP"]]) * (reset_end - reset_at)
+        code.op("JMP")
+        code.ref(top_ref)
+        code.mark(end)
 
     def c_node(self, n, top=False):
         code = self.code
@@ -591,7 +669,7 @@ class Compiler:
             end = Ref()
             for cond, block in n.branches:
                 nxt = Ref()
-                self.c_expr(cond, n.line)
+                self.c_cond(cond, n.line, False)
                 code.op("JZ")
                 code.ref(nxt)
                 self.c_block(block)
@@ -603,15 +681,7 @@ class Compiler:
             code.mark(end)
             return
         if t is rpy.While:
-            top_ref, end = Ref(), Ref()
-            code.mark(top_ref)
-            self.c_expr(n.cond, n.line)
-            code.op("JZ")
-            code.ref(end)
-            self.c_block(n.block)
-            code.op("JMP")
-            code.ref(top_ref)
-            code.mark(end)
+            self.c_while(n)
             return
         if t is rpy.Pause:
             if n.expr:
@@ -706,8 +776,8 @@ class Compiler:
         for text, cond, _ in n.items:
             r = Ref()
             refs.append(r)
-            if cond:
-                self.c_expr(cond, n.line)
+            if cond:   # unknown: offered, so the menu is never left empty
+                self.c_cond(cond, n.line, True)
             else:
                 code.op("PUSH_TRUE")
             code.op("MENU_ITEM")
@@ -1504,6 +1574,27 @@ class Compiler:
             code.mark(end)
             return
         if isinstance(n, ast.Compare):
+            seq = (ast.List, ast.Tuple, ast.Set)
+            if len(n.ops) == 1 and isinstance(n.ops[0], (ast.In, ast.NotIn)) \
+                    and isinstance(n.comparators[0], seq):
+                # x in ["a", "b"]  ->  x == "a" or x == "b" (the VM has no lists)
+                elts = n.comparators[0].elts
+                if any(isinstance(e, ast.Starred) for e in elts):
+                    raise Unsupported(f"unsupported expression {ast.unparse(n)}")
+                test = (ast.BoolOp(ast.Or(), [ast.Compare(n.left, [ast.Eq()], [e])
+                                              for e in elts])
+                        if len(elts) > 1 else
+                        ast.Compare(n.left, [ast.Eq()], elts) if elts else
+                        ast.Constant(False))
+                if isinstance(n.ops[0], ast.NotIn):
+                    test = ast.UnaryOp(ast.Not(), test)
+                self.c_ast(test, line)
+                return
+            if len(n.ops) == 1 and all(isinstance(x, (ast.List, ast.Tuple)) and len(x.elts) == 1
+                                       for x in (n.left, n.comparators[0])):
+                # [a] > [b] compares the single items
+                self.c_ast(ast.Compare(n.left.elts[0], n.ops, [n.comparators[0].elts[0]]), line)
+                return
             left = n.left
             for i, (op, right) in enumerate(zip(n.ops, n.comparators)):
                 self.c_ast(left, line)
@@ -1620,10 +1711,16 @@ class Compiler:
             tree = ast.parse(src)
         except SyntaxError:
             raise Unsupported("cannot parse python code")
-        for st in tree.body:
+        self.c_pybody(tree.body, line)
+
+    def c_pybody(self, body, line):
+        for st in body:
+            cp = self.checkpoint()
             try:
                 self.c_pystmt(st, line)
             except Unsupported as e:
+                self.rollback(cp)
+                self.dropped += 1
                 self.warn(line, f"python: {e}; statement skipped")
 
     def c_pystmt(self, st, line):
@@ -1661,16 +1758,14 @@ class Compiler:
             return
         if isinstance(st, ast.If):
             other, end = Ref(), Ref()
-            self.c_ast(st.test, line)
+            self.c_cond(ast.unparse(st.test), line, False)
             code.op("JZ")
             code.ref(other)
-            for s in st.body:
-                self.c_pystmt(s, line)
+            self.c_pybody(st.body, line)
             code.op("JMP")
             code.ref(end)
             code.mark(other)
-            for s in st.orelse:
-                self.c_pystmt(s, line)
+            self.c_pybody(st.orelse, line)
             code.mark(end)
             return
         if isinstance(st, ast.Pass):
