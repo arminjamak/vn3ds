@@ -329,6 +329,7 @@ static void begin_file(void)
     wlen = 0;
     write_failed = !out;
     snprintf(NET.current, sizeof(NET.current), "%s", path);
+    LOG("net: receiving %s", path);
 }
 
 /* A large receive window: with the console's default one the sender can
@@ -599,6 +600,26 @@ static bool data_v4(const u8 *p, size_t n)
     return true;
 }
 
+/* "VN3L": sends log.old.txt and log.txt (the last run's and this one's). */
+static void send_logs(void)
+{
+    static const char *names[] = {"log.old.txt", "log.txt"};
+    static u8 chunk[4096];
+    for (int i = 0; i < 2; i++) {
+        char full[400];
+        snprintf(full, sizeof(full), "%s/%s", E.root, names[i]);
+        int n = snprintf((char *)chunk, sizeof(chunk), "==== %s ====\n", names[i]);
+        send(conn_fd, (const char *)chunk, n, 0);
+        FILE *f = fopen(full, "rb");
+        if (!f)
+            continue;
+        size_t r;
+        while ((r = fread(chunk, 1, sizeof(chunk), f)) > 0)
+            send(conn_fd, (const char *)chunk, r, 0);
+        fclose(f);
+    }
+}
+
 static void feed(const u8 *p, size_t n)
 {
     while (n > 0) {
@@ -615,6 +636,11 @@ static void feed(const u8 *p, size_t n)
                 return;
             got = 0;
             if (state == ST_HEADER) {
+                if (memcmp(hdr, "VN3L", 4) == 0) {   /* a computer asks for the logs */
+                    send_logs();
+                    close_conn();
+                    return;
+                }
                 proto = rd_u32(hdr + 4);
                 if (memcmp(hdr, "VN3D", 4) != 0 || proto < 1 || proto > 4) {
                     set_status("Unknown sender (update vn3ds-port?)", NULL);

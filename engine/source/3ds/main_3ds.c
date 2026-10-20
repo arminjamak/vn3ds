@@ -30,8 +30,12 @@ void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void
 
 void platform_log(const char *fmt, ...)
 {
-    if (!log_file)
+    if (!log_file) {
+        /* keep the previous run's log: after a freeze it says where it stopped */
+        remove(ROOT "/log.old.txt");
+        rename(ROOT "/log.txt", ROOT "/log.old.txt");
         log_file = fopen(ROOT "/log.txt", "w");
+    }
     if (!log_file)
         return;
     va_list ap;

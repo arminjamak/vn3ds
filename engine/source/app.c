@@ -1107,23 +1107,19 @@ static void rx_update(Input *in)
 {
     net_poll();
     rx_measure();
-    /* overnight transfers: stay awake, and away from a story let the screens
-     * go dark when nobody is looking (the button that wakes them does nothing else) */
-    static float idle;
-    static bool awake_held, dark;
-    bool woke = dark && in->down;
-    idle = (in->down || in->held) ? 0 : idle + 1.0f / 60.0f;
+    /* overnight transfers: stay awake. (The screens stay on: switching the
+     * backlights off during a transfer froze vn3ds on a real New 3DS.) */
+    static bool awake_held;
     if (NET.receiving != awake_held) {
         awake_held = NET.receiving;
         platform_keep_awake(awake_held);
     }
-    bool want_dark = NET.receiving && idle > 60.0f && E.screen != SCR_GAME && E.screen != SCR_MINIGAME;
-    if (want_dark != dark) {
-        dark = want_dark;
-        platform_screens(!dark);
+    static float beat;
+    if (NET.receiving && (beat += 1.0f / 60.0f) > 5.0f) {   /* for log.txt after a freeze */
+        beat = 0;
+        LOG("rx: %s | %u of %u files, %.1f MB", NET.message, (unsigned)NET.files_done,
+            (unsigned)NET.files_total, NET.bytes_done / 1048576.0);
     }
-    if (woke)
-        in->down = 0;
     bool finished = NET.completed != rx_seen;
     if (finished || (rx_was_receiving && !NET.receiving)) {
         app_rescan_games();
