@@ -132,6 +132,18 @@ APPROX_TRANSITIONS = {"pixellate", "zoomin", "zoomout", "zoominout", "blinds",
     for d in ("left", "right", "up", "down")}
 
 
+def child_nodes(n):
+    """The statements nested in a label, if, while or menu, in source order."""
+    if isinstance(n, (rpy.Label, rpy.While)):
+        return list(n.block)
+    if isinstance(n, rpy.If):
+        out = [c for _, block in n.branches for c in block]
+        return out + list(n.else_ or [])
+    if isinstance(n, rpy.Menu):
+        return [c for item in n.items for c in (item[2] or [])]
+    return []
+
+
 def parse_color(s, default=0xFFFFFFFF):
     if not isinstance(s, str):
         return default
@@ -322,6 +334,11 @@ class Compiler:
                     for c in n.block:
                         if isinstance(c, rpy.Python) and not c.init:
                             c.init = True  # `$` inside init: runs at init time
+                elif isinstance(n, (rpy.Label, rpy.If, rpy.While, rpy.Menu)):
+                    # Ren'Py runs define/default/image/transform statements at
+                    # init time wherever they appear, even indented inside a
+                    # label or a branch, so look for them in nested blocks.
+                    stack[0:0] = [(prio, c) for c in child_nodes(n)]
                 elif isinstance(n, rpy.Screen):
                     self.screens[n.name] = n.items
                     self.screen_bgs[n.name] = n.background

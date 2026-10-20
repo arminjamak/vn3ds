@@ -88,7 +88,9 @@ label after_local:
     while tries < MAX_TRIES:
         $ tries += 1
         "Loop iteration [tries]."
-    if tries == 3 and not (score < 0):
+    # late_default is declared by a `default` inside label nav_left, which
+    # runs later (if at all): Ren'Py still gives it its value at game start.
+    if tries == 3 and not (score < 0) and late_default == 7:
         "Loop finished correctly."
     menu choose_label:
         "Pick one. (choice menu with conditions)"
@@ -148,6 +150,7 @@ label strings_and_screens:
     return
 
 label nav_left:
+    default late_default = 7
     "Went left."
     return
 
