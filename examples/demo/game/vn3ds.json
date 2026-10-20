@@ -1,4 +1,5 @@
 {
+ "audio_masters": "../../music/build/master",
  "depth": {
   "cg": 0.3,
   "aron": 0.0,

@@ -1,4 +1,4 @@
-"""Render the score: python3 examples/music/render.py [cue ...]
+"""Render the score: python3 examples/music/render.py [--masters] [cue ...]
 
 Each file in cues/ is one looping cue written in vnsynth. Renders them all
 (or the named ones) into examples/demo/game/audio/.
@@ -7,6 +7,10 @@ The minigame cues live in cues/minigame/ and render into audio/minigame/:
 name them as `minigame/quiz`, or `minigame` for all of them (their loops and
 `minigame/sfx`, the shared sound effects). Files starting with `_` are
 helpers, not cues.
+
+--masters writes lossless FLAC masters into build/master/ instead (and leaves
+the .ogg files alone): vnpack encodes the 3DS's audio from those when they
+are there (vn3ds.json "audio_masters"), one lossy generation instead of two.
 """
 import os
 import runpy
@@ -53,7 +57,13 @@ def find_cues(names):
 
 
 def main():
-    cues = find_cues(sys.argv[1:])
+    args = sys.argv[1:]
+    if "--masters" in args:
+        # lossless masters only, into build/master/ (the game's .ogg files stay)
+        args.remove("--masters")
+        os.environ["VNSYNTH_MASTERS"] = os.path.join(HERE, "build", "master")
+        os.environ["VNSYNTH_MASTERS_ONLY"] = "1"
+    cues = find_cues(args)
     with ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 2)) as ex:
         for name, dt in ex.map(render_one, cues):
             print(f"  {name:<28} {dt:5.1f}s", flush=True)

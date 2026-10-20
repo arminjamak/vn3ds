@@ -1135,10 +1135,31 @@ def _write_wav(wav, stereo):
         w.writeframes(data.tobytes())
 
 
+# render.py --masters: also (or only) write each cue as a lossless FLAC into
+# this folder (examples/music/build/master/<name>.flac), which vnpack encodes
+# for the 3DS instead of the shipped .ogg (vn3ds.json "audio_masters").
+MASTERS = os.environ.get("VNSYNTH_MASTERS")
+MASTERS_ONLY = os.environ.get("VNSYNTH_MASTERS_ONLY") == "1"
+
+
+def _write_master(path, stereo):
+    dest = os.path.join(MASTERS, meta_name(path) + ".flac")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, "out.wav")
+        _write_wav(wav, stereo)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", wav, "-c:a", "flac",
+                        "-compression_level", "8", dest], check=True)
+
+
 def write_audio(path, stereo, ceiling=0.97):
     """Write a .wav, or an .ogg (Vorbis). Lossy coding can overshoot the
     limiter on a loud transient, so the .ogg is decoded again and, if it
     would clip, re-encoded a little quieter."""
+    if MASTERS:
+        _write_master(path, stereo)
+        if MASTERS_ONLY:
+            return
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "out.wav")
