@@ -234,8 +234,8 @@ def deliver(args, game_dirs):
 # What each quality mode asks of the packager. Options the packager doesn't
 # know yet are left out, so this works while features are being added.
 QUALITY = {
-    "wifi": [("--audio-profile", "wifi"), ("--jpeg", "80"), ("--rgb565", None),
-             ("--video-codec", "h264"), ("--video-kbps", "220"), ("--video-fps", "24")],
+    "wifi": [("--audio-profile", "wifi"), ("--jpeg", "75"), ("--rgb565", None),
+             ("--video-codec", "h264"), ("--video-kbps", "200"), ("--video-fps", "24")],
     "sd": [("--video-codec", "h264"), ("--video-kbps", "900"), ("--video-fps", "30")],
 }
 

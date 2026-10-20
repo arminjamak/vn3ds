@@ -594,7 +594,7 @@ def convert_audio(data, name, out_path, warn, profile="sd"):
     profile "sd": Ogg Vorbis files are copied as they are (best quality).
     profile "wifi": everything is re-encoded small for Wi-Fi transfers:
     22 kHz, mixed to mono and written as identical stereo channels (Vorbis
-    stores the zero difference almost for free), quality 2: about 23 kbps."""
+    stores the zero difference almost for free), quality 1.5: about 20 kbps."""
     if is_ogg_vorbis(data) and profile != "wifi":
         with open(out_path, "wb") as f:
             f.write(data)
@@ -611,11 +611,11 @@ def convert_audio(data, name, out_path, warn, profile="sd"):
         if profile == "wifi":
             mono = ["-af", "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1", "-ar", "22050"]
             cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", *mono, "-c:a", "vorbis",
-                   "-strict", "-2", "-q:a", "2", out_path]
+                   "-strict", "-2", "-q:a", "1.5", out_path]
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode != 0:   # mono sources: pan needs two channels
                 cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", "22050",
-                       "-c:a", "vorbis", "-strict", "-2", "-q:a", "2", out_path]
+                       "-c:a", "vorbis", "-strict", "-2", "-q:a", "1.5", out_path]
                 r = subprocess.run(cmd, capture_output=True)
             if r.returncode != 0:
                 warn(None, f"{name}: ffmpeg failed: {r.stderr.decode(errors='replace').strip()}")
