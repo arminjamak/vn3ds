@@ -266,6 +266,9 @@ class Compiler:
         self.screen_bgs = {}
         self.minigames = []          # ids passed to vn3ds_minigame(), in order
         self.named_audio = {}        # "minigame/tower_1" -> resource index
+        self.screen_bodies = {}      # screen name -> its lines (ported minigames)
+        self.py_classes = {}         # init python class name -> ast.ClassDef
+        self.ported = None           # ported.Ported: screens rebuilt as native minigames
 
     # -- tables ---------------------------------------------------------
 
@@ -322,6 +325,7 @@ class Compiler:
                 elif isinstance(n, rpy.Screen):
                     self.screens[n.name] = n.items
                     self.screen_bgs[n.name] = n.background
+                    self.screen_bodies[n.name] = getattr(n, "body", None)
                 elif isinstance(n, rpy.Define):
                     self.collect_define(n, prio + n.priority, seq)
                 elif isinstance(n, rpy.Default):
@@ -415,6 +419,8 @@ class Compiler:
                 else:
                     self.defines[tname] = (st.value, n.line)
             elif isinstance(st, (ast.FunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
+                if isinstance(st, ast.ClassDef):
+                    self.py_classes[st.name] = st   # read by ported minigames
                 self.warn(n.line, "python functions/classes in init python are ignored")
 
     def const_value(self, expr):
@@ -712,6 +718,12 @@ class Compiler:
     def c_call_screen(self, n):
         """A navigation screen (buttons that Jump/Call/Return) becomes a menu."""
         code = self.code
+        if self.ported is not None and self.ported.handles(n.name):
+            try:   # a native minigame (ported.py)
+                self.ported.compile_call(self, n)
+            except ValueError as e:
+                raise Unsupported(str(e))
+            return
         items = self.screens.get(n.name)
         if not items:
             raise Unsupported(f"call screen {n.name} has no Jump/Call buttons vn3ds can turn "
@@ -1855,6 +1867,8 @@ def write_game(path, comp, meta, images, resources, layers=(), voices=None, musi
         section("TALK", struct.pack("<I", s(comp.meta["speaking_attribute"])))
     if comp.minigames:
         section("MINI", struct.pack("<I", len(comp.minigames)) + strs(comp.minigames))
+    if comp.ported is not None and comp.ported.entries:
+        section("PORT", comp.ported.section(s))
     if comp.named_audio:
         audn = bytearray(struct.pack("<I", len(comp.named_audio)))
         for name, res in sorted(comp.named_audio.items()):

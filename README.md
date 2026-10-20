@@ -249,6 +249,8 @@ stereo offset never shows a black strip at the edge.
   of the image, flat but with the camera parallax.
 - `call screen` navigation screens made of buttons (maps, phone menus) become a menu, with the
   screen's background picture shown behind it
+- `call screen` minigame screens named in an adapter become native minigames (see
+  "Ported minigames" below)
 - string methods `upper lower title strip capitalize`, indexing and slicing, and
   `renpy.input` (returns its default name)
 
@@ -280,6 +282,12 @@ The demo game:
 python3 examples/make_demo_assets.py
 tools/vnpack.sh examples/demo -o build
 ```
+
+For a quick test build of a big game, `--only-images GLOB` and `--only-audio
+GLOB` (repeatable) pack the whole script but only the matching images (by
+name, e.g. `"cg 12*"`) and audio files (by path); `--mg-input` and
+`--mg-seed` drive the story's minigames with scripted input (see
+`engine/host/main_host.c`).
 
 Inspect a compiled script with `python3 -m vnpack.disasm build/<id>/game.bin` (from `tools/`).
 
@@ -327,6 +335,16 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   Minigames menu with best scores. Define `vn3ds_minigame()` in your game
   for PC (Snapshot's `minigames.rpy` shows a stand-in). Music and sounds come
   from `game/audio/minigame/`.
+- **Ported minigames**: a game's own custom minigame screens (a lockpick
+  displayable, a swinging-marker timing bar, an imagemap instrument, timed
+  captions over a recording) can play as native vn3ds games. A `"minigames"`
+  map in `vn3ds.json`, or an adapter in `tools/vnpack/adapters/<game id>.json`,
+  names each screen's mechanic; vnpack reads the numbers, art, sounds and text
+  from the game's own files and compiles `call screen` into the native game,
+  which sets the variables (`_return`, counters, ...) the original screen
+  did. They play with the buttons or big touch areas, have no cheats or
+  scores and don't appear in the Minigames menu. Mechanics and what an entry
+  names: `tools/vnpack/ported.py`; an example: `tests/ported/`.
 - **`config.speaking_attribute`** (standard Ren'Py) is honoured: while a
   character speaks, the engine flaps between their image and the image with
   that attribute, e.g. `aron tired` and `aron tired talk`.

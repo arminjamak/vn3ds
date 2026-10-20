@@ -7,20 +7,162 @@
 #include <stdio.h>
 
 extern const MiniGame MG_QUIZ, MG_DRAW, MG_INVADERS, MG_TOWER, MG_SNAKE, MG_MISO, MG_LANTERN;
+extern const MiniGame MG_LOCKPICK, MG_SWING, MG_INSTRUMENT, MG_CAPTIONS;
 
 /* Menu order. */
 static const MiniGame *const GAMES[] = {
     &MG_QUIZ, &MG_MISO, &MG_DRAW, &MG_LANTERN, &MG_SNAKE, &MG_TOWER, &MG_INVADERS,
 };
 
+/* Mechanics for ported games (see minigame.h): never in the menu. */
+static const MiniGame *const PORTED[] = {
+    &MG_LOCKPICK, &MG_SWING, &MG_INSTRUMENT, &MG_CAPTIONS,
+};
+
 MgRun MG;
+
+/* ---- the PORT table --------------------------------------------------------
+ * u32 count; { str mechanic; u32 n; { str key; str value } [n] } [count] */
+
+static const u8 *port_entry(int index, const char **mechanic, u32 *nkv)
+{
+    if (!E.loaded || !E.game.ported || index < 0)
+        return NULL;
+    const u8 *p = E.game.ported, *end = p + E.game.ported_size;
+    u32 count = rd_u32(p);
+    p += 4;
+    for (u32 i = 0; i < count && p + 8 <= end; i++) {
+        u32 n = rd_u32(p + 4);
+        if (p + 8 + 8 * (size_t)n > end)
+            return NULL;
+        if ((int)i == index) {
+            *mechanic = game_str(&E.game, rd_u32(p));
+            *nkv = n;
+            return p + 8;
+        }
+        p += 8 + 8 * (size_t)n;
+    }
+    return NULL;
+}
+
+/* "@3" -> 3, anything else -> -1 */
+static int port_index(const char *id)
+{
+    if (!id || id[0] != '@' || id[1] < '0' || id[1] > '9')
+        return -1;
+    return atoi(id + 1);
+}
 
 const MiniGame *mg_find(const char *id)
 {
     for (unsigned i = 0; i < ARRAY_LEN(GAMES); i++)
         if (!strcmp(GAMES[i]->id, id))
             return GAMES[i];
+    const char *mech;
+    u32 n;
+    if (port_entry(port_index(id), &mech, &n) && mech)
+        for (unsigned i = 0; i < ARRAY_LEN(PORTED); i++)
+            if (!strcmp(PORTED[i]->id, mech))
+                return PORTED[i];
     return NULL;
+}
+
+int mg_param_all(const char *key, const char **out, int max)
+{
+    const char *mech;
+    u32 n;
+    const u8 *kv = port_entry(MG.port, &mech, &n);
+    int k = 0;
+    for (u32 i = 0; kv && i < n && k < max; i++) {
+        const char *name = game_str(&E.game, rd_u32(kv + 8 * i));
+        if (name && !strcmp(name, key)) {
+            const char *v = game_str(&E.game, rd_u32(kv + 8 * i + 4));
+            out[k++] = v ? v : "";
+        }
+    }
+    return k;
+}
+
+const char *mg_param(const char *key)
+{
+    const char *v;
+    return mg_param_all(key, &v, 1) ? v : NULL;
+}
+
+float mg_paramf(const char *key, float def)
+{
+    const char *v = mg_param(key);
+    return v && *v ? (float)atof(v) : def;
+}
+
+Value *mg_var(const char *name)
+{
+    if (!E.loaded || !E.vm.vars || !name)
+        return NULL;
+    for (u32 i = 0; i < E.game.nvars; i++)
+        if (E.game.var_names[i] && !strcmp(E.game.var_names[i], name))
+            return &E.vm.vars[i];
+    return NULL;
+}
+
+double mg_var_num(const char *name, double def)
+{
+    Value *v = mg_var(name);
+    if (!v)
+        return def;
+    if (v->type == VAL_NUM || v->type == VAL_BOOL)
+        return v->num;
+    if (v->type == VAL_STR && v->str)
+        return atof(v->str);
+    return def;
+}
+
+const char *mg_var_str(const char *name)
+{
+    Value *v = mg_var(name);
+    return v && v->type == VAL_STR && v->str ? v->str : NULL;
+}
+
+void mg_var_set_num(const char *name, double num)
+{
+    Value *v = mg_var(name);
+    if (!v)
+        return;
+    value_free(v);
+    v->type = VAL_NUM;
+    v->num = num;
+}
+
+void mg_var_set_bool(const char *name, bool b)
+{
+    Value *v = mg_var(name);
+    if (!v)
+        return;
+    value_free(v);
+    v->type = VAL_BOOL;
+    v->num = b ? 1 : 0;
+}
+
+void mg_var_set_str(const char *name, const char *str)
+{
+    Value *v = mg_var(name);
+    if (v)
+        value_set_str(v, str);
+}
+
+GfxTex *mg_image(const char *spec, float *w, float *h)
+{
+    if (!E.loaded || !spec)
+        return NULL;
+    s32 i = stage_resolve(&E.game, spec, NULL);
+    if (i < 0 || (u32)i >= E.game.nimages)
+        return NULL;
+    const ImageDef *im = &E.game.images[i];
+    if (w)
+        *w = im->w;
+    if (h)
+        *h = im->h;
+    return im->res >= 0 ? texcache_image(im) : NULL;
 }
 
 int mg_count(void) { return (int)ARRAY_LEN(GAMES); }
@@ -169,6 +311,7 @@ static void record_score(const char *id, int score, bool story)
 /* ---- random ------------------------------------------------------------------ */
 
 static u32 rng = 0x9E3779B9u;
+u32 mg_test_seed;
 
 u32 mg_rand(void)
 {
@@ -229,7 +372,10 @@ static void bank_load(const MiniGame *g)
     if (!E.loaded || !E.game.audio_names)
         return;
     char prefix[48];
-    snprintf(prefix, sizeof(prefix), "minigame/%s_", g->id);
+    if (MG.port >= 0)   /* a ported game's own clips: "minigame/@3_unlock" plays as "unlock" */
+        snprintf(prefix, sizeof(prefix), "minigame/@%d_", MG.port);
+    else
+        snprintf(prefix, sizeof(prefix), "minigame/%s_", g->id);
     u32 n = rd_u32(E.game.audio_names);
     for (u32 i = 0; i < n && bank_n < BANK_MAX; i++) {
         const char *an = game_str(&E.game, rd_u32(E.game.audio_names + 4 + 8 * i));
@@ -240,7 +386,10 @@ static void bank_load(const MiniGame *g)
                       !strcmp(an, "minigame/board_tick") || !strcmp(an, "minigame/board_land");
         if (!shared && strncmp(an, prefix, strlen(prefix)) != 0)
             continue;
-        snprintf(bank_names[bank_n], sizeof(bank_names[0]), "%s", an + 9);
+        if (MG.port >= 0 && !shared && !strncmp(an + strlen(prefix), "loop_", 5))
+            continue;   /* streamed by mg_sound_loop() */
+        snprintf(bank_names[bank_n], sizeof(bank_names[0]), "%s",
+                 MG.port >= 0 && !shared ? an + strlen(prefix) : an + 9);
         game_res_path(&E.game, res, paths[bank_n], sizeof(paths[0]));
         ptrs[bank_n] = paths[bank_n];
         bank_n++;
@@ -259,6 +408,17 @@ void mg_sfx_pitch(const char *name, float rate)
 }
 
 void mg_sfx(const char *name) { mg_sfx_pitch(name, 1.0f); }
+
+void mg_sound_loop(const char *name)
+{
+    if (!name) {
+        audio_stop(CH_SOUND, 0.05f);
+        return;
+    }
+    char full[64];
+    snprintf(full, sizeof(full), "@%d_loop_%s", MG.port, name);
+    play_named(CH_SOUND, full, true);
+}
 void mg_music(const char *name) { play_named(CH_MUSIC, name, true); }
 
 /* ---- drawing helpers ---------------------------------------------------------- */
@@ -342,12 +502,18 @@ static Value *story_cheats(void)
     return NULL;
 }
 
+static void start_play(void);
+static void leave(void);
+
 void mg_begin(const MiniGame *g, bool from_story)
 {
     memset(&MG, 0, sizeof(MG));
     MG.game = g;
     MG.from_story = from_story;
-    if (from_story) {
+    MG.port = from_story ? port_index(E.vm.mg_id) : -1;
+    if (MG.port >= 0) {
+        MG.cheats_left = 0;   /* no cheats in ported games */
+    } else if (from_story) {
         Value *v = story_cheats();
         MG.cheats_left = v && (v->type == VAL_NUM || v->type == VAL_BOOL) ? (int)v->num : 0;
     } else {
@@ -362,11 +528,14 @@ void mg_begin(const MiniGame *g, bool from_story)
     bank_load(g);
     if (g->music)
         prefetch_named(g->music);
+    if (MG.port >= 0)
+        start_play();   /* straight in, as in the original */
 }
 
 static void start_play(void)
 {
-    rng = (platform_time() * 2654435761u) ^ (E.frame * 40503u) ^ 0x51ED270Bu;
+    rng = mg_test_seed ? mg_test_seed
+                       : (platform_time() * 2654435761u) ^ (E.frame * 40503u) ^ 0x51ED270Bu;
     if (!rng)
         rng = 1;
     MG.phase = MG_PLAY;
@@ -382,6 +551,10 @@ static void finish(void)
 {
     MG.score = MG.game->score ? MG.game->score() : 0;
     MG.score = MG.score < 0 ? 0 : (MG.score > 100 ? 100 : MG.score);
+    if (MG.port >= 0) {   /* no scores or result card: back to the story */
+        leave();
+        return;
+    }
     const char *v = MG.game->verdict ? MG.game->verdict() : NULL;
     snprintf(MG.verdict, sizeof(MG.verdict), "%s", v ? v : "");
     record_score(MG.game->id, MG.score, MG.from_story);
@@ -403,6 +576,14 @@ static void finish(void)
 
 static void leave(void)
 {
+    if (MG.port >= 0) {
+        /* The story's music and sounds play on untouched, as they did
+         * under the original screen. */
+        audio_sfx_free();
+        bank_n = 0;
+        app_minigame_done(MG.score);
+        return;
+    }
     /* restore the story's music */
     audio_stop(CH_SOUND, 0);
     audio_sfx_free();
@@ -544,7 +725,7 @@ void mg_update(const Input *in, float dt)
         break;
     }
     case MG_PAUSED: {
-        int n = MG.from_story ? 2 : 3;   /* Resume, Restart, (Quit) */
+        int n = MG.port >= 0 ? 1 : MG.from_story ? 2 : 3;   /* Resume, (Restart), (Quit) */
         if (in->down & KEY_UP_)
             MG.pause_sel = (MG.pause_sel + n - 1) % n;
         if (in->down & KEY_DOWN_)
@@ -723,7 +904,7 @@ void mg_draw_bottom(void)
         break;
     case MG_PAUSED: {
         static const char *items[] = {"Resume", "Restart", "Quit (score so far)"};
-        int n = MG.from_story ? 2 : 3;
+        int n = MG.port >= 0 ? 1 : MG.from_story ? 2 : 3;
         for (int i = 0; i < n; i++)
             bottom_button(60, 50 + i * 50, 200, 40, items[i], i == MG.pause_sel);
         break;

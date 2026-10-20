@@ -83,6 +83,7 @@ typedef struct {
     bool music_loop_before;
     int pause_sel;
     bool posted;          /* the score went to the online leaderboard (leaderboard.h) */
+    int port;             /* PORT entry of a ported game (see below), -1 for the others */
 } MgRun;
 
 extern MgRun MG;
@@ -112,6 +113,10 @@ void mg_text_centered(int eye, const char *s, float cx, float y, float scale, fl
 /* Background helpers (no depth argument: drawn far behind, at +1). */
 void mg_sky(int eye, u32 top, u32 bottom);
 
+/* Desktop test hook: when non-zero, every run's random numbers start from
+ * this seed instead of the clock (vn3ds-host --mg-seed). */
+extern u32 mg_test_seed;
+
 /* Deterministic random numbers, reseeded by mg_begin(). */
 u32 mg_rand(void);
 float mg_randf(void);                 /* 0..1 */
@@ -121,6 +126,42 @@ int mg_randi(int lo, int hi);         /* lo..hi inclusive */
 void mg_sfx(const char *name);        /* one-shot; several can overlap */
 void mg_sfx_pitch(const char *name, float rate);   /* rate 1 = as recorded */
 void mg_music(const char *name);      /* switch the music loop (e.g. per level) */
+
+/* ---- ported minigames ---------------------------------------------------
+ *
+ * Games rebuilt from a ported game's own custom screens (a lockpick, an
+ * instrument, ...). vnpack compiles `call screen <name>` into
+ * vn3ds_minigame("@i"), where i is an entry of the game's PORT table: the
+ * mechanic (a MiniGame id from the ported list in minigame.c) and its
+ * parameters, art and sounds, all from the game's own files (see
+ * tools/vnpack/ported.py). A ported game starts straight away and ends
+ * straight back in the story: no intro or result card, no cheats, no
+ * scores, no Minigames menu entry. Its result goes back to the story
+ * through the script's variables, the way the original screen set them.
+ *
+ * Sounds: the entry's sounds are its named audio "minigame/@i_<name>", so
+ * mg_sfx("<name>") plays them like any minigame's own clips; clips named
+ * "loop_<name>" are streamed instead (mg_sound_loop). */
+
+/* The entry's parameters: the first value of `key`, or NULL / `def`. */
+const char *mg_param(const char *key);
+float mg_paramf(const char *key, float def);
+/* Every value of a repeated key, in order; returns how many. */
+int mg_param_all(const char *key, const char **out, int max);
+/* Story variables by name (NULL / `def` when the script has no such variable). */
+Value *mg_var(const char *name);
+double mg_var_num(const char *name, double def);
+const char *mg_var_str(const char *name);
+void mg_var_set_num(const char *name, double v);
+void mg_var_set_bool(const char *name, bool v);
+void mg_var_set_str(const char *name, const char *v);
+/* One of the game's images by the name the script shows it by ("bg room"),
+ * loaded through the texture cache; *w, *h get its size in top-screen px
+ * (the story's scale). NULL if the game has no such image. */
+GfxTex *mg_image(const char *spec, float *w, float *h);
+/* A looping clip "loop_<name>" of the entry, streamed on the story's sound
+ * channel (one at a time; not in the decoded bank). NULL stops it. */
+void mg_sound_loop(const char *name);
 
 /* The framework's Cheat button on the bottom screen: keep touch areas clear
  * of it (taps there are the cheat, not your game's input). */

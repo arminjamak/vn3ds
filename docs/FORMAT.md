@@ -192,6 +192,21 @@ u32 count;  { str name; i32 res; } [count]   e.g. "minigame/tower_1" -> RES inde
 ```
 Everything in `game/audio/minigame/` is packed and listed here; minigames
 look up their music and sounds by name.
+Ported minigames' sounds are listed as `minigame/@<entry>_<name>` (names
+starting `loop_` are streamed in a loop, the others decoded into memory).
+
+#### `PORT` ported minigames
+```
+u32 count
+{ str mechanic             native mechanic: "lockpick", "swing_timing", "instrument", "captions"
+  u32 n
+  { str key; str value } [n]   parameters, image names, layout (keys may repeat)
+} [count]
+```
+Custom minigame screens of a ported game, rebuilt from vnpack's adapters
+(`tools/vnpack/ported.py` lists each mechanic's keys). The script starts entry
+`i` with OP_MINIGAME on the string `"@i"`; the game sets the story's variables
+itself and its score is discarded. These never appear in the Minigames menu.
 
 #### `MUSM` music tempo grids (optional)
 ```

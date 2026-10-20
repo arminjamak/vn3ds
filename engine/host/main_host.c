@@ -4,6 +4,9 @@
  *              [--every N] [--test-save] [--root dir]
  *              [--record frames.rgb --audio-log audio.txt --pace --stop-label L]
  *              [--minigame id [--every N]]   (plays a minigame with its bot)
+ *              [--mg-input "T:KEYS[:DUR],..."]   (scripted input for the story's
+ *              minigames instead of their bots; see scripted_input())
+ *              [--mg-seed N]   (minigames' random numbers from a fixed seed)
  *              [--leaderboard id]   (renders the Minigames menu's online top 10)
  *              [--perf]   (prints the engine's timing lines, "[perf] ...")
  *              [--no-draw]   (draws only for screenshots: fast)
@@ -279,6 +282,54 @@ static int run_ui_tour(const char *out)
 
 static void record_frame(FILE *f);
 
+/* --mg-input: scripted input for the story's minigames instead of their bot,
+ * as comma-separated "T:KEYS[:DUR]" (seconds since the game started; KEYS
+ * a, b, x, y, left, right, up, down joined with '+', or touch@X/Y; held
+ * for DUR seconds, default one frame), e.g. "0.5:right:1.2,2:a:3". */
+static const char *mg_input;
+
+static void scripted_input(Input *in, float t)
+{
+    static const struct { const char *name; u32 key; } KEYS[] = {
+        {"a", KEY_A_}, {"b", KEY_B_}, {"x", KEY_X_}, {"y", KEY_Y_}, {"left", KEY_LEFT_},
+        {"right", KEY_RIGHT_}, {"up", KEY_UP_}, {"down", KEY_DOWN_},
+    };
+    const float frame = 1.0f / 60.0f;
+    for (const char *p = mg_input; p && *p;) {
+        char ev[64];
+        size_t n = strcspn(p, ",");
+        snprintf(ev, sizeof(ev), "%.*s", (int)(n < sizeof(ev) ? n : sizeof(ev) - 1), p);
+        p += n + (p[n] == ',');
+        float at = (float)atof(ev), dur = frame;
+        char *keys = strchr(ev, ':');
+        if (!keys)
+            continue;
+        keys++;
+        char *d = strchr(keys, ':');
+        if (d) {
+            *d = 0;
+            dur = fmaxf((float)atof(d + 1), frame);
+        }
+        if (t + frame / 2 < at || t >= at + dur - frame / 2)
+            continue;
+        bool first = t < at + frame / 2;
+        for (char *k = strtok(keys, "+"); k; k = strtok(NULL, "+")) {
+            u32 key = 0;
+            if (!strncmp(k, "touch@", 6)) {
+                key = KEY_TOUCH_;
+                in->tx = atoi(k + 6);
+                in->ty = strchr(k, '/') ? atoi(strchr(k, '/') + 1) : 120;
+            }
+            for (unsigned i = 0; i < ARRAY_LEN(KEYS); i++)
+                if (!strcmp(k, KEYS[i].name))
+                    key = KEYS[i].key;
+            in->held |= key;
+            if (first)
+                in->down |= key;
+        }
+    }
+}
+
 /* Plays one minigame start to finish with its bot: intro, play, result. */
 static int run_minigame(const char *id, const char *out, int every, FILE *rec)
 {
@@ -429,6 +480,10 @@ int main(int argc, char **argv)
             test_save = true;
         else if (!strcmp(argv[i], "--minigame") && i + 1 < argc)
             minigame = argv[++i];
+        else if (!strcmp(argv[i], "--mg-input") && i + 1 < argc)
+            mg_input = argv[++i];
+        else if (!strcmp(argv[i], "--mg-seed") && i + 1 < argc)
+            mg_test_seed = (u32)strtoul(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--leaderboard") && i + 1 < argc)
             board = argv[++i];
         else if (!strcmp(argv[i], "--listen"))
@@ -730,11 +785,17 @@ int main(int argc, char **argv)
                 if (mg_frames % 90 == 0)
                     in.down = KEY_A_;
             } else if (MG.phase == MG_PLAY) {
-                if (MG.game->bot)
+                if (mg_input)
+                    scripted_input(&in, MG.t);
+                else if (MG.game->bot)
                     MG.game->bot(&in, MG.t);
                 else if (mg_frames % 30 == 0)
                     in.down = KEY_A_;
                 in.held |= in.down;
+                if (out && every > 0 && mg_frames % (every * 4) == 0) {
+                    app_render();
+                    dump(out, shots++, "minigame");
+                }
             } else if (MG.phase == MG_RESULT) {
                 if (mg_frames % 120 == 0) {
                     printf("    [minigame] %s: %d%%%s%s\n", MG.game->id, MG.score,
@@ -757,7 +818,11 @@ int main(int argc, char **argv)
             dump(out, shots++, "pause");
         }
         log_input(&in);
+        bool in_ported = E.screen == SCR_MINIGAME && MG.port >= 0;
         app_update(&in, dt);
+        if (in_ported && E.screen != SCR_MINIGAME)   /* back in the story */
+            printf("    [minigame] @%d %s ended after %.1f s (score %d)\n", MG.port, MG.game->id,
+                   MG.t, MG.score);
         if (no_draw && !rec)
             app_frame_done_without_drawing();
         else

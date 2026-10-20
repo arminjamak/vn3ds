@@ -64,4 +64,22 @@ echo "CG patches (--cg-patches)"
 python3 tests/test_cg_patches.py > "$OUT/cgp.txt" 2>&1 || { grep -v "  ok:" "$OUT/cgp.txt"; fail=1; }
 tail -1 "$OUT/cgp.txt"
 
+echo "ported minigames (call screen -> native lockpick, instrument, timing, captions)"
+mkdir -p "$OUT/ported"
+cp -R tests/ported/game "$OUT/ported/game"
+python3 tests/ported/make_assets.py "$OUT/ported"
+tools/vnpack.sh "$OUT/ported" -o "$OUT/build" -q --no-audio
+engine/build-host/vn3ds-host "$OUT/build/ported-test" --root "$OUT/root_ported1" --mg-seed 1 > "$OUT/tp1.txt" 2>&1
+check "$OUT/tp1.txt" "The vault opened."
+check "$OUT/tp1.txt" "A rising tune."
+check "$OUT/tp1.txt" "You plucked 8 strings: lhlhlhlh."
+check "$OUT/tp1.txt" "Points: 1."
+check "$OUT/tp1.txt" "The tape ended."
+engine/build-host/vn3ds-host "$OUT/build/ported-test" --root "$OUT/root_ported2" --mg-seed 1 \
+    --mg-input "0.5:a:2,3:right:1.3,4.5:a:2,7:b:1,7.5:a" > "$OUT/tp2.txt" 2>&1
+check "$OUT/tp2.txt" "The vault stayed shut."
+check "$OUT/tp2.txt" "You plucked 2 strings: lh."
+check "$OUT/tp2.txt" "Points: -1."
+check "$OUT/tp2.txt" "The tape ended."
+
 [ $fail = 0 ] && echo "all tests passed" || { echo "FAILED"; exit 1; }

@@ -1,0 +1,39 @@
+{
+  "minigames": {
+    "lock_game": {
+      "mechanic": "lockpick",
+      "class": "LockGame",
+      "images": {
+        "plate": "lock_plate_image",
+        "cylinder": "lock_cylinder_image",
+        "tension": "lock_tension_image",
+        "pick": "lock_pick_image",
+        "pick_broken": "lock_pick_broken_image"
+      },
+      "sounds": {
+        "unlock": "lock_unlock_audio",
+        "pick_break": "lock_pick_break_audio",
+        "loop_moving": "lock_moving_audio",
+        "loop_jiggling": "lock_jiggling_audio",
+        "loop_moving_back": "lock_moving_back_audio"
+      },
+      "result": "_return"
+    },
+    "ball_minigame": {
+      "mechanic": "swing_timing",
+      "window": "correct_degree",
+      "speed": "ball_speed",
+      "speed_alt": "ball_speed2",
+      "speed_if": "ballbowspeed",
+      "score": "score",
+      "rotation_var": "ball_rotation",
+      "clockwise_var": "is_clockwise"
+    },
+    "lyreharpscreen": {
+      "mechanic": "instrument"
+    },
+    "audiologlast": {
+      "mechanic": "captions"
+    }
+  }
+}

@@ -434,8 +434,8 @@ class Image(Node): pass          # name, expr, atl
 class Transform(Node): pass      # name, params, block
 class Init(Node): pass           # priority, block
 class Unsupported(Node): pass    # what
-class Screen(Node): pass         # name, items (see screen_items)
-class CallScreen(Node): pass     # name, with_
+class Screen(Node): pass         # name, items (see screen_items), background, body (lines)
+class CallScreen(Node): pass     # name, with_, args (source of "(...)" or None)
 
 
 # --------------------------------------------------------------------------
@@ -525,8 +525,9 @@ def parse_statement(line):
     if w == "call":
         if lex.keyword("screen"):
             name = lex.word()
+            args = None
             if lex.peek("("):
-                lex.balanced()
+                args = lex.balanced()
             with_ = None
             while not lex.eol():
                 if lex.keyword("with"):
@@ -535,7 +536,7 @@ def parse_statement(line):
                     lex.simple_expression()
                 else:
                     lex.rest()
-            return CallScreen(line, name=name, with_=with_)
+            return CallScreen(line, name=name, with_=with_, args=args)
         if lex.keyword("expression"):
             target = lex.simple_expression()
             expression = True
@@ -717,7 +718,7 @@ def parse_statement(line):
     if w == "screen":
         name = lex.word()
         return Screen(line, name=name, items=screen_items(line.block),
-                      background=screen_background(line.block))
+                      background=screen_background(line.block), body=line.block)
 
     if w in SKIPPED_BLOCKS:
         return Unsupported(line, what=SKIPPED_BLOCKS[w])

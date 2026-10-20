@@ -286,6 +286,10 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
         g->music_meta = s.p + 4;
         g->nmusic_meta = rd_u32(s.p);
     }
+    if (find_section(d, g->size, "PORT", &s) && s.size >= 4) {
+        g->ported = s.p;
+        g->ported_size = s.size;
+    }
     if (find_section(d, g->size, "TALK", &s) && s.size >= 4)
         g->speaking_attr = game_str(g, rd_u32(s.p));
     if (find_section(d, g->size, "VOX ", &s) && s.size >= 4) {

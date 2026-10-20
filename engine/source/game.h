@@ -125,6 +125,10 @@ typedef struct {
      * bar, u8 bars per phrase, u16 bars per loop} (optional) */
     const u8 *music_meta;
     u32 nmusic_meta;
+    /* PORT: minigames ported from the original game's own screens (see
+     * FORMAT.md); the script starts entry i as vn3ds_minigame("@i"). */
+    const u8 *ported;
+    u32 ported_size;
 } Game;
 
 bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errlen);

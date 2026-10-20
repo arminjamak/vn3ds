@@ -1,0 +1,19 @@
+{
+  "minigames": {
+    "vault_lock": {
+      "mechanic": "lockpick",
+      "class": "TumblerLock",
+      "images": {"plate": "plate_img", "cylinder": "cylinder_img", "tension": "tension_img",
+                 "pick": "pick_img", "pick_broken": "pick_broken_img"},
+      "result": "_return"
+    },
+    "harp_map": {"mechanic": "instrument"},
+    "swing_bar": {
+      "mechanic": "swing_timing",
+      "window": "window_deg", "speed": "step_steady", "speed_alt": "step_shaky",
+      "speed_if": "steady", "score": "points",
+      "rotation_var": "swing_pos", "clockwise_var": "swing_cw"
+    },
+    "tape_play": {"mechanic": "captions"}
+  }
+}

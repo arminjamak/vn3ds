@@ -6,6 +6,7 @@ Copy the resulting build/<id>/ folder to sdmc:/3ds/vn3ds/games/ on the SD card.
 """
 
 import argparse
+import fnmatch
 import hashlib
 import multiprocessing
 import time
@@ -313,6 +314,11 @@ def main(argv=None, progress=None):
                          "12 for cvid)")
     ap.add_argument("-j", "--jobs", type=int, default=0,
                     help="processes for image conversion (default: up to 4)")
+    ap.add_argument("--only-images", action="append", default=[], metavar="GLOB",
+                    help="pack only the images whose names match (fnmatch, repeatable): "
+                         "a quick test build with the whole script")
+    ap.add_argument("--only-audio", action="append", default=[], metavar="GLOB",
+                    help="pack only the audio files whose paths match (fnmatch, repeatable)")
     ap.add_argument("--check", action="store_true",
                     help="only parse and compile the scripts and report problems")
     ap.add_argument("--all-warnings", action="store_true")
@@ -368,6 +374,17 @@ def main(argv=None, progress=None):
 
     comp = Compiler(warn)
     comp.collect(files)
+    # Custom screens rebuilt as native minigames (ported.py): the adapter is
+    # chosen by the game's id, worked out as below.
+    from .ported import Ported, load_spec
+    _base = os.path.abspath(args.project)
+    if os.path.basename(_base) == "game":
+        _base = os.path.dirname(_base)
+    _title = args.title or cfg.get("title") or comp.meta["title"] or \
+        os.path.splitext(os.path.basename(_base))[0]
+    ported_spec = load_spec(args.id or cfg.get("id") or slug(_title), cfg)
+    if ported_spec:
+        comp.ported = Ported(ported_spec, files, warn)
     try:
         comp.compile(files)
     except (CompileError, rpy.ParseError) as e:
@@ -375,6 +392,8 @@ def main(argv=None, progress=None):
         sys.exit(f"vnpack: {e}")
 
     progress("scripts", state="done", labels=len(comp.defined_labels), files=len(scripts))
+    if comp.ported is not None:
+        comp.ported.prepare_assets(fs)   # crop boxes and sizes of the minigames' art
     if args.check:
         warn.report(limit=10**9 if args.all_warnings else 60)
         n_specs = len(comp.used_specs)
@@ -508,6 +527,8 @@ def main(argv=None, progress=None):
         if key is None:
             warn(None, f"audio file '{path}' not found")
             continue
+        if args.only_audio and not any(fnmatch.fnmatch(key, g.lower()) for g in args.only_audio):
+            continue
         audio_jobs.append((key, rel))
     # ffmpeg runs in its own process, so threads are enough to use every core
     from concurrent.futures import ThreadPoolExecutor
@@ -569,6 +590,8 @@ def main(argv=None, progress=None):
                           duck=float(vcfg.get("duck", 0.85)))
 
     names = sorted(n for n in defs if n.split()[0] in used_tags)
+    if args.only_images:
+        names = [n for n in names if any(fnmatch.fnmatch(n, g) for g in args.only_images)]
     # Layered illustrations (vn3ds.json "layers"): each layer becomes its own
     # texture with its own depth; the flat image is only for Ren'Py itself.
     layer_cfg = {k: v for k, v in cfg.get("layers", {}).items() if k.split()[0] in used_tags}
