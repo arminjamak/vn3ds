@@ -896,27 +896,33 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
         if fps > fps_cap:
             fps = Fraction(fps_cap)
         fps = fps.limit_denominator(1001)
-        # Decode and scale once into raw YUV; both x264 passes read that.
-        y4m = os.path.join(tmp, "v.y4m")
-        cmd = [ffmpeg, "-v", "error", "-y", "-i", src]
+        # Each x264 pass reads the clip decoded and scaled to raw YUV through
+        # a pipe (a long clip as a file would take gigabytes of disk).
+        dec = [ffmpeg, "-v", "error", "-nostdin", "-i", src]
         if max_seconds:
-            cmd += ["-t", str(max_seconds)]
-        cmd += ["-an", "-vf", f"fps={fps.numerator}/{fps.denominator},"
-                f"scale={w}:{h}:flags=lanczos,setsar=1,format=yuv420p", y4m]
-        r = subprocess.run(cmd, capture_output=True)
-        if r.returncode != 0:
-            raise OSError(r.stderr.decode(errors="replace").strip()[:200])
+            dec += ["-t", str(max_seconds)]
+        dec += ["-an", "-vf", f"fps={fps.numerator}/{fps.denominator},"
+                f"scale={w}:{h}:flags=lanczos,setsar=1,format=yuv420p",
+                "-f", "yuv4mpegpipe", "-"]
         gop = max(1, int(round(float(fps) * gop_seconds)))
         x264 = (f"bframes=0:ref=3:keyint={gop}:min-keyint={max(1, gop // 4)}:scenecut=40:"
                 "open-gop=0:slices=1:sliced-threads=0:aud=0:annexb=1:"
                 "nal-hrd=none:force-cfr=1")
         out = os.path.join(tmp, "v.h264")
-        base = [ffmpeg, "-v", "error", "-y", "-i", y4m, "-an", "-c:v", "libx264",
+        base = [ffmpeg, "-v", "error", "-y", "-f", "yuv4mpegpipe", "-i", "-", "-an",
+                "-c:v", "libx264",
                 "-profile:v", profile, "-level:v", level, "-preset", preset,
                 "-b:v", f"{int(kbps)}k", "-x264-params", x264,
                 "-passlogfile", os.path.join(tmp, "x264")]
         for p, dst in ((1, ["-f", "null", os.devnull]), (2, ["-f", "h264", out])):
-            r = subprocess.run(base + ["-pass", str(p)] + dst, capture_output=True)
+            with tempfile.TemporaryFile() as derr:
+                d = subprocess.Popen(dec, stdout=subprocess.PIPE, stderr=derr)
+                r = subprocess.run(base + ["-pass", str(p)] + dst, stdin=d.stdout,
+                                   capture_output=True)
+                d.stdout.close()
+                if d.wait() != 0:
+                    derr.seek(0)
+                    raise OSError(derr.read().decode(errors="replace").strip()[:200])
             if r.returncode != 0:
                 raise OSError(r.stderr.decode(errors="replace").strip()[:200])
         with open(out, "rb") as f:
