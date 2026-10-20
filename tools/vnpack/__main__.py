@@ -16,6 +16,9 @@ import re
 import sys
 from collections import OrderedDict
 
+import numpy as np
+from PIL import Image
+
 from . import rpy
 from .assets import (AUDIO_EXTS, IMAGE_EXTS, AssetFS, ImageBuilder,
                      convert_audio, encode_ctex, encode_cvh, encode_cvid, resize_rgba, video_frames)
@@ -84,7 +87,10 @@ def _image_job(name):
                 data, poster, _ = encode_cvh(
                     b.fs.read(key), key, lw, lh, loop, kbps=kbps,
                     fps_cap=_W["video_fps"] or 30, max_seconds=_W["video_seconds"],
-                    profile=_W["video_profile"], poster_scale=1.0 if kbps > 400 else 0.5)
+                    profile=_W["video_profile"], poster_scale=1.0 if kbps > 400 else 0.5,
+                    poster_jpeg=_W.get("jpeg", 0) if _W.get("jpeg_posters") else 0,
+                    jpeg_encoder=_W.get("jpeg_encoder", "pillow"),
+                    jpeg_qscale=_W.get("jpeg_qscale", 5.0))
                 return name, ("cvh", data, lw, lh, True, poster), warnings
             fps = _W["video_fps"] or 12
             frames = video_frames(b.fs.read(key), key, w, h, fps, _W["video_seconds"] or 12)
@@ -98,9 +104,16 @@ def _image_job(name):
             return name, None, warnings
         lw, lh = img.width * scale, img.height * scale
         w, h = max(1, int(round(lw))), max(1, int(round(lh)))
-        data, _ = encode_ctex(resize_rgba(img, w, h), lw, lh, allow_565=_W["rgb565"],
-                              jpeg_quality=_W.get("jpeg", 0))
+        small = resize_rgba(img, w, h)
+        data, opaque = encode_ctex(small, lw, lh, allow_565=_W["rgb565"],
+                                   jpeg_quality=_W.get("jpeg", 0),
+                                   jpeg_encoder=_W.get("jpeg_encoder", "pillow"),
+                                   jpeg_qscale=_W.get("jpeg_qscale", 5.0))
         full = img.width >= _W["gw"] * 0.95 and img.height >= _W["gh"] * 0.95
+        if _W.get("cg_patches") and opaque and full and _W.get("jpeg", 0) > 0:
+            # the picture as stored, for comparing with its neighbours (--cg-patches)
+            pixels = np.asarray(small.convert("RGB"), dtype=np.uint8)
+            return name, ("tex", data, lw, lh, full, pixels), warnings
         return name, ("tex", data, lw, lh, full), warnings
     except (OSError, ValueError, SyntaxError, MemoryError) as e:
         warnings.append(f"image '{name}': {e}")
@@ -130,6 +143,61 @@ def layer_anim(spec, scale):
     elif kind == 6:
         b *= scale
     return (kind, a, b, max(0.05, float(spec.get("period", 4.0))))
+
+
+# --cg-patches: a picture that differs from a recently stored one only in a
+# small region (a face, a hand: the usual CG variant) is stored as that
+# region alone, drawn over the earlier picture's texture. The engine puts the
+# two together into one texture when it loads them, so the result is drawn
+# exactly like an ordinary image.
+PATCH_BLOCK = 16       # JPEG 4:2:0 MCU size: patch edges fall on block boundaries
+PATCH_THRESHOLD = 8    # a block changed when a channel differs by more than this
+PATCH_SPILL = 3        # a neighbouring row/column of blocks that differs by more
+                       # than this (the soft edge of the change) joins the patch,
+                       # so the patch edge falls where the pictures agree
+PATCH_KEYFRAMES = 4    # compare with this many of the last pictures stored whole
+PATCH_MAX_AREA = 0.5   # at most this share of the picture becomes a patch
+PATCH_MAX_BYTES = 0.8  # and the patch must be this much smaller than the whole
+ANIM_PATCH = 7         # layer record kind the engine composites at load time
+
+
+def natural_key(s):
+    """Sort key putting "cg 9" before "cg 10"."""
+    return [int(t) if i % 2 else t for i, t in enumerate(re.split(r"(\d+)", s))]
+
+
+def plan_patch(pixels, keyframes):
+    """Compare a picture with the keyframes [(res, pixels), ...] (newest
+    last). Returns None or (share of picture, res, (x0, y0, x1, y1)); the box
+    is None when nothing changed by more than the threshold."""
+    h, w = pixels.shape[:2]
+    bh, bw = -(-h // PATCH_BLOCK), -(-w // PATCH_BLOCK)
+    a = pixels.astype(np.int16)
+    best = None
+    for res, kp in reversed(keyframes):
+        if kp.shape != pixels.shape:
+            continue
+        d = np.zeros((bh * PATCH_BLOCK, bw * PATCH_BLOCK), np.int16)
+        d[:h, :w] = np.abs(a - kp).max(-1)
+        diff = d.reshape(bh, PATCH_BLOCK, bw, PATCH_BLOCK).max((1, 3))
+        blocks = diff > PATCH_THRESHOLD
+        if not blocks.any():
+            return (0.0, res, None)
+        ys, xs = np.nonzero(blocks)
+        y0, y1, x0, x1 = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
+        share = (y1 - y0) * (x1 - x0) / float(bh * bw)
+        if best is None or share < best[0]:
+            best = (share, res, diff, (x0, y0, x1, y1))
+    if best is None or best[3] is None:
+        return best
+    share, res, diff, (x0, y0, x1, y1) = best
+    bh, bw = diff.shape
+    nx0 = x0 - 1 if x0 > 0 and diff[y0:y1, x0 - 1].max() > PATCH_SPILL else x0
+    nx1 = x1 + 1 if x1 < bw and diff[y0:y1, x1].max() > PATCH_SPILL else x1
+    ny0 = y0 - 1 if y0 > 0 and diff[y0 - 1, x0:x1].max() > PATCH_SPILL else y0
+    ny1 = y1 + 1 if y1 < bh and diff[y1, x0:x1].max() > PATCH_SPILL else y1
+    return (share, res, (nx0 * PATCH_BLOCK, ny0 * PATCH_BLOCK,
+                         min(w, nx1 * PATCH_BLOCK), min(h, ny1 * PATCH_BLOCK)))
 
 
 def find_game_dir(path):
@@ -215,6 +283,17 @@ def main(argv=None, progress=None):
     ap.add_argument("--jpeg", type=int, default=0, metavar="Q",
                     help="store opaque images as JPEG at quality Q (1-100, e.g. 80: about a "
                          "fifth of the size, decoded to RGB565 on load); 0 = off")
+    ap.add_argument("--jpeg-encoder", choices=("pillow", "ffmpeg"), default="pillow",
+                    help="JPEG encoder for --jpeg: pillow (libjpeg, default) or ffmpeg "
+                         "(trellis quantisation, about a quarter smaller; quality from "
+                         "--jpeg-qscale)")
+    ap.add_argument("--jpeg-qscale", type=float, default=5.0, metavar="QS",
+                    help="ffmpeg JPEG quantiser scale (2-31, lower is better; default 5)")
+    ap.add_argument("--jpeg-posters", action="store_true",
+                    help="store movie poster frames as JPEG too (with --jpeg)")
+    ap.add_argument("--cg-patches", action="store_true",
+                    help="store pictures that differ from a recent one only in a region "
+                         "as just that region (with --jpeg)")
     ap.add_argument("--no-audio", action="store_true", help="skip audio")
     ap.add_argument("--audio-profile", choices=("sd", "wifi"), default="sd",
                     help="sd: keep Ogg files as they are; wifi: re-encode everything small")
@@ -393,7 +472,8 @@ def main(argv=None, progress=None):
         w = max(1, int(round(logical_w)))
         h = max(1, int(round(logical_h)))
         data, opaque = encode_ctex(resize_rgba(img, w, h), logical_w, logical_h,
-                                   allow_565=args.rgb565, jpeg_quality=args.jpeg)
+                                   allow_565=args.rgb565, jpeg_quality=args.jpeg,
+                                   jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale)
         idx = len(resources)
         rel = content_name("img", data, "ctex")
         with open(os.path.join(out_dir, rel), "wb") as f:
@@ -481,9 +561,15 @@ def main(argv=None, progress=None):
               video_seconds=args.video_seconds, video_codec=args.video_codec,
               video_kbps=args.video_kbps, video_profile=args.video_profile)
     _W["jpeg"] = args.jpeg
+    _W.update(jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale,
+              jpeg_posters=args.jpeg_posters, cg_patches=args.cg_patches)
+    if args.cg_patches:
+        # neighbouring variants of a CG next to each other: "cg 9", "cg 10"
+        names = sorted(names, key=natural_key)
     # Each worker holds a few full-size pictures; more than 4 mostly adds swap.
     jobs = max(1, args.jobs or min(4, os.cpu_count() or 2))
     by_hash = {}
+    layer_records = []
     done = 0
     t0 = time.time()
 
@@ -504,6 +590,24 @@ def main(argv=None, progress=None):
         with ctx.Pool(jobs) as pool:
             yield from pool.imap(_image_job, names, chunksize=8)
 
+    entries = {}       # name -> (image record, layer items or None)
+    keyframes = []     # [(res, pixels)] of the last pictures stored whole
+    patches = [0, 0]   # pictures stored as a patch, bytes saved
+
+    def write_res(data, ext):
+        nonlocal total_bytes
+        digest = hashlib.sha1(data).digest()
+        res = by_hash.get(digest)
+        if res is None:
+            res = len(resources)
+            rel = content_name("img", data, ext)
+            with open(os.path.join(out_dir, rel), "wb") as f:
+                f.write(data)
+            total_bytes += len(data)
+            resources.append(rel)
+            by_hash[digest] = res
+        return res
+
     for name, result, warnings in results():
         for w in warnings:
             warn(None, w)
@@ -522,11 +626,46 @@ def main(argv=None, progress=None):
         depth = depth_map.get(name, depth_map.get(tag, float("nan")))
         if result[0] == "solid":
             _, rgba, w, h, full = result
-            images.append(dict(name=name, res=-1, color=rgba, w=w, h=h,
-                               flags=1 | (2 if full else 0), depth=depth))
+            entries[name] = (dict(name=name, res=-1, color=rgba, w=w, h=h,
+                                  flags=1 | (2 if full else 0), depth=depth), None)
             continue
         kind, data, lw, lh, full = result[:5]
         digest = hashlib.sha1(data).digest()
+        if kind == "tex" and len(result) > 5 and digest not in by_hash:
+            pixels = result[5]
+            plan = plan_patch(pixels, keyframes)
+            items = None
+            if plan is not None and plan[0] <= PATCH_MAX_AREA:
+                _, base, box = plan
+                if box is None:     # the same picture to within the threshold
+                    items = ()
+                else:
+                    x0, y0, x1, y1 = box
+                    ph, pw = pixels.shape[:2]
+                    sx, sy = lw / pw, lh / ph
+                    pdata, _ = encode_ctex(Image.fromarray(pixels[y0:y1, x0:x1]).convert("RGBA"),
+                                           (x1 - x0) * sx, (y1 - y0) * sy, allow_565=True,
+                                           jpeg_quality=args.jpeg, jpeg_encoder=args.jpeg_encoder,
+                                           jpeg_qscale=args.jpeg_qscale)
+                    if len(pdata) < len(data) * PATCH_MAX_BYTES:
+                        pres = write_res(pdata, "ctex")
+                        patches[1] += len(data) - len(pdata)
+                        ldepth = depth if not math.isnan(depth) else float(cfg.get("depth_bg", 1.0))
+                        items = [(base, ldepth, 0.0, 0.0, lw, lh, (0, 0.0, 0.0, 1.0)),
+                                 (pres, ldepth, x0 * sx, y0 * sy, (x1 - x0) * sx, (y1 - y0) * sy,
+                                  (ANIM_PATCH, float(x0), float(y0), 1.0))]
+                if items is not None:
+                    patches[0] += 1
+                    if not items:
+                        patches[1] += len(data)
+                    entries[name] = (dict(name=name, res=base, color=0xFFFFFFFF, w=lw, h=lh,
+                                          flags=2 if full else 0, depth=depth), items or None)
+                    continue
+            keyframes = (keyframes + [(write_res(data, "ctex"), pixels.astype(np.int16))])[
+                -PATCH_KEYFRAMES:]
+        elif kind == "tex" and len(result) > 5:
+            keyframes = (keyframes + [(by_hash[digest], result[5].astype(np.int16))])[
+                -PATCH_KEYFRAMES:]
         res = by_hash.get(digest)
         if res is None:
             res = len(resources)
@@ -540,15 +679,24 @@ def main(argv=None, progress=None):
                 total_bytes += len(result[5])
             resources.append(rel)
             by_hash[digest] = res
-        images.append(dict(name=name, res=res, color=0xFFFFFFFF, w=lw, h=lh,
-                           flags=(2 if full else 0) | (4 if kind in ("video", "cvh") else 0),
-                           depth=depth))
+        entries[name] = (dict(name=name, res=res, color=0xFFFFFFFF, w=lw, h=lh,
+                              flags=(2 if full else 0) | (4 if kind in ("video", "cvh") else 0),
+                              depth=depth), None)
+
+    # Image records in name order, whatever order they were converted in.
+    for name in sorted(entries):
+        record, items = entries[name]
+        if items:
+            layer_records.append((len(images), items))
+        images.append(record)
+    if patches[0] and not args.quiet:
+        print(f"  --cg-patches: {patches[0]} pictures stored as a patch or reused "
+              f"({patches[1] >> 20} MiB saved)", file=sys.stderr)
 
     progress("images", state="done", done=done, total=len(names))
     if movies or movies_done:
         progress("video", state="done", done=movies_done, total=max(movies, movies_done))
     progress("pack", state="active")
-    layer_records = []
     for name in sorted(layer_cfg):
         items = []
         canvas = None
@@ -567,7 +715,8 @@ def main(argv=None, progress=None):
             lw, lh = part.width * scale, part.height * scale
             w, h = max(1, int(round(lw))), max(1, int(round(lh)))
             data, _ = encode_ctex(resize_rgba(part, w, h), lw, lh, allow_565=args.rgb565,
-                                  jpeg_quality=args.jpeg)
+                                  jpeg_quality=args.jpeg, jpeg_encoder=args.jpeg_encoder,
+                                  jpeg_qscale=args.jpeg_qscale)
             digest = hashlib.sha1(data).digest()
             res = by_hash.get(digest)
             if res is None:

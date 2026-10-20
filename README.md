@@ -84,7 +84,11 @@ it does the rest:
 Useful options: `--rgb565` (textures about 60% smaller, slight banding;
 recommended for very large games), `--jpeg 80` (opaque images as JPEG, about
 a fifth of the RGB565 size; the default for Wi-Fi), `--no-audio`, `--fit`,
-`-o build`.
+`-o build`. The Wi-Fi preset (`--quality wifi`) also uses ffmpeg's trellis
+JPEG encoder (`--jpeg-encoder ffmpeg --jpeg-qscale 5.5`), stores CG variants
+as patches over the picture before them (`--cg-patches`), JPEG movie posters
+(`--jpeg-posters`), and H.264 at 100 kbps / 20 fps; `--no-cg-patches` and
+`--no-jpeg-posters` turn those two off.
 
 Tested with Eternum 0.9 (431 labels, 12,000+ images, ported from its
 Android build in about 5 minutes), Ren'Py's own *The Question*, the Ren'Py
@@ -239,7 +243,7 @@ stereo offset never shows a black strip at the edge.
   `gui/main_menu.png` as the title-screen picture
 - `Movie(play=...)` images (animated scenes): re-encoded to H.264 (needs `ffmpeg` with
   libx264) at the clip's own frame rate up to 30 fps, played by the New 3DS's hardware
-  decoder; an Old 3DS shows the clip's first frame. `--video-kbps` (default 900; about 250
+  decoder; an Old 3DS shows the clip's first frame. `--video-kbps` (default 900; 100
   for a Wi-Fi edition), `--video-fps` (cap), `--video-seconds`, `--no-video`, and
   `--video-codec cvid` for the older tiled format (12 fps, any 3DS). They play at the depth
   of the image, flat but with the camera parallax.

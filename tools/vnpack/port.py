@@ -248,9 +248,13 @@ def install(out_dir, game_id, sd, engine=None):
 
 # What each quality mode asks of the packager. Options the packager doesn't
 # know yet are left out, so this works while features are being added.
+# Wi-Fi: Opus audio, ffmpeg's trellis JPEG encoder, near-duplicate CGs as
+# patches, JPEG movie posters, H.264 at 100 kbps / 20 fps (Eternum: ~290 MB).
 QUALITY = {
     "wifi": [("--audio-profile", "wifi"), ("--jpeg", "75"), ("--rgb565", None),
-             ("--video-codec", "h264"), ("--video-kbps", "200"), ("--video-fps", "24")],
+             ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "5.5"), ("--cg-patches", None),
+             ("--jpeg-posters", None),
+             ("--video-codec", "h264"), ("--video-kbps", "100"), ("--video-fps", "20")],
     "sd": [("--video-codec", "h264"), ("--video-kbps", "900"), ("--video-fps", "30")],
 }
 
@@ -281,9 +285,18 @@ def vnpack_args(opts, quality, primary, overlays, scripts):
             vargs.append("--" + flag.replace("_", "-"))
     vargs += quality_args(quality)
     for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps),
-                      ("--video-fps", getattr(opts, "video_fps", None))):
+                      ("--video-fps", getattr(opts, "video_fps", None)),
+                      ("--jpeg-encoder", getattr(opts, "jpeg_encoder", None)),
+                      ("--jpeg-qscale", getattr(opts, "jpeg_qscale", None))):
         if val:   # after the quality preset, so these win
             vargs += [flag, str(val)]
+    for flag in ("cg_patches", "jpeg_posters"):
+        on = getattr(opts, flag, None)
+        opt = "--" + flag.replace("_", "-")
+        if on and opt not in vargs:
+            vargs.append(opt)
+        elif on is False and opt in vargs:   # --no-cg-patches / --no-jpeg-posters
+            vargs.remove(opt)
     if opts.jpeg is not None:
         vargs += ["--jpeg", str(opts.jpeg)]
     return vargs
@@ -430,9 +443,18 @@ def main(argv=None):
     ap.add_argument("--video-codec", choices=("h264", "cvid"),
                     help="movie format (default h264: smooth on a New 3DS, a still elsewhere)")
     ap.add_argument("--video-kbps", type=int,
-                    help="H.264 bitrate (default: 900 for the SD card, 260 for Wi-Fi)")
+                    help="H.264 bitrate (default: 900 for the SD card, 100 for Wi-Fi)")
     ap.add_argument("--video-fps", type=int,
-                    help="highest movie frame rate (default: 30 for the SD card, 24 for Wi-Fi)")
+                    help="highest movie frame rate (default: 30 for the SD card, 20 for Wi-Fi)")
+    ap.add_argument("--jpeg-encoder", choices=("pillow", "ffmpeg"),
+                    help="JPEG encoder (default: ffmpeg for Wi-Fi, pillow otherwise)")
+    ap.add_argument("--jpeg-qscale", type=float, metavar="QS",
+                    help="ffmpeg JPEG quantiser scale, lower is better (default 5.5 for Wi-Fi)")
+    ap.add_argument("--cg-patches", action=argparse.BooleanOptionalAction, default=None,
+                    help="store CG variants as patches over an earlier picture "
+                         "(default: on for Wi-Fi)")
+    ap.add_argument("--jpeg-posters", action=argparse.BooleanOptionalAction, default=None,
+                    help="JPEG movie poster frames (default: on for Wi-Fi)")
     ap.add_argument("--fit", action="store_true")
     ap.add_argument("-j", "--jobs", type=int, default=0)
     ap.add_argument("--quality", choices=("auto", "wifi", "sd"), default="auto",
@@ -456,7 +478,12 @@ def main(argv=None):
         id=args.id, title=args.title, rgb565=args.rgb565, jpeg=args.jpeg,
         no_audio=args.no_audio, no_video=args.no_video, video_codec=args.video_codec,
         video_kbps=args.video_kbps, fit=args.fit, jobs=args.jobs)
-    opts.video_fps = args.video_fps   # not in flow.Options: the app never sets it
+    # not in flow.Options: the app never sets these
+    opts.video_fps = args.video_fps
+    opts.jpeg_encoder = args.jpeg_encoder
+    opts.jpeg_qscale = args.jpeg_qscale
+    opts.cg_patches = args.cg_patches
+    opts.jpeg_posters = args.jpeg_posters
     ui = flow.ConsoleUI()
     try:
         r = flow.run(opts, ui)

@@ -512,12 +512,15 @@ def bleed_edges(arr, iterations=6):
     return out
 
 
-def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0):
+def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0,
+                jpeg_encoder="pillow", jpeg_qscale=5.0):
     """Encode a PIL RGBA image (already at its on-screen size) as .ctex bytes.
 
     jpeg_quality > 0 stores opaque images as a baseline JPEG at that quality
     (decoded by the engine into an RGB565 texture); images with transparency
-    are unaffected. Returns (bytes, opaque).
+    are unaffected. With jpeg_encoder "ffmpeg" the JPEG comes from ffmpeg's
+    trellis-quantising encoder at jpeg_qscale instead (jpeg_quality then only
+    switches JPEG on). Returns (bytes, opaque).
     """
     w, h = img.size
     if w > MAX_TEX or h > MAX_TEX:
@@ -527,7 +530,8 @@ def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0):
     arr = np.asarray(img.convert("RGBA"), dtype=np.uint8)
     opaque = bool(arr[..., 3].min() == 255)
     if opaque and jpeg_quality > 0:
-        return encode_jpeg_ctex(img, logical_w, logical_h, jpeg_quality), True
+        return encode_jpeg_ctex(img, logical_w, logical_h, jpeg_quality,
+                                jpeg_encoder, jpeg_qscale), True
     if not opaque:
         arr = bleed_edges(arr)
     tw, th = next_pow2(w), next_pow2(h)
@@ -564,16 +568,58 @@ def encode_ctex(img, logical_w, logical_h, allow_565=False, jpeg_quality=0):
 CTEX_ZLIB, CTEX_JPEG = 1, 2   # .ctex flags
 
 
-def encode_jpeg_ctex(img, logical_w, logical_h, quality):
+def jfif_yuv420(rgb):
+    """JFIF YCbCr 4:2:0 planes (Y, then Cb, then Cr) of an HxWx3 uint8 array.
+    Each chroma sample averages its own 2x2 pixels, so every 16x16 block
+    converts the same wherever the picture is cut (--cg-patches relies on
+    that); ffmpeg's own RGB conversion depends on the picture's size."""
+    h, w = rgb.shape[:2]
+    a = rgb.astype(np.float32)
+    y = 0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]
+    cb = 128 - 0.168736 * a[..., 0] - 0.331264 * a[..., 1] + 0.5 * a[..., 2]
+    cr = 128 + 0.5 * a[..., 0] - 0.418688 * a[..., 1] - 0.081312 * a[..., 2]
+    ch, cw = (h + 1) // 2, (w + 1) // 2
+
+    def half(c):
+        c = np.pad(c, ((0, ch * 2 - h), (0, cw * 2 - w)), mode="edge")
+        return c.reshape(ch, 2, cw, 2).mean((1, 3))
+    return b"".join(np.clip(np.round(p), 0, 255).astype(np.uint8).tobytes()
+                    for p in (y, half(cb), half(cr)))
+
+
+def ffmpeg_jpeg(rgb, qscale):
+    """A baseline 4:2:0 JPEG of an HxWx3 uint8 array from ffmpeg's MJPEG
+    encoder: trellis quantisation and optimal Huffman tables, about a quarter
+    smaller than libjpeg at the same quality. None when ffmpeg is missing."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    h, w = rgb.shape[:2]
+    r = subprocess.run([ffmpeg, "-v", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", "yuvj420p",
+                        "-s", f"{w}x{h}", "-i", "-", "-c:v", "mjpeg", "-q:v", f"{float(qscale):g}",
+                        "-trellis", "1", "-huffman", "optimal", "-pix_fmt", "yuvj420p",
+                        "-frames:v", "1", "-fflags", "+bitexact", "-flags:v", "+bitexact",
+                        "-threads", "1", "-f", "image2", "-"],
+                       input=jfif_yuv420(rgb), capture_output=True)
+    if r.returncode != 0 or r.stdout[:2] != b"\xff\xd8":
+        raise OSError("ffmpeg JPEG: " + r.stderr.decode(errors="replace").strip()[:200])
+    return r.stdout
+
+
+def encode_jpeg_ctex(img, logical_w, logical_h, quality, encoder="pillow", qscale=5.0):
     """An opaque image as a JPEG .ctex: the payload is a baseline JPEG of the
     image (not padded); the engine decodes it into a tex_w x tex_h RGB565
     texture, repeating the edge pixels into the padding."""
     w, h = img.size
     tw, th = next_pow2(w), next_pow2(h)
-    buf = io.BytesIO()
-    img.convert("RGB").save(buf, "JPEG", quality=int(quality), optimize=True, progressive=False,
-                            subsampling=2 if quality < 90 else 0)
-    jpg = buf.getvalue()
+    jpg = None
+    if encoder == "ffmpeg":
+        jpg = ffmpeg_jpeg(np.asarray(img.convert("RGB")), qscale)
+    if jpg is None:
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, "JPEG", quality=int(quality), optimize=True,
+                                progressive=False, subsampling=2 if quality < 90 else 0)
+        jpg = buf.getvalue()
     header = b"CTEX" + struct.pack("<HHHHHHffIII", 1, FMT_RGB565, tw, th, w, h,
                                    float(logical_w), float(logical_h), CTEX_JPEG,
                                    tw * th * 2, len(jpg))
@@ -827,13 +873,15 @@ def split_annexb(stream):
 
 def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
                max_seconds=None, profile="main", level="3.0", gop_seconds=4.0,
-               preset="slower", poster_scale=1.0):
+               preset="slower", poster_scale=1.0, poster_jpeg=0, jpeg_encoder="pillow",
+               jpeg_qscale=5.0):
     """Convert a movie into .cvh bytes plus its poster (.ctex bytes).
 
     Returns (cvh, poster_ctex, info). Two-pass libx264 at `kbps`, no
     B-frames, one slice per frame, an IDR frame at least every `gop_seconds`.
     The frame rate is the clip's own, capped at `fps_cap`. The poster is
-    stored at `poster_scale` of the video's size (RGB565) and drawn scaled up."""
+    stored at `poster_scale` of the video's size (RGB565) and drawn scaled up;
+    poster_jpeg > 0 stores it as a JPEG at that quality (with jpeg_encoder)."""
     from fractions import Fraction
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -922,7 +970,8 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
     if poster_scale < 1.0:
         img = img.resize((max(8, int(w * poster_scale)), max(8, int(h * poster_scale))),
                          Image.LANCZOS)
-    poster, _ = encode_ctex(img, logical_w, logical_h, allow_565=True)
+    poster, _ = encode_ctex(img, logical_w, logical_h, allow_565=True, jpeg_quality=poster_jpeg,
+                            jpeg_encoder=jpeg_encoder, jpeg_qscale=jpeg_qscale)
     info = dict(w=w, h=h, fps=float(fps), frames=n, keyframes=sum(idr),
                 seconds=n / float(fps), bytes=len(cvh), poster_bytes=len(poster))
     return cvh, poster, info

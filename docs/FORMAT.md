@@ -143,7 +143,8 @@ u32 count
     f32 depth              stereo depth (same scale as META depths)
     f32 x, y, w, h         box inside the image, in its logical px (IMGS w, h)
     u32 anim               0 none, 1 sway, 2 pulse, 3 breathe, 4 fall, 5 rise,
-                           6 stars (a = count, b = largest size; picture unused)
+                           6 stars (a = count, b = largest size; picture unused),
+                           7 patch (see below)
     f32 a, b               sway: x/y amplitude in logical px;
                            pulse: minimum alpha; breathe: scale growth;
                            fall/rise: travel distance per loop in logical px
@@ -153,6 +154,18 @@ u32 count
 ```
 The renderer also scales each layer's camera drift by
 `1 / (1 + 0.55 * max(depth, -0.8))`, so distant planes move less.
+
+**Patched pictures** (`vnpack --cg-patches`): a CG variant that differs from
+a picture stored shortly before it only in one region is written as two
+layers: layer 0 is that earlier picture (its `res` is also the IMGS entry's
+`res`, box 0, 0, w, h), layer 1 (`anim` 7) an opaque JPEG `.ctex` of the
+changed rectangle, with `a`, `b` its top-left corner in texels of layer 0
+(multiples of 16, so its edges fall on the JPEG block grid). Both textures
+must be JPEG `.ctex` files. The engine does not draw these as layers: when it
+loads the image it decodes the earlier picture and decodes the patch into
+it, and from then on the image is an ordinary one-texture image (same depth,
+transforms, transitions and stereo shift as any other). Engines that predate
+this draw the patch as a second layer over the first.
 
 #### `LABL` labels
 ```
@@ -278,7 +291,11 @@ padding as above. The decoder takes baseline and extended-sequential Huffman
 JPEGs with 8-bit samples: grayscale or YCbCr, 4:4:4, 4:2:2, 4:2:0 or 4:4:0,
 interleaved or not, with or without restart markers. Progressive,
 arithmetic-coded, lossless, 12-bit and CMYK files fail to load. vnpack writes
-4:2:0 below quality 90 and 4:4:4 from 90 up, with optimised Huffman tables.
+4:2:0 below quality 90 and 4:4:4 from 90 up, with optimised Huffman tables;
+with `--jpeg-encoder ffmpeg` the JPEG comes from ffmpeg's MJPEG encoder
+(4:2:0, trellis quantisation, optimised Huffman tables, quantiser scale
+`--jpeg-qscale`) fed with JFIF YCbCr that vnpack converts itself.
+`--jpeg-posters` writes movie poster frames this way too.
 Images with transparency keep the zlib path. Older engines can't load these
 files.
 

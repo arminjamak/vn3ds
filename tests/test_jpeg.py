@@ -11,6 +11,7 @@ crash it."""
 
 import io
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -144,6 +145,38 @@ def main():
     sprite.putalpha(128)
     data, opaque = encode_ctex(sprite, 427.0, 240.0, jpeg_quality=80)
     check(not opaque and struct.unpack("<I", data[24:28])[0] == 1, "images with alpha stay zlib RGBA8")
+
+    print("ffmpeg encoder (--jpeg-encoder ffmpeg)")
+    if shutil.which("ffmpeg"):
+        for w, h in [(427, 240), (427, 241), (33, 17), (17, 33), (1, 1), (250, 141), (216, 120)]:
+            src = picture(w, h, w * 7 + h)
+            data, opaque = encode_ctex(src.convert("RGBA"), float(w), float(h), jpeg_quality=75,
+                                       jpeg_encoder="ffmpeg", jpeg_qscale=5.5)
+            fmt, tw, th, iw, ih = struct.unpack("<HHHHH", data[6:16])
+            flags, raw, stored = struct.unpack("<III", data[24:36])
+            jpg = data[36:]
+            ok_hdr = opaque and flags == 2 and fmt == 2 and (iw, ih) == (w, h) and stored == len(jpg)
+            got = decode_rgb(jpg, w, h)
+            if got is None or not ok_hdr:
+                check(False, f"{w}x{h} ffmpeg JPEG decodes")
+                continue
+            ref = np.asarray(Image.open(io.BytesIO(jpg)).convert("RGB"))
+            luma = psnr(ref @ [0.299, 0.587, 0.114], got @ [0.299, 0.587, 0.114])
+            vs_src = psnr(np.asarray(src), got)
+            q75 = jpeg_bytes(src, quality=75, subsampling=2, optimize=True)
+            vs_q75 = psnr(np.asarray(src), np.asarray(Image.open(io.BytesIO(q75)).convert("RGB")))
+            r = run("tiled", path, tw, th, path + ".bin")
+            check(r.returncode == 0 and luma >= 45 and vs_src >= min(vs_q75 - 1.5, 40),
+                  f"{w}x{h} ffmpeg qscale 5.5: decodes like Pillow (luma {luma:.1f} dB), "
+                  f"{vs_src:.1f} dB from the source (Pillow q75 {vs_q75:.1f}), "
+                  f"{len(jpg)} bytes (q75 {len(q75)})")
+        again, _ = encode_ctex(picture(427, 240, 3).convert("RGBA"), 427.0, 240.0, jpeg_quality=75,
+                               jpeg_encoder="ffmpeg", jpeg_qscale=5.5)
+        same, _ = encode_ctex(picture(427, 240, 3).convert("RGBA"), 427.0, 240.0, jpeg_quality=75,
+                              jpeg_encoder="ffmpeg", jpeg_qscale=5.5)
+        check(again == same and b"Lavc" not in again, "ffmpeg output is reproducible (bitexact)")
+    else:
+        print("  skipped: no ffmpeg")
 
     print("robustness")
     src = picture(250, 141, 9)

@@ -53,4 +53,8 @@ echo "JPEG textures"
 python3 tests/test_jpeg.py > "$OUT/jpeg.txt" 2>&1 || { grep -v "  ok:" "$OUT/jpeg.txt"; fail=1; }
 tail -1 "$OUT/jpeg.txt"
 
+echo "CG patches (--cg-patches)"
+python3 tests/test_cg_patches.py > "$OUT/cgp.txt" 2>&1 || { grep -v "  ok:" "$OUT/cgp.txt"; fail=1; }
+tail -1 "$OUT/cgp.txt"
+
 [ $fail = 0 ] && echo "all tests passed" || { echo "FAILED"; exit 1; }
