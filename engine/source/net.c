@@ -386,6 +386,29 @@ static void write_data(const u8 *p, size_t n)
     }
 }
 
+/* The Homebrew Launcher lists sdmc:/3ds/vn3ds.3dsx and, from older installs,
+ * sdmc:/3ds/vn3ds/vn3ds.3dsx: when the engine updates, refresh both so it
+ * doesn't matter which one is started. */
+static void also_update_engine_copy(const char *fresh)
+{
+    char other[400];
+    snprintf(other, sizeof(other), "%s/vn3ds.3dsx", E.root);
+    struct stat st;
+    if (!strcmp(other, fresh) || stat(other, &st) != 0)
+        return;
+    FILE *in = fopen(fresh, "rb"), *out_f = fopen(other, "wb");
+    static u8 chunk[16 * 1024];
+    size_t r;
+    bool ok = in && out_f;
+    while (ok && (r = fread(chunk, 1, sizeof(chunk), in)) > 0)
+        ok = fwrite(chunk, 1, r, out_f) == r;
+    if (in)
+        fclose(in);
+    if (out_f)
+        fclose(out_f);
+    LOG("net: %s %s too", ok ? "updated" : "could not update", other);
+}
+
 static void end_file(void)
 {
     u8 code = 0;
@@ -399,8 +422,10 @@ static void end_file(void)
         code = ok ? 0 : 2;
         if (ok) {
             NET.files_done++;
-            if (!strcmp(path, "vn3ds.3dsx"))
+            if (!strcmp(path, "vn3ds.3dsx")) {
                 NET.engine_updated = true;
+                also_update_engine_copy(final_path);
+            }
             else if (!strncmp(path, "games/", 6)) {
                 const char *id = path + 6;
                 size_t n = strcspn(id, "/");

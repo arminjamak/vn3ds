@@ -5,6 +5,9 @@
 #include "video.h"
 
 #include <dirent.h>
+#ifdef __3DS__
+#include <3ds.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -197,50 +200,34 @@ static void apply_staged_update(const char *id)
     move_tree(staged, live);
 }
 
-static int cmp_str(const void *a, const void *b)
-{
-    return strcmp(*(const char *const *)a, *(const char *const *)b);
-}
-
 /* After an update (see flag_prune in net.c), deletes packed files in img/
  * and snd/ that game.bin no longer names: files are named by their contents,
- * so changed ones arrive under new names and the old ones stay behind. */
-static void prune_game(const char *dir, const Game *g)
+ * so changed ones arrive under new names and the old ones stay behind. On a
+ * 3DS card deleting a thousand files takes minutes, so it runs in a
+ * low-priority thread while the game plays; the flag goes only when done. */
+enum { PRUNE_NAME = 64 };
+typedef struct {
+    char dir[400];
+    char *names;   /* n names of PRUNE_NAME bytes, sorted */
+    u32 n;
+} PruneJob;
+static volatile bool prune_busy;
+
+static int cmp_name(const void *a, const void *b)
 {
-    char flag[400];
-    snprintf(flag, sizeof(flag), "%s/prune.flag", dir);
-    struct stat st;
-    if (stat(flag, &st) != 0)
-        return;
-    remove(flag);
-    enum { NAME = 64 };
-    /* every referenced path, plus the poster beside each .cvh video */
-    const char **keep = malloc(sizeof(char *) * (g->nres * 2 + 1));
-    char *posters = malloc((size_t)g->nres * NAME + 1);
+    return strcmp((const char *)a, (const char *)b);
+}
+
+static void prune_run(void *arg)
+{
+    PruneJob *job = arg;
     char *doomed = NULL;
-    u32 n = 0, ndoomed = 0, cap = 0;
-    if (!keep || !posters)
-        goto out;
-    for (u32 i = 0, used = 0; i < g->nres; i++) {
-        const char *r = g->res[i];
-        if (!r)
-            continue;
-        size_t len = strlen(r);
-        if (len >= NAME - 2)
-            goto out;   /* not a name this scheme makes: leave the folder alone */
-        keep[n++] = r;
-        if (len > 4 && !strcmp(r + len - 4, ".cvh")) {
-            snprintf(posters + used, NAME, "%.*s.ctex", (int)(len - 4), r);
-            keep[n++] = posters + used;
-            used += NAME;
-        }
-    }
-    qsort(keep, n, sizeof(char *), cmp_str);
+    u32 ndoomed = 0, cap = 0;
     /* list first, delete after: removing while reading a folder can skip entries */
     static const char *subs[] = {"img", "snd"};
     for (int k = 0; k < 2; k++) {
-        char path[400];
-        snprintf(path, sizeof(path), "%s/%s", dir, subs[k]);
+        char path[460];
+        snprintf(path, sizeof(path), "%s/%s", job->dir, subs[k]);
         DIR *d = opendir(path);
         if (!d)
             continue;
@@ -248,35 +235,95 @@ static void prune_game(const char *dir, const Game *g)
         while ((e = readdir(d))) {
             const char *ext = strrchr(e->d_name, '.');
             if (!ext || (strcmp(ext, ".ctex") && strcmp(ext, ".ogg") && strcmp(ext, ".cvid") &&
-                         strcmp(ext, ".cvh")) || strlen(e->d_name) >= NAME - 5)
+                         strcmp(ext, ".cvh")) || strlen(e->d_name) >= PRUNE_NAME - 5)
                 continue;
-            char rel[NAME];
+            char rel[PRUNE_NAME];
             snprintf(rel, sizeof(rel), "%s/%s", subs[k], e->d_name);
-            const char *key = rel;
-            if (bsearch(&key, keep, n, sizeof(char *), cmp_str))
+            if (bsearch(rel, job->names, job->n, PRUNE_NAME, cmp_name))
                 continue;
             if (ndoomed == cap) {
                 cap = cap ? cap * 2 : 64;
-                char *grown = realloc(doomed, (size_t)cap * NAME);
+                char *grown = realloc(doomed, (size_t)cap * PRUNE_NAME);
                 if (!grown)
                     break;
                 doomed = grown;
             }
-            memcpy(doomed + (size_t)ndoomed++ * NAME, rel, NAME);
+            memcpy(doomed + (size_t)ndoomed++ * PRUNE_NAME, rel, PRUNE_NAME);
         }
         closedir(d);
     }
     for (u32 i = 0; i < ndoomed; i++) {
-        char path[400];
-        snprintf(path, sizeof(path), "%s/%s", dir, doomed + (size_t)i * NAME);
+        char path[460];
+        snprintf(path, sizeof(path), "%s/%s", job->dir, doomed + (size_t)i * PRUNE_NAME);
         remove(path);
     }
+    char flag[460];
+    snprintf(flag, sizeof(flag), "%s/prune.flag", job->dir);
+    remove(flag);
     if (ndoomed)
         LOG("removed %u files the update replaced", (unsigned)ndoomed);
-out:
-    free(keep);
-    free(posters);
     free(doomed);
+    free(job->names);
+    free(job);
+    prune_busy = false;
+}
+
+#ifndef __3DS__
+#include <pthread.h>
+static void *prune_run_host(void *arg)
+{
+    prune_run(arg);
+    return NULL;
+}
+#endif
+
+static void prune_game(const char *dir, const Game *g)
+{
+    char flag[400];
+    snprintf(flag, sizeof(flag), "%s/prune.flag", dir);
+    struct stat st;
+    if (prune_busy || stat(flag, &st) != 0)
+        return;
+    PruneJob *job = calloc(1, sizeof(PruneJob));
+    /* every referenced path, plus the poster beside each .cvh video */
+    char *names = job ? malloc((size_t)(g->nres * 2 + 1) * PRUNE_NAME) : NULL;
+    if (!names) {
+        free(job);
+        return;
+    }
+    u32 n = 0;
+    for (u32 i = 0; i < g->nres; i++) {
+        const char *r = g->res[i];
+        if (!r)
+            continue;
+        size_t len = strlen(r);
+        if (len >= PRUNE_NAME - 2) {   /* not a name this scheme makes: leave the folder alone */
+            free(names);
+            free(job);
+            return;
+        }
+        snprintf(names + (size_t)n++ * PRUNE_NAME, PRUNE_NAME, "%s", r);
+        if (len > 4 && !strcmp(r + len - 4, ".cvh"))
+            snprintf(names + (size_t)n++ * PRUNE_NAME, PRUNE_NAME, "%.*s.ctex", (int)(len - 4), r);
+    }
+    qsort(names, n, PRUNE_NAME, cmp_name);
+    snprintf(job->dir, sizeof(job->dir), "%s", dir);
+    job->names = names;
+    job->n = n;
+    prune_busy = true;
+#ifdef __3DS__
+    s32 prio = 0x30;
+    svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
+    Thread t = threadCreate(prune_run, job, 16 * 1024, prio < 0x3E ? prio + 2 : 0x3F, -2, true);
+    if (!t)
+        prune_run(job);
+#else
+    pthread_t t;
+    if (pthread_create(&t, NULL, prune_run_host, job) == 0)
+        pthread_detach(t);
+    else
+        prune_run(job);
+#endif
 }
 
 static bool load_game_dir(const char *dir, const char *id)
@@ -432,8 +479,6 @@ void app_init(const char *game_dir)
     else {
         if (app_listen_background)
             net_start(NET_PORT);   /* listen in the background: games can arrive any time */
-        if (E.ngames == 1 && !AP.on)
-            app_load_game(0);
     }
 }
 
