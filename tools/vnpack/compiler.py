@@ -1797,7 +1797,7 @@ def encode_atl(programs):
         struct.pack("<I", o) for o in offsets) + bytes(blob)
 
 
-def write_game(path, comp, meta, images, resources, layers=(), voices=None):
+def write_game(path, comp, meta, images, resources, layers=(), voices=None, music=()):
     """Serialise everything into game.bin.
 
     `images` is a list of dicts with name/res/color/w/h/flags/depth;
@@ -1860,6 +1860,11 @@ def write_game(path, comp, meta, images, resources, layers=(), voices=None):
         for name, res in sorted(comp.named_audio.items()):
             audn += struct.pack("<Ii", s(name), res)
         section("AUDN", audn)
+    if music:
+        musm = bytearray(struct.pack("<I", len(music)))
+        for res, bpm, bpb, phrase, bars in music:
+            musm += struct.pack("<ifBBH", res, bpm, bpb, phrase, bars)
+        section("MUSM", musm)
     if voices:
         vox = bytearray(struct.pack("<I", len(voices["bank"])))
         for res in voices["bank"]:

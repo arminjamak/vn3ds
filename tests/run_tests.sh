@@ -45,6 +45,13 @@ check "$OUT/t3.txt" "Went left."
 if grep -q "This line must not be reached" "$OUT/t3.txt"; then echo "  call screen fell through"; fail=1; fi
 if grep -q "This should never show" "$OUT/t3.txt"; then echo "  hidden menu option was shown"; fail=1; fi
 
+echo "Snapshot smoothness: preloads, music changes on the beat, gapless splices"
+mkdir -p "$OUT/root4"; printf 'text_speed = 6\n' > "$OUT/root4/settings.cfg"   # instant text
+engine/build-host/vn3ds-host "$OUT/build/snapshot" --root "$OUT/root4" --pace --no-draw --perf \
+    --max-lines 400 --music-wav "$OUT/music.wav" > "$OUT/t4.txt" 2> "$OUT/p4.txt"
+python3 tests/check_smoothness.py "$OUT/p4.txt" "$OUT/t4.txt" "$OUT/music.wav" > "$OUT/smooth.txt" || fail=1
+grep -v "^        " "$OUT/smooth.txt"
+
 echo "3dslink (netloader) sender"
 python3 tests/test_3dslink.py > "$OUT/3dslink.txt" 2>&1 || { grep -v "  ok:" "$OUT/3dslink.txt"; fail=1; }
 tail -1 "$OUT/3dslink.txt"

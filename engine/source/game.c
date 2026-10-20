@@ -282,6 +282,10 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
     }
     if (find_section(d, g->size, "AUDN", &s) && s.size >= 4 && 4 + 8 * rd_u32(s.p) <= s.size)
         g->audio_names = s.p;
+    if (find_section(d, g->size, "MUSM", &s) && s.size >= 4 && 4 + 12 * (u64)rd_u32(s.p) <= s.size) {
+        g->music_meta = s.p + 4;
+        g->nmusic_meta = rd_u32(s.p);
+    }
     if (find_section(d, g->size, "TALK", &s) && s.size >= 4)
         g->speaking_attr = game_str(g, rd_u32(s.p));
     if (find_section(d, g->size, "VOX ", &s) && s.size >= 4) {

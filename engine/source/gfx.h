@@ -19,6 +19,10 @@ void gfx_tex_free(GfxTex *t);
 GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih);
 void *gfx_tex_data(GfxTex *t);
 void gfx_tex_commit(GfxTex *t);
+/* Like gfx_tex_create without clearing the pixels (the caller writes all
+ * of them). Background loading (texcache.c): the main thread allocates and
+ * commits, the background thread decodes into gfx_tex_data() in between. */
+GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih);
 
 void gfx_frame_begin(void);
 void gfx_frame_end(void);

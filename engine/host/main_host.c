@@ -5,6 +5,9 @@
  *              [--record frames.rgb --audio-log audio.txt --pace --stop-label L]
  *              [--minigame id [--every N]]   (plays a minigame with its bot)
  *              [--leaderboard id]   (renders the Minigames menu's online top 10)
+ *              [--perf]   (prints the engine's timing lines, "[perf] ...")
+ *              [--no-draw]   (draws only for screenshots: fast)
+ *              [--music-wav out.wav]   (writes the music channel's mix)
  *   vn3ds-host --decode-audio in.ogg [out.wav] [--loops N]
  *              (decodes through the 3DS streaming code, prints the decode cost)
  *
@@ -23,6 +26,7 @@
 #include "../source/minigame.h"
 #include "host.h"
 #include "../source/net.h"
+#include "../source/bg.h"
 #include <unistd.h>
 
 #include <dirent.h>
@@ -109,6 +113,29 @@ void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void
             cb(e->d_name, ud);
     closedir(d);
 }
+
+/* --perf: print the engine's timing lines (PERF) as "[perf] ..." */
+bool host_perf;
+/* --no-draw: skip drawing between screenshots (fast timing and music runs) */
+static bool no_draw;
+u64 platform_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (u64)ts.tv_sec * 1000000 + (u64)(ts.tv_nsec / 1000);
+}
+void platform_perf(const char *fmt, ...)
+{
+    if (!host_perf)
+        return;
+    char line[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "    [perf] t=%.3f %s\n", host_now, line);
+}
+void platform_perf_flush(void) {}
 
 void platform_log(const char *fmt, ...)
 {
@@ -290,6 +317,7 @@ static int run_minigame(const char *id, const char *out, int every, FILE *rec)
         log_input(&in);
         app_update(&in, dt);
         app_render();
+        bg_idle();   /* the background thread's share of the frame, as on the 3DS */
         if (rec && frame % 2 == 0)
             record_frame(rec);
         if (out && frame % every == 0 && E.screen == SCR_MINIGAME)
@@ -409,6 +437,14 @@ int main(int argc, char **argv)
             home = true;
         else if (!strcmp(argv[i], "--ui-tour"))
             ui_tour = true;
+        else if (!strcmp(argv[i], "--perf"))
+            host_perf = true;
+        else if (!strcmp(argv[i], "--no-draw"))
+            no_draw = true;
+        else if (!strcmp(argv[i], "--music-wav") && i + 1 < argc) {
+            extern const char *host_music_wav_path;
+            host_music_wav_path = argv[++i];
+        }
         else if (!strcmp(argv[i], "--pace"))
             pace = true;
         else if (!strcmp(argv[i], "--stop-label") && i + 1 < argc)
@@ -722,7 +758,11 @@ int main(int argc, char **argv)
         }
         log_input(&in);
         app_update(&in, dt);
-        app_render();
+        if (no_draw && !rec)
+            app_frame_done_without_drawing();
+        else
+            app_render();
+        bg_idle();   /* the background thread's share of the frame, as on the 3DS */
         if (rec && frame % 2 == 0)
             record_frame(rec);
         if (E.quit)

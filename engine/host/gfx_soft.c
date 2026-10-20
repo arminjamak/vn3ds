@@ -170,6 +170,11 @@ static void untile(GfxTex *t, const u8 *pix, int fmt, int tw, int th)
     (void)th;
 }
 
+GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
+{
+    return gfx_tex_create(tw, th, fmt, iw, ih);
+}
+
 GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
 {
     int bpp = fmt == 0 ? 4 : fmt == 1 ? 3 : 2;

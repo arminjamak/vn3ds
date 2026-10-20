@@ -15,6 +15,7 @@ typedef struct {
     long rate;     /* Hz; 48000 for Opus */
     bool downmix;  /* Opus with more than two channels, mixed to stereo */
     void *h;       /* OggOpusFile * or OggVorbis_File * */
+    void *mem;     /* adec_open_mem: the file in memory (owned) */
 } ADec;
 
 /* Codec of an Ogg file from its first bytes (at least the first page). */
@@ -23,6 +24,12 @@ const char *adec_codec_name(int codec);
 /* Opens `path`; false (with *d cleared) if it is missing or not a mono or
  * stereo Ogg Opus / Vorbis file this build can decode. */
 bool adec_open(ADec *d, const char *path);
+/* The same for a whole file already in memory (malloc'd; taken over and
+ * freed by adec_close, also on failure): decoding then never touches the
+ * SD card. */
+bool adec_open_mem(ADec *d, u8 *data, size_t len);
+/* Reads a file into memory (NULL if missing or bigger than `max`). */
+u8 *adec_read_file(const char *path, size_t max, size_t *len);
 void adec_close(ADec *d);
 /* Back to the first sample (Opus: the first one after the pre-skip). */
 bool adec_rewind(ADec *d);

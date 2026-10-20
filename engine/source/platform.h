@@ -33,6 +33,8 @@ bool platform_mkdir(const char *path);
 void platform_list_dirs(const char *path, void (*cb)(const char *name, void *ud), void *ud);
 u32 platform_time(void); /* seconds since 1970 */
 u64 platform_ms(void);   /* a millisecond clock (for timing) */
+/* Writes buffered PERF lines to the log (the background thread calls it). */
+void platform_perf_flush(void);
 /* Long transfers: keep the console awake (even with the lid closed) and
  * switch the screens' backlights off and on. No-ops on the desktop. */
 void platform_keep_awake(bool on);

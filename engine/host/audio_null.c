@@ -5,6 +5,7 @@
  * --decode-audio renders a file through the 3DS's streaming path. */
 #include "../source/audio.h"
 #include "../source/audio_dec.h"
+#include "../source/music.h"
 #include "host.h"
 
 #include <time.h>
@@ -14,8 +15,70 @@ FILE *host_audio_log;
 double host_now;
 static float last_duck = 1.0f, last_vol[CH_COUNT] = {-1, -1, -1};
 
-bool audio_init(void) { return true; }
-void audio_exit(void) {}
+/* The music channel runs through the same mixer as on the 3DS (music.c),
+ * paced by the game's clock; --music-wav writes what it mixes. */
+const char *host_music_wav_path;
+static FILE *music_wav;
+static u32 music_wav_frames;
+static long music_wav_rate;
+static double music_due;
+static bool music_paused;
+
+static void wav_header(FILE *f, long rate, u32 frames)
+{
+    u32 bytes = frames * 4, v;
+    fwrite("RIFF", 1, 4, f);
+    v = 36 + bytes;
+    fwrite(&v, 4, 1, f);
+    fwrite("WAVEfmt ", 1, 8, f);
+    v = 16;
+    fwrite(&v, 4, 1, f);
+    u16 h[2] = {1, 2};
+    fwrite(h, 2, 2, f);
+    v = (u32)rate;
+    fwrite(&v, 4, 1, f);
+    v = (u32)rate * 4;
+    fwrite(&v, 4, 1, f);
+    h[0] = 4;
+    h[1] = 16;
+    fwrite(h, 2, 2, f);
+    fwrite("data", 1, 4, f);
+    fwrite(&bytes, 4, 1, f);
+}
+
+static void music_wav_close(void)
+{
+    if (!music_wav)
+        return;
+    fseek(music_wav, 0, SEEK_SET);
+    wav_header(music_wav, music_wav_rate, music_wav_frames);
+    fclose(music_wav);
+    music_wav = NULL;
+}
+
+bool audio_init(void)
+{
+    music_init();
+    return true;
+}
+
+void audio_exit(void)
+{
+    music_wav_close();
+    music_exit();
+}
+
+bool audio_bg_work(void) { return music_bg_work(); }
+
+void audio_music_change(const char *path, bool loop, float fadein)
+{
+    music_change(path, loop, fadein);
+    /* (the soundtrack log keeps the plain play, for tools/vn3ds-record) */
+    if (host_audio_log)
+        fprintf(host_audio_log, "%.4f play %d %d %.3f %d %s\n", host_now, CH_MUSIC, loop, fadein, 0, path);
+}
+
+void audio_music_prefetch(const char *path, bool loop) { music_prefetch(path, loop); }
 
 void audio_play(int ch, const char *path, bool loop, float fadein, bool queue)
 {
@@ -44,6 +107,12 @@ void audio_play(int ch, const char *path, bool loop, float fadein, bool queue)
     playing[ch] = ch == CH_MUSIC;
     if (host_audio_log)
         fprintf(host_audio_log, "%.4f play %d %d %.3f %d %s\n", host_now, ch, loop, fadein, queue, path);
+    if (ch == CH_MUSIC) {
+        if (queue)
+            music_queue(path, loop);
+        else
+            music_play_now(path, loop, fadein);
+    }
 }
 
 void audio_stop(int ch, float fadeout)
@@ -53,12 +122,16 @@ void audio_stop(int ch, float fadeout)
     playing[ch] = false;
     if (host_audio_log)
         fprintf(host_audio_log, "%.4f stop %d %.3f\n", host_now, ch, fadeout);
+    if (ch == CH_MUSIC)
+        music_stop(fadeout);
 }
 
-bool audio_playing(int ch) { return playing[ch]; }
+bool audio_playing(int ch) { return ch == CH_MUSIC ? music_playing() : playing[ch]; }
 
 void audio_pause(int ch, bool paused)
 {
+    if (ch == CH_MUSIC)
+        music_paused = paused;
     if (host_audio_log)
         fprintf(host_audio_log, "%.4f %s %d\n", host_now, paused ? "pause" : "resume", ch);
 }
@@ -69,7 +142,43 @@ void audio_set_volume(int ch, float v)
     if (ch >= 0 && ch < CH_COUNT)
         last_vol[ch] = v;
 }
-void audio_update(float dt) { (void)dt; }
+void audio_update(float dt)
+{
+    static bool wav_tried;
+    if (host_music_wav_path && !wav_tried) {
+        /* opened on the first frame (creating a file can take a while) */
+        wav_tried = true;
+        music_wav = fopen(host_music_wav_path, "wb");
+        if (music_wav)
+            atexit(music_wav_close);
+        else
+            perror(host_music_wav_path);
+    }
+    if (music_paused)
+        return;
+    music_due += dt * (double)music_rate();
+    static s16 buf[4096 * 2];
+    while (music_due >= 1) {
+        long n = music_due > 4096 ? 4096 : (long)music_due;
+        music_due -= (double)n;
+        s64 at = music_clock();
+        long got = music_mix(buf, n);
+        if (got > 0 && !music_wav_rate && music_wav) {
+            music_wav_rate = music_rate();
+            wav_header(music_wav, music_wav_rate, 0);
+            printf("    [music-wav] %s starts at mixer frame %lld, %ld Hz\n", host_music_wav_path,
+                   (long long)at, music_wav_rate);
+        }
+        if (!music_wav_rate)
+            continue;
+        if (!music_wav)
+            continue;
+        if (got <= 0)
+            memset(buf, 0, (size_t)n * 4);
+        fwrite(buf, 4, (size_t)n, music_wav);
+        music_wav_frames += (u32)n;
+    }
+}
 
 int host_vox_count;
 static int vox_loaded;

@@ -132,6 +132,19 @@ typedef struct {
 } Engine;
 
 extern Engine E;
+
+/* What the current frame cost the main thread, for the timing log: textures
+ * loaded on the spot (not preloaded), and the music calls. */
+typedef struct {
+    u32 tex_sync;       /* textures read and decoded on the main thread */
+    u32 tex_sync_bytes; /* their file sizes */
+    u64 tex_sync_us;
+    u32 tex_ready;      /* preloaded textures that were used for the first time */
+    u64 music_us;       /* time in audio_play / audio_stop / the music changes */
+    u64 save_us;        /* autosave */
+    bool advanced;      /* the story moved on this frame (A, auto, skip...) */
+} FramePerf;
+extern FramePerf FP;
 extern const float TEXT_SPEEDS[];
 extern const int NUM_TEXT_SPEEDS;
 
@@ -159,6 +172,7 @@ extern bool app_start_receiving; /* set before app_init, e.g. when launched via 
 extern bool app_listen_background; /* accept transfers at any time (3DS default) */
 void app_update(const Input *in, float dt);
 void app_render(void);
+void app_frame_done_without_drawing(void);   /* (desktop tests: instead of app_render) */
 void app_shutdown(void);
 
 /* app.c */
@@ -208,9 +222,19 @@ GfxTex *texcache_get(s32 res);
 /* An image's texture (its base picture with its patch put in, if any). */
 GfxTex *texcache_image(const ImageDef *im);
 void texcache_clear(void);
+void texcache_init(void);
+/* Once a frame: hands preloads their memory, caches finished ones. */
+void texcache_pump(void);
+/* Preloading (see texcache.c): a prediction pass is want_begin, want for
+ * each picture in the order it may be needed, want_end. */
+void texcache_want_begin(void);
+void texcache_want(const ImageDef *im);
+void texcache_want_end(void);
 
 /* save.c */
 bool save_write(int slot);
+/* background: the file is written by the background thread (autosaves). */
+bool save_write_ex(int slot, bool background);
 bool save_peek(const char *game_id, int slot, SlotInfo *info);
 bool save_read(int slot);
 void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE]);

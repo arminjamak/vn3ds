@@ -121,6 +121,10 @@ typedef struct {
     const char *minigames[16]; /* MINI: minigame ids the script uses */
     int nminigames;
     const u8 *audio_names;     /* AUDN: u32 count, {u32 name, s32 res} (optional) */
+    /* MUSM: music tempo grids, u32 count, {s32 res, f32 bpm, u8 beats per
+     * bar, u8 bars per phrase, u16 bars per loop} (optional) */
+    const u8 *music_meta;
+    u32 nmusic_meta;
 } Game;
 
 bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errlen);

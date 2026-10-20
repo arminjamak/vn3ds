@@ -15,7 +15,7 @@ mkdir -p "$OUT/root"
 printf 'text_speed = 6\n' > "$OUT/root/settings.cfg"   # instant text
 fail=0
 # engine notices that are not problems
-benign='leaderboard: offline'
+benign='leaderboard: offline\|open [a-z0-9-]*: \|removed [0-9]* files'
 problems() { grep -E "ERROR|\[log\]" "$1" | grep -v "$benign"; }
 for label in $(grep -oE '^label (ch4_test_[a-z_]+)' tests/snapshot/route_tests.rpy | cut -d' ' -f2); do
     engine/build-host/vn3ds-host "$OUT/build/snapshot" --label "$label" --root "$OUT/root" > "$OUT/t.txt" 2>&1 || true

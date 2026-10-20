@@ -309,6 +309,13 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   played as text appears, pitched per character variable, with the music
   ducked underneath (`{"bank": [...], "pitch": {"a": 1.0}, "volume": 0.32,
   "duck": 0.8}`).
+- **`music`**: each track's tempo grid, so the music plays as one continuous
+  score: when the script changes music (`play music`, or `stop music
+  fadeout` followed by a `play music`), the current track finishes its loop
+  or its phrase and the new one comes in on the downbeat, at most 8 s later;
+  without a grid it crossfades on the beat. `{"audio/cafe.ogg": {"bpm": 82,
+  "beats_per_bar": 4, "phrase_bars": 4, "bars": 16}}` (`bars` = the loop's
+  length). Snapshot's is written by `examples/music/meta.py` from the score.
 - **Ren'Py's `camera` statement** (standard Ren'Py) moves the whole scene with
   ATL: `xoffset`, `yoffset`, `zoom`, `rotate` and `zpos`, plus `xrotate` and
   `yrotate`, which on the 3DS tilt and orbit around the screen plane so a

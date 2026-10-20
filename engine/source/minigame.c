@@ -202,6 +202,19 @@ static void play_named(int ch, const char *name, bool loop)
     audio_play(ch, path, loop, ch == CH_MUSIC ? 0.4f : 0.0f, false);
 }
 
+/* Opens a game's music during its intro, so it starts on the dot (the
+ * rhythm games time their charts from that moment). */
+static void prefetch_named(const char *name)
+{
+    char full[96], path[400];
+    snprintf(full, sizeof(full), "minigame/%s", name);
+    s32 res = E.loaded ? game_audio_named(&E.game, full) : -1;
+    if (res < 0)
+        return;
+    game_res_path(&E.game, res, path, sizeof(path));
+    audio_music_prefetch(path, true);
+}
+
 /* The run's sound bank: every "minigame/<game id>_*" clip plus the shared
  * ones, decoded once by mg_begin() so rapid effects can overlap. */
 #define BANK_MAX 64
@@ -347,6 +360,8 @@ void mg_begin(const MiniGame *g, bool from_story)
     E.screen = SCR_MINIGAME;
     talk_end();
     bank_load(g);
+    if (g->music)
+        prefetch_named(g->music);
 }
 
 static void start_play(void)
@@ -379,6 +394,11 @@ static void finish(void)
     MG.scroll_ticks = 0;
     MG.landed = false;
     mg_sfx("result");
+    if (MG.from_story && MG.music_before >= 0) {   /* ready to pick the story up again */
+        char path[400];
+        game_res_path(&E.game, MG.music_before, path, sizeof(path));
+        audio_music_prefetch(path, MG.music_loop_before);
+    }
 }
 
 static void leave(void)

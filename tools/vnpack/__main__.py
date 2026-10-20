@@ -526,6 +526,23 @@ def main(argv=None, progress=None):
         if os.path.exists(os.path.join(out_dir, rel)):
             resources[i] = rename_by_content(rel)
 
+    # Music tempo grids (vn3ds.json "music": {"audio/x.ogg": {"bpm", "beats_per_bar",
+    # "phrase_bars", "bars"}}): the engine changes music on a phrase boundary or
+    # at the end of the loop instead of cutting. Keyed by the file the script plays.
+    music_meta = []
+    mcfg = {}
+    for name, m in (cfg.get("music") or {}).items():
+        key = fs.find(name, dirs=("", "audio/"))
+        if key and isinstance(m, dict) and float(m.get("bpm", 0)) > 0:
+            mcfg[key] = m
+    for i, (kind, path) in enumerate(comp.resources if mcfg else ()):
+        key = resolve_auto_audio(fs, path[6:]) if path.startswith("?auto:") else \
+            fs.find(path, dirs=("", "audio/"))
+        if key in mcfg:
+            m = mcfg[key]
+            music_meta.append((i, float(m["bpm"]), int(m.get("beats_per_bar", 4)),
+                               int(m.get("phrase_bars", 4)), int(m.get("bars", 0))))
+
     # Machine voices (vn3ds.json "voices"): a syllable bank plus a pitch per
     # character, played by the engine as text appears.
     voices = None
@@ -754,7 +771,7 @@ def main(argv=None, progress=None):
                 max_shift=float(cfg.get("max_shift", 6.0)),
                 title_image=title_image, camera=cfg.get("camera"))
     size = write_game(os.path.join(out_dir, "game.bin"), comp, meta, images, resources,
-                      layer_records, voices)
+                      layer_records, voices, music=music_meta)
 
     progress("pack", state="done", bytes=size + total_bytes)
     warn.report(limit=10**9 if args.all_warnings else 60)

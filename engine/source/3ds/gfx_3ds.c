@@ -161,7 +161,7 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
     return t;
 }
 
-GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
+GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
 {
     GPU_TEXCOLOR gfmt = fmt == 0 ? GPU_RGBA8 : fmt == 1 ? GPU_RGB8 : GPU_RGB565;
     GfxTex *t = calloc(1, sizeof(GfxTex));
@@ -169,7 +169,6 @@ GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
         free(t);
         return NULL;
     }
-    memset(t->tex.data, 0, t->tex.size);
     C3D_TexSetFilter(&t->tex, GPU_LINEAR, GPU_LINEAR);
     C3D_TexSetWrap(&t->tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
     t->sub.width = (u16)iw;
@@ -178,6 +177,14 @@ GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
     t->sub.top = 1.0f;
     t->sub.right = (float)iw / (float)tw;
     t->sub.bottom = 1.0f - (float)ih / (float)th;
+    return t;
+}
+
+GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
+{
+    GfxTex *t = gfx_tex_alloc(tw, th, fmt, iw, ih);
+    if (t)
+        memset(t->tex.data, 0, t->tex.size);
     return t;
 }
 

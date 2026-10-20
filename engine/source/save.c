@@ -1,4 +1,5 @@
 #include "app.h"
+#include "bg.h"
 
 /* Save files hold the VM (resume point, call stack, variables), the scene
  * that was on screen and the music. Sprites are written as raw structs, so
@@ -12,7 +13,30 @@ static void slot_path(int slot, char *out, size_t len)
     snprintf(out, len, "%s/saves/%s/slot%02d.sav", E.root, E.game.id, slot);
 }
 
-static bool wr(FILE *f, const void *p, size_t n) { return fwrite(p, 1, n, f) == n; }
+/* A save is put together in memory, then written in one go (on the
+ * background thread for autosaves, so the frame that makes one doesn't
+ * wait for the SD card). */
+typedef struct {
+    u8 *p;
+    size_t n, cap;
+} Buf;
+
+static bool wr(Buf *b, const void *p, size_t n)
+{
+    if (b->n + n > b->cap) {
+        size_t cap = b->cap ? b->cap * 2 : 4096;
+        while (cap < b->n + n)
+            cap *= 2;
+        u8 *grown = realloc(b->p, cap);
+        if (!grown)
+            return false;
+        b->p = grown;
+        b->cap = cap;
+    }
+    memcpy(b->p + b->n, p, n);
+    b->n += n;
+    return true;
+}
 static bool rdf(FILE *f, void *p, size_t n) { return fread(p, 1, n, f) == n; }
 
 static void preview_text(char *out, size_t len)
@@ -26,21 +50,25 @@ static void preview_text(char *out, size_t len)
             *c = ' ';
 }
 
-bool save_write(int slot)
+bool save_write(int slot) { return save_write_ex(slot, false); }
+
+bool save_write_ex(int slot, bool background)
 {
     VM *vm = &E.vm;
     if (vm->state != VM_SAY && vm->state != VM_MENU && vm->state != VM_PAUSE)
         return false;
     talk_end(); /* never save a sprite with its mouth open */
     char dir[300], path[320];
-    snprintf(dir, sizeof(dir), "%s/saves", E.root);
-    platform_mkdir(dir);
-    snprintf(dir, sizeof(dir), "%s/saves/%s", E.root, E.game.id);
-    platform_mkdir(dir);
+    static char dirs_for[64];   /* the folders are made once per game */
+    if (strcmp(dirs_for, E.game.id) != 0) {
+        snprintf(dir, sizeof(dir), "%s/saves", E.root);
+        platform_mkdir(dir);
+        snprintf(dir, sizeof(dir), "%s/saves/%s", E.root, E.game.id);
+        platform_mkdir(dir);
+        snprintf(dirs_for, sizeof(dirs_for), "%s", E.game.id);
+    }
     slot_path(slot, path, sizeof(path));
-    FILE *f = fopen(path, "wb");
-    if (!f)
-        return false;
+    Buf buf = {0}, *f = &buf;
 
     bool ok = true;
     u32 version = SAVE_VERSION, crc = E.game.crc, t = platform_time();
@@ -71,7 +99,20 @@ bool save_write(int slot)
     u8 loop = E.music_loop, win = E.window_mode;
     ok &= wr(f, &E.music_res, 4) && wr(f, &loop, 1) && wr(f, &win, 1);
     ok &= wr(f, &st->has_camera, 1) && wr(f, &st->camera, sizeof(Sprite));
-    ok &= fclose(f) == 0;
+    if (!ok) {
+        free(buf.p);
+        return false;
+    }
+    if (background) {
+        bg_write_file(path, buf.p, buf.n);
+        return true;
+    }
+    bg_flush_files();   /* (an older autosave of this slot must not land after it) */
+    FILE *out = fopen(path, "wb");
+    ok = out && fwrite(buf.p, 1, buf.n, out) == buf.n;
+    if (out)
+        ok = (fclose(out) == 0) && ok;
+    free(buf.p);
     return ok;
 }
 
@@ -96,6 +137,7 @@ static bool read_header(FILE *f, SlotInfo *info)
  * game's CRC isn't checked here; loading still checks it). */
 bool save_peek(const char *game_id, int slot, SlotInfo *info)
 {
+    bg_flush_files();
     char path[400];
     snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.sav", E.root, game_id, slot);
     memset(info, 0, sizeof(*info));
@@ -132,6 +174,7 @@ void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE])
 
 bool save_read(int slot)
 {
+    bg_flush_files();
     char path[320];
     slot_path(slot, path, sizeof(path));
     FILE *f = fopen(path, "rb");

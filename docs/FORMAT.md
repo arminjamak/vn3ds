@@ -193,6 +193,16 @@ u32 count;  { str name; i32 res; } [count]   e.g. "minigame/tower_1" -> RES inde
 Everything in `game/audio/minigame/` is packed and listed here; minigames
 look up their music and sounds by name.
 
+#### `MUSM` music tempo grids (optional)
+```
+u32 count;  { i32 res; f32 bpm; u8 beats_per_bar; u8 phrase_bars; u16 bars; } [count]
+```
+From vn3ds.json `"music"`. `bars` is the length of one loop of the file in
+bars (0 = unknown; the grid is then `bpm` alone). A change of music waits
+for the end of the current track's loop or its next phrase boundary (at
+most 8 s), then splices in the new track on the downbeat; tracks without a
+grid crossfade on the beat. Several RES entries may share a file.
+
 #### `TALK` speaking attribute
 ```
 str attribute    Ren'Py's config.speaking_attribute (e.g. "talk")

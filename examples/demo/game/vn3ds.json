@@ -5251,5 +5251,337 @@
   },
   "volume": 0.32,
   "duck": 0.8
+ },
+ "music": {
+  "audio/ambulance_transfer.ogg": {
+   "bpm": 72.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/angel_ops.ogg": {
+   "bpm": 77.4,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/ashveil_offer.ogg": {
+   "bpm": 69.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/blueprint.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/cafe.ogg": {
+   "bpm": 82.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/captured_earth.ogg": {
+   "bpm": 63.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/closed_ward.ogg": {
+   "bpm": 64.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/club_speed.ogg": {
+   "bpm": 126.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 4,
+   "bars": 32
+  },
+  "audio/council.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/crash.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/deepest_layer.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/ember_trial.ogg": {
+   "bpm": 76.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/entities.ogg": {
+   "bpm": 77.4,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/fight.ogg": {
+   "bpm": 104.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/fog.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 3,
+   "phrase_bars": 2,
+   "bars": 20
+  },
+  "audio/goldlight.ogg": {
+   "bpm": 72.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/group_therapy.ogg": {
+   "bpm": 76.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/kitchen_talk.ogg": {
+   "bpm": 88.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/lantern_watch.ogg": {
+   "bpm": 72.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/draw.ogg": {
+   "bpm": 64.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/minigame/invaders.ogg": {
+   "bpm": 120.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 4,
+   "bars": 24
+  },
+  "audio/minigame/invaders_boss.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/lantern.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/miso.ogg": {
+   "bpm": 103.9974,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/quiz.ogg": {
+   "bpm": 83.99685,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/snake.ogg": {
+   "bpm": 115.998067,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/tower_1.ogg": {
+   "bpm": 100.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/minigame/tower_2.ogg": {
+   "bpm": 112.002987,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 20
+  },
+  "audio/minigame/tower_3.ogg": {
+   "bpm": 123.998967,
+   "beats_per_bar": 4,
+   "phrase_bars": 4,
+   "bars": 24
+  },
+  "audio/minigame/tower_4.ogg": {
+   "bpm": 137.997125,
+   "beats_per_bar": 4,
+   "phrase_bars": 4,
+   "bars": 24
+  },
+  "audio/mira_visits.ogg": {
+   "bpm": 70.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/miso.ogg": {
+   "bpm": 108.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/morning.ogg": {
+   "bpm": 78.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/morning_render.ogg": {
+   "bpm": 78.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/notebook.ogg": {
+   "bpm": 70.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/office.ogg": {
+   "bpm": 100.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/ovation.ogg": {
+   "bpm": 104.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/protected_world.ogg": {
+   "bpm": 98.360656,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/purgatorium_shift.ogg": {
+   "bpm": 109.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/questions.ogg": {
+   "bpm": 72.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/real_world_vigil.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/rooftop_mission.ogg": {
+   "bpm": 92.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/starving.ogg": {
+   "bpm": 58.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 1,
+   "bars": 12
+  },
+  "audio/the_leak.ogg": {
+   "bpm": 90.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/the_record.ogg": {
+   "bpm": 60.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/theme.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/theo_nights.ogg": {
+   "bpm": 80.715308,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/together_night.ogg": {
+   "bpm": 66.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/umbrella_rain.ogg": {
+   "bpm": 66.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/unease.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/unraveling.ogg": {
+   "bpm": 96.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 24
+  },
+  "audio/voices.ogg": {
+   "bpm": 90.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/ward.ogg": {
+   "bpm": 64.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 12
+  },
+  "audio/watch.ogg": {
+   "bpm": 72.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  },
+  "audio/worlds_upon_worlds.ogg": {
+   "bpm": 64.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 2,
+   "bars": 16
+  }
  }
 }

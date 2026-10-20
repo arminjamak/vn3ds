@@ -50,6 +50,13 @@ static inline u32 rgba_alpha(u32 c, float a)
 
 void platform_log(const char *fmt, ...);
 #define LOG(...) platform_log(__VA_ARGS__)
+/* Timing lines ("perf: ..."): buffered in memory on the 3DS and written to
+ * the log by the background thread, so measuring never costs a frame; on
+ * the desktop printed with --perf. Safe from any thread. */
+void platform_perf(const char *fmt, ...);
+#define PERF(...) platform_perf(__VA_ARGS__)
+/* A microsecond clock (for timing). */
+u64 platform_us(void);
 
 /* Bytes of the next UTF-8 code point and its value. */
 int utf8_decode(const char *s, u32 *cp);

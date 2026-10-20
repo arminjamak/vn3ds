@@ -18,11 +18,18 @@ TP_OBJ := $(addprefix build-host/tp/,$(OPUS_SRC:.c=.o) $(OPUSFILE_SRC:.c=.o))
 AUDIO_CFLAGS := -DVN_HAVE_OPUS $(OPUS_ENGINE_INCS) $(OGG_CFLAGS)
 AUDIO_LIBS := $(OPUS_LIB) $(shell pkg-config --libs ogg)
 endif
+# Vorbis: the reference libvorbisfile (brew install libvorbis), standing in
+# for the 3DS's Tremor, so the desktop build can play the sd profile's music.
+HAVE_VORBISFILE := $(shell pkg-config --exists vorbisfile 2>/dev/null && echo 1)
+ifeq ($(HAVE_VORBISFILE),1)
+AUDIO_CFLAGS += -DVN_HAVE_VORBISFILE $(shell pkg-config --cflags vorbisfile)
+AUDIO_LIBS += $(shell pkg-config --libs vorbisfile)
+endif
 TP_CFLAGS := -O2 -g -std=gnu11 -w
 
 $(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h $(OPUS_LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(AUDIO_CFLAGS) -o $@ $(SRC) $(AUDIO_LIBS) -lz -lm
+	$(CC) $(CFLAGS) $(AUDIO_CFLAGS) -o $@ $(SRC) $(AUDIO_LIBS) -lz -lm -lpthread
 
 build-host/tp/opus/%.o: third_party/opus/%.c
 	@mkdir -p $(dir $@)

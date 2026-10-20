@@ -3,6 +3,8 @@
 #include "leaderboard.h"
 #include "net.h"
 #include "video.h"
+#include "bg.h"
+#include "predict.h"
 
 #include <dirent.h>
 #ifdef __3DS__
@@ -14,6 +16,7 @@
 bool app_start_receiving;
 
 Engine E;
+FramePerf FP;
 
 /* characters per second; 0 = instant */
 const float TEXT_SPEEDS[] = {15, 25, 35, 50, 70, 110, 0};
@@ -25,6 +28,14 @@ const int NUM_TEXT_SPEEDS = (int)ARRAY_LEN(TEXT_SPEEDS);
 
 static void run_vm(void);
 static void touch_buttons(const Input *in);
+/* `stop music fadeout N` with a new track coming before the next line: the
+ * stop waits, and the play that follows becomes a musical change (see
+ * audio_music_change). Without a play, it happens at the next line. */
+static struct {
+    bool on;
+    float fade, t;
+} mstop;
+
 
 /* ---- autoplay (testing in emulators) ------------------------------------
  * If <root>/autoplay.cfg exists the engine plays by itself:
@@ -438,26 +449,42 @@ static void thumb_path(const char *id, char *out, size_t len)
     snprintf(out, len, "%s/saves/%s/slot%02d.thm", E.root, id, RESUME_SLOT);
 }
 
-void app_autosave(void)
+static void autosave(bool background)
 {
     if (!E.loaded || E.screen != SCR_GAME)
         return;
     E.autosave_t = E.time;
-    if (!save_write(RESUME_SLOT))
+    if (!save_write_ex(RESUME_SLOT, background))
         return;
     E.has_resume = true;
     if (!thumb_valid)
         return;
     char path[400];
     thumb_path(E.game.id, path, sizeof(path));
+    size_t n = 8 + sizeof(thumb);
+    u8 *buf = malloc(n);
+    if (!buf)
+        return;
+    u16 wh[2] = {THUMB_W, THUMB_H};
+    memcpy(buf, "THM1", 4);
+    memcpy(buf + 4, wh, 4);
+    memcpy(buf + 8, thumb, sizeof(thumb));
+    if (background) {
+        bg_write_file(path, buf, n);
+        return;
+    }
     FILE *f = fopen(path, "wb");
     if (f) {
-        u16 wh[2] = {THUMB_W, THUMB_H};
-        fwrite("THM1", 1, 4, f);
-        fwrite(wh, 2, 2, f);
-        fwrite(thumb, 2, THUMB_W * THUMB_H, f);
+        fwrite(buf, 1, n, f);
         fclose(f);
     }
+    free(buf);
+}
+
+void app_autosave(void)
+{
+    autosave(false);
+    bg_flush_files();
 }
 
 bool app_has_resume(void) { return E.loaded && E.has_resume; }
@@ -509,6 +536,8 @@ void app_init(const char *game_dir)
 {
     memset(&E, 0, sizeof(E));
     snprintf(E.root, sizeof(E.root), "%s", platform_root());
+    texcache_init();
+    bg_start();
     settings_load();
     lb_init();
     audio_set_volume(CH_MUSIC, E.set.music_vol);
@@ -573,6 +602,7 @@ void app_shutdown(void)
     lb_shutdown();
     settings_save();
     unload_game();
+    bg_stop();
 }
 
 void app_to_title(void)
@@ -581,6 +611,7 @@ void app_to_title(void)
     talk_end();
     for (int ch = 0; ch < CH_COUNT; ch++)
         audio_stop(ch, 0.5f);
+    mstop.on = false;
     E.music_res = -1;
     stage_clear(&E.stage);
     stage_clear(&E.committed);
@@ -594,6 +625,7 @@ void app_to_title(void)
 
 static void reset_presentation(void)
 {
+    mstop.on = false;
     stage_clear(&E.stage);
     stage_clear(&E.committed);
     E.stage.has_camera = E.committed.has_camera = 0;
@@ -635,6 +667,77 @@ bool app_load_slot(int slot)
     E.vm.state = VM_RUNNING;
     run_vm();
     return true;
+}
+
+/* ---- looking ahead: preloads and the music ---------------------------------
+ * After the story moves on (on the next frame, to keep the frame A was
+ * pressed on light), predict.c looks a few lines ahead: the pictures there
+ * are preloaded and the next music is opened and decoded in advance. */
+
+#define PREDICT_LINES 6   /* how far ahead the scan looks (lines, menus) */
+#define PRELOAD_LINES 3   /* pictures this close are preloaded */
+
+static bool predict_due;
+
+bool app_music_meta(const char *path, MusicMeta *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (!E.loaded || !E.game.music_meta)
+        return false;
+    for (u32 i = 0; i < E.game.nmusic_meta; i++) {
+        const u8 *m = E.game.music_meta + 12 * i;
+        char p[400];
+        game_res_path(&E.game, rd_s32(m), p, sizeof(p));
+        if (strcmp(p, path) != 0)
+            continue;
+        out->bpm = rd_f32(m + 4);
+        out->beats_per_bar = m[8];
+        out->phrase_bars = m[9];
+        out->bars = rd_u16(m + 10);
+        return out->bpm > 0;
+    }
+    return false;
+}
+
+static void run_prediction(void)
+{
+    if (!E.loaded || E.screen != SCR_GAME)
+        return;
+    u64 t0 = platform_us();
+    Prediction pr;
+    predict_scan(&E.vm, &E.stage, PREDICT_LINES, &pr);
+    texcache_want_begin();
+    int n = 0;
+    for (int i = 0; i < pr.nimages; i++)
+        if (pr.image_dist[i] <= PRELOAD_LINES && (u32)pr.images[i] < E.game.nimages) {
+            texcache_want(&E.game.images[pr.images[i]]);
+            n++;
+        }
+    texcache_want_end();
+    if (pr.music_res >= 0 && !(pr.music_flags & 2) && pr.music_res != E.music_res) {
+        char path[400];
+        game_res_path(&E.game, pr.music_res, path, sizeof(path));
+        audio_music_prefetch(path, pr.music_flags & 1);
+    }
+    PERF("predict: %d pictures within %d lines, next music res %d (%d lines on); %.2f ms", n,
+         PRELOAD_LINES, (int)pr.music_res, pr.music_dist, (platform_us() - t0) / 1000.0);
+}
+
+/* Does a music PLAY come before the player is next asked for anything? */
+static bool music_follows(void)
+{
+    Prediction pr;
+    predict_scan(&E.vm, &E.stage, 0, &pr);
+    return pr.music_res >= 0 && !(pr.music_flags & 2);
+}
+
+static void music_stop_now(void)
+{
+    if (!mstop.on)
+        return;
+    mstop.on = false;
+    PERF("music: the deferred stop happens now (fade %.1f s): no new music came", mstop.fade);
+    audio_stop(CH_MUSIC, mstop.fade);
 }
 
 /* ---- VM hooks ------------------------------------------------------------ */
@@ -780,13 +883,25 @@ void eng_play(u8 channel, s32 res, u8 flags, float fadein, float fadeout)
     (void)fadeout;
     if (channel >= CH_COUNT || res < 0)
         return;
-    if (channel == CH_MUSIC && (flags & 4) && E.music_res == res && audio_playing(CH_MUSIC))
+    if (channel == CH_MUSIC && (flags & 4) && E.music_res == res && audio_playing(CH_MUSIC) && !mstop.on)
         return;
     char path[400];
     game_res_path(&E.game, res, path, sizeof(path));
     bool loop = flags & 1, queue = flags & 2;
-    audio_play(channel, path, loop, fadein, queue);
+    u64 t0 = platform_us();
+    if (channel == CH_MUSIC && !queue) {
+        /* one continuous score: the new track comes in on the beat */
+        if (mstop.on)
+            PERF("music: the deferred stop becomes a change to %s", path);
+        mstop.on = false;
+        audio_music_change(path, loop, fadein);
+    } else {
+        audio_play(channel, path, loop, fadein, queue);
+    }
+    u64 us = platform_us() - t0;
+    FP.music_us += us;
     if (channel == CH_MUSIC) {
+        PERF("music: play %s took %.2f ms", path, us / 1000.0);
         E.music_res = res;
         E.music_loop = loop;
     }
@@ -798,7 +913,18 @@ void eng_stop(u8 channel, float fadeout)
 {
     if (channel >= CH_COUNT)
         return;
-    audio_stop(channel, fadeout);
+    u64 t0 = platform_us();
+    if (channel == CH_MUSIC && fadeout > 0 && audio_playing(CH_MUSIC) && !E.skip && music_follows()) {
+        mstop.on = true;
+        mstop.fade = fadeout;
+        mstop.t = 0;
+        PERF("music: stop (fade %.1f s) deferred: new music follows", fadeout);
+    } else {
+        if (channel == CH_MUSIC)
+            mstop.on = false;
+        audio_stop(channel, fadeout);
+    }
+    FP.music_us += platform_us() - t0;
     if (channel == CH_MUSIC)
         E.music_res = -1;
 }
@@ -848,13 +974,21 @@ static void prepare_text(void)
 static void run_vm(void)
 {
     VM *vm = &E.vm;
+    FP.advanced = true;
+    predict_due = true;
     talk_end();
     vm_run(vm);
+    /* the player is asked for something: a deferred stop of the music is real */
+    if (mstop.on && vm->state != VM_WITH && !(vm->state == VM_PAUSE && vm->pause_time >= 0))
+        music_stop_now();
     switch (vm->state) {
     case VM_SAY: {
         E.say_serial++;
-        if (E.time - E.autosave_t > 120.0f)
-            app_autosave();
+        if (E.time - E.autosave_t > 120.0f) {
+            u64 t0 = platform_us();
+            autosave(true);   /* written by the background thread */
+            FP.save_us += platform_us() - t0;
+        }
         if (AP.on)
             LOG("say: %s%s%s", vm->say_who, vm->say_who[0] ? ": " : "", vm->say_text);
         prepare_text();
@@ -1226,13 +1360,60 @@ static void rx_update(Input *in)
     rx_was_receiving = NET.receiving;
 }
 
+static void update_frame(const Input *in_real, float dt);
+static u64 perf_update_us;
+static u32 perf_report_frames;   /* frames after an advance still being reported */
+static bool perf_a;
+
 void app_update(const Input *in_real, float dt)
+{
+    memset(&FP, 0, sizeof(FP));
+    u64 t0 = platform_us();
+    update_frame(in_real, dt);
+    perf_update_us = platform_us() - t0;
+    perf_a = (in_real->down & KEY_A_) != 0;
+}
+
+/* The timing line for a frame (see app_render): every frame on which the
+ * story moved on and the two after it, and any slow frame. */
+static void perf_frame(u64 render_us)
+{
+    if (FP.advanced)
+        perf_report_frames = 3;
+#ifdef __3DS__
+    u64 total = perf_update_us + render_us;
+#else
+    u64 total = perf_update_us;   /* (the desktop's software renderer is no guide) */
+#endif
+    if (perf_report_frames == 0 && total < 20000 && !FP.tex_sync)
+        return;
+    const char *what = FP.advanced ? "advance" : perf_report_frames > 0 ? "after" : "slow";
+    if (perf_report_frames > 0)
+        perf_report_frames--;
+    PERF("frame %u %s%s: update %.2f ms, render %.2f ms; sync textures %u (%u KB, %.2f ms), "
+         "preloaded %u; music %.2f ms; save %.2f ms",
+         (unsigned)E.frame, what, perf_a ? " (A)" : "", perf_update_us / 1000.0, render_us / 1000.0,
+         (unsigned)FP.tex_sync, (unsigned)(FP.tex_sync_bytes >> 10), FP.tex_sync_us / 1000.0,
+         (unsigned)FP.tex_ready, FP.music_us / 1000.0, FP.save_us / 1000.0);
+}
+
+/* Desktop test runs that skip drawing still get their timing lines. */
+void app_frame_done_without_drawing(void) { perf_frame(0); }
+
+static void update_frame(const Input *in_real, float dt)
 {
     Input in_copy = *in_real;
     Input *in = &in_copy;
     autoplay_input(in, dt);
     E.time += dt;
     E.frame++;
+    texcache_pump();
+    if (predict_due) {   /* (the frame after the story moved on) */
+        predict_due = false;
+        run_prediction();
+    }
+    if (mstop.on && (mstop.t += dt) > 10.0f)
+        music_stop_now();
     video_update(dt);
     if (E.toast_t > 0)
         E.toast_t -= dt;
@@ -1345,8 +1526,10 @@ void app_minigame_done(int score)
 
 void app_render(void)
 {
+    u64 r0 = platform_us();
     float strength = app_strength();
     gfx_frame_begin();   /* (waits for the previous frame's GPU work) */
+    u64 r1 = platform_us();
     if (snap_pending) {
         thumb_valid = gfx_snapshot_read(thumb, THUMB_W, THUMB_H);
         snap_pending = false;
@@ -1388,5 +1571,8 @@ void app_render(void)
     gfx_target_bottom(0x1A1A24FF);
     ui_draw_bottom();
     ui_draw_opening(-1);
+    u64 r2 = platform_us();
     gfx_frame_end();
+    /* the time spent drawing, without the waits for the GPU and the screen */
+    perf_frame((r2 - r1) + (r1 - r0 > 2000 ? 0 : r1 - r0));
 }

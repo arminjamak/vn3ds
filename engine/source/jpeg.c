@@ -1030,3 +1030,5 @@ int jpeg_decode_rgb(const uint8_t *src, size_t len, uint8_t *dst, int w, int h)
     release(d);
     return r;
 }
+
+void jpeg_init(void) { init_tables(); }

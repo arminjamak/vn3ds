@@ -24,6 +24,10 @@ enum {
     JPEG_ERR_SIZE = -6,        /* image does not fit the destination */
 };
 
+/* Builds the decoder's tables. Call once before decoding on more than one
+ * thread (the decoder itself keeps no other shared state). */
+void jpeg_init(void);
+
 /* Width and height from the frame header. */
 int jpeg_size(const uint8_t *src, size_t len, int *w, int *h);
 

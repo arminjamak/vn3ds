@@ -16,11 +16,15 @@
 u32 __stacksize__ = 96 * 1024;
 
 static FILE *log_file;
+/* The log is written from the main thread and the background thread. */
+static LightLock log_lock;
+static bool log_lock_ready;
 
 const char *platform_root(void) { return ROOT; }
 bool platform_mkdir(const char *path) { return mkdir(path, 0777) == 0; }
 u32 platform_time(void) { return (u32)time(NULL); }
 u64 platform_ms(void) { return osGetTime(); }
+u64 platform_us(void) { return svcGetSystemTick() * 1000u / (SYSCLOCK_ARM11 / 1000u); }
 
 void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void *ud)
 {
@@ -34,7 +38,7 @@ void platform_list_dirs(const char *path, void (*cb)(const char *, void *), void
     closedir(d);
 }
 
-void platform_log(const char *fmt, ...)
+static void log_open(void)
 {
     if (!log_file) {
         /* keep the previous run's log: after a freeze it says where it stopped */
@@ -42,14 +46,79 @@ void platform_log(const char *fmt, ...)
         rename(ROOT "/log.txt", ROOT "/log.old.txt");
         log_file = fopen(ROOT "/log.txt", "w");
     }
-    if (!log_file)
-        return;
+}
+
+static void log_lock_take(void)
+{
+    if (!log_lock_ready) {
+        LightLock_Init(&log_lock);
+        log_lock_ready = true;
+    }
+    LightLock_Lock(&log_lock);
+}
+
+/* perf lines wait here until the background thread writes them out */
+static char perf_buf[24 * 1024];
+static size_t perf_len;
+static u32 perf_dropped;
+
+static void perf_write_locked(void)
+{
+    log_open();
+    if (log_file && perf_len) {
+        fwrite(perf_buf, 1, perf_len, log_file);
+        if (perf_dropped)
+            fprintf(log_file, "perf: (%u lines dropped, the buffer was full)\n", (unsigned)perf_dropped);
+        fflush(log_file);
+    }
+    perf_len = 0;
+    perf_dropped = 0;
+}
+
+void platform_log(const char *fmt, ...)
+{
+    log_lock_take();
+    perf_write_locked();   /* keep the lines in order */
+    if (log_file) {
+        va_list ap;
+        va_start(ap, fmt);
+        vfprintf(log_file, fmt, ap);
+        va_end(ap);
+        fputc('\n', log_file);
+        fflush(log_file);
+    }
+    LightLock_Unlock(&log_lock);
+}
+
+void platform_perf(const char *fmt, ...)
+{
+    char line[256];
+    int n = snprintf(line, sizeof(line), "perf %.3f: ", (double)osGetTime() / 1000.0);
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(log_file, fmt, ap);
+    n += vsnprintf(line + n, sizeof(line) - (size_t)n - 1, fmt, ap);
     va_end(ap);
-    fputc('\n', log_file);
-    fflush(log_file);
+    if (n > (int)sizeof(line) - 2)
+        n = (int)sizeof(line) - 2;
+    line[n++] = '\n';
+    log_lock_take();
+    if (perf_len + (size_t)n <= sizeof(perf_buf)) {
+        memcpy(perf_buf + perf_len, line, (size_t)n);
+        perf_len += (size_t)n;
+    } else {
+        perf_dropped++;
+    }
+    LightLock_Unlock(&log_lock);
+}
+
+/* Called by the background thread now and then (and at exit). */
+void platform_perf_flush(void)
+{
+    if (!perf_len)
+        return;
+    log_lock_take();
+    perf_write_locked();
+    LightLock_Unlock(&log_lock);
 }
 
 static u32 map_keys(u32 k)
@@ -157,6 +226,7 @@ int main(int argc, char **argv)
     app_shutdown();
     audio_exit();
     gfx_exit();
+    platform_perf_flush();
     if (log_file)
         fclose(log_file);
     return 0;
