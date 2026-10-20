@@ -67,6 +67,33 @@ def stars(d, n, ymax, seed=3, xmax=W, rmax=4):
         d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 230, 255))
 
 
+def sky_stars(scene, key, depth, count, size=6, box=(0, 0, W, 420), seed=3, faint=0):
+    """Stars that come out a little different every time (vn3ds.json anim
+    "stars"): the 3DS scatters `count` twinkling stars of up to `size`
+    virtual px in this layer's box, newly seeded at each showing. The baked
+    picture is what Ren'Py on a PC shows; two invisible corner pixels pin the
+    box. `faint` adds that many dim baked stars behind, the same on both."""
+    x0, y0, x1, y1 = box
+    if faint:
+        img, d = blank()
+        rng = np.random.default_rng(seed + 1000)
+        for _ in range(faint):
+            x, y = int(rng.integers(x0, x1)), int(rng.integers(y0, y1))
+            r = int(rng.integers(1, 3))
+            d.ellipse([x - r, y - r, x + r, y + r], fill=(235, 235, 255, 110))
+        scene.add(key + " faint", img, depth + 0.02)
+    img, d = blank()
+    rng = np.random.default_rng(seed)
+    for _ in range(count):
+        x, y = int(rng.integers(x0, x1)), int(rng.integers(y0, y1))
+        r = int(rng.integers(1, 4))
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 230, 255))
+    img.putpixel((x0, y0), (255, 255, 255, 1))
+    img.putpixel((x1 - 1, y1 - 1), (255, 255, 255, 1))
+    scene.add(key, img, depth, STARS(count, size))
+    return img
+
+
 def blank():
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     return img, ImageDraw.Draw(img)
@@ -134,6 +161,7 @@ PULSE = lambda low=0.45, period=4: {"type": "pulse", "a": low, "period": period}
 BREATHE = lambda amount=0.012, period=4.5: {"type": "breathe", "a": amount, "period": period}
 FALL = lambda dist=H, period=1.2: {"type": "fall", "a": dist, "period": period}
 RISE = lambda dist=H, period=12: {"type": "rise", "a": dist, "period": period}
+STARS = lambda count=80, size=6: {"type": "stars", "a": count, "b": size}
 
 
 # ---------------------------------------------------------------- scenes
@@ -333,10 +361,7 @@ def ward():
 def rooftop():
     back = gradient(W, H, (10, 12, 35), (45, 40, 90))
     s = Scene(back, 1.5)
-    st, d = s.new("stars", 1.5)
-    stars(d, 160, 420, seed=5)
-    tw, d = s.new("twinkle", 1.45, PULSE(0.1, 2.3))
-    stars(d, 60, 420, seed=6, rmax=5)
+    sky_stars(s, "stars", 1.48, 110, 6, (0, 0, W, 430), seed=5, faint=90)
     s.add("moonglow", light((1020, 140), 160, (210, 210, 240), 120), 1.3, PULSE(0.7, 8))
     moon, d = s.new("moon", 1.3)
     d.ellipse([985, 105, 1055, 175], fill=(240, 240, 250, 255))
@@ -431,7 +456,7 @@ def watch():
     win, d = s.new("round window", 0.85)
     d.ellipse([470, 120, 810, 460], fill=(25, 20, 30, 255))
     d.ellipse([490, 140, 790, 440], fill=(15, 18, 40, 255))
-    stars(d, 25, 300, seed=9)
+    sky_stars(s, "stars", 0.86, 16, 5, (536, 186, 744, 394), seed=9)
     room, d = s.new("aron's window", 0.9)
     d.rectangle([600, 300, 680, 370], fill=(255, 210, 130, 255))
     d.line([640, 300, 640, 370], fill=(80, 60, 40, 255), width=3)
@@ -553,10 +578,7 @@ def clinic():
 def earth():
     back = gradient(W, H, (5, 5, 20), (30, 20, 60))
     s = Scene(back, 1.5)
-    st, d = s.new("stars", 1.5)
-    stars(d, 220, H, seed=17)
-    tw, d = s.new("twinkle", 1.45, PULSE(0.1, 2.8))
-    stars(d, 80, H, seed=18, rmax=5)
+    sky_stars(s, "stars", 1.48, 170, 7, (0, 0, W, H), seed=17, faint=120)
     s.add("atmosphere", light((640, 900), 620, (90, 140, 230), 200), 0.95, PULSE(0.75, 7))
     planet, d = s.new("earth", 0.9, BREATHE(0.006, 9))
     d.ellipse([140, 420, 1140, 1420], fill=(40, 90, 170, 255))
@@ -805,6 +827,9 @@ def street_snow():
 
 def park_night():
     s = night_of(park, (1000, 90), [((150, 420), 0.3), ((1050, 400), 0.3)])
+    star_layer = Scene(Image.new("RGB", (W, H)))
+    sky_stars(star_layer, "stars", 1.38, 80, 6, (0, 0, W, 380), seed=67, faint=40)
+    s.layers[1:1] = star_layer.layers[1:]   # behind the clouds and hills
     tw, d = s.new("fireflies", 0.0, SWAY(10, 6, 5))
     rng = np.random.default_rng(65)
     for _ in range(25):
@@ -833,6 +858,9 @@ def ward_night():
 
 def rooftop_dawn():
     s = recolor(rooftop(), (1.4, 1.0, 0.9), (60, 30, 30))
+    for layer in s.layers:
+        if layer[3] and layer[3].get("type") == "stars":
+            layer[3] = STARS(35, 4)
     s.add("dawn", light((200, 560), 600, (255, 170, 110), 160), 1.2, PULSE(0.85, 12))
     return s
 
@@ -1034,8 +1062,7 @@ def staircase():
     """The dream: a glass staircase down into a calm sea, a lighthouse at the bottom."""
     back = gradient(W, H, (20, 30, 60), (40, 80, 120))
     s = Scene(back, 1.5)
-    st, d = s.new("stars", 1.5)
-    stars(d, 120, 300, seed=73)
+    sky_stars(s, "stars", 1.5, 90, 6, (0, 0, W, 320), seed=73, faint=50)
     sea, d = s.new("sea", 1.1, SWAY(4, 1, 12))
     d.rectangle([-20, 330, W + 20, H], fill=(30, 70, 110, 255))
     for y in range(350, H, 30):
@@ -1056,8 +1083,7 @@ def staircase():
 def lighthouse():
     back = gradient(W, H, (10, 15, 35), (30, 40, 70))
     s = Scene(back, 1.4)
-    st, d = s.new("stars", 1.4)
-    stars(d, 150, 450, seed=74)
+    sky_stars(s, "stars", 1.4, 110, 6, (0, 0, W, 450), seed=74, faint=60)
     sweep, d = s.new("beam", 0.6, SWAY(260, 0, 6))
     d.polygon([(640, 220), (1400, 120), (1400, 330)], fill=(255, 250, 200, 90))
     tower, d = s.new("tower", 0.4)
@@ -1130,8 +1156,7 @@ def supermarket():
 def bridge():
     back = gradient(W, H, (40, 40, 80), (120, 80, 110))
     s = Scene(back, 1.4)
-    st, d = s.new("stars", 1.4)
-    stars(d, 80, 250, seed=76)
+    sky_stars(s, "stars", 1.4, 70, 5, (0, 0, W, 260), seed=76, faint=30)
     city, d = s.new("far shore", 1.0)
     rng = np.random.default_rng(77)
     x = 0
@@ -1709,3 +1734,659 @@ def isolation():
 
 SCENES.update({"pov ambulance": pov_ambulance, "pov restraint": pov_restraint,
                "bg isolation": isolation})
+
+
+# ---------------------------------------------------------------- reverse angles
+# The same rooms seen from the other side. Each keeps its original's palette,
+# materials and light: whatever was on the left of the original is on the
+# right here, and the window the original faced is now behind the camera, so
+# its light falls into the shot as a patch on the floor and the far wall.
+# "door" and "corner" scenes are the original view filmed from the next room
+# or from behind something, with a soft foreground frame in front of the
+# screen, as if the documentary crew were standing just outside.
+
+def soft_shape(draw, color, alpha=255, blur=0):
+    """A transparent layer with shapes painted by `draw(d)` in one colour,
+    edges blurred without dark fringes (only the mask is blurred)."""
+    mask = Image.new("L", (W, H), 0)
+    draw(ImageDraw.Draw(mask))
+    if blur:
+        mask = mask.filter(ImageFilter.GaussianBlur(blur))
+    if alpha < 255:
+        mask = mask.point(lambda v: v * alpha // 255)
+    img = Image.new("RGBA", (W, H), tuple(color) + (0,))
+    img.putalpha(mask)
+    return img
+
+
+def window_patch(quad, color, alpha=90, panes=(2, 2), bar=14, blur=10):
+    """The light of a window behind the camera, thrown onto the room as a
+    skewed quad split into panes (quad: top-left, top-right, bottom-right,
+    bottom-left)."""
+    (ax, ay), (bx, by), (cx_, cy_), (dx, dy) = quad
+    nx, ny = panes
+
+    def lerp(p, q, t):
+        return (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
+
+    def draw(d):
+        for i in range(nx):
+            for j in range(ny):
+                pts = []
+                for u, v in ((i / nx, j / ny), ((i + 1) / nx, j / ny), ((i + 1) / nx, (j + 1) / ny),
+                             (i / nx, (j + 1) / ny)):
+                    top, bot = lerp((ax, ay), (bx, by), u), lerp((dx, dy), (cx_, cy_), u)
+                    pts.append(lerp(top, bot, v))
+                cxp = sum(p[0] for p in pts) / 4
+                cyp = sum(p[1] for p in pts) / 4
+                pts = [(cxp + (px - cxp) * (1 - bar / 200), cyp + (py - cyp) * (1 - bar / 200)) for px, py in pts]
+                d.polygon(pts, fill=255)
+    return soft_shape(draw, color, alpha, blur)
+
+
+def wood_floor(d, y0, color, line, step=80, lean=60):
+    d.rectangle([0, y0, W, H], fill=color)
+    for x in range(-lean, W + lean, step):
+        d.line([x, y0, x + lean, H], fill=line, width=3)
+
+
+def door_frame(wall, trim, opening, shade=0.85, leaf=None, extra=None, blur=2):
+    """The near wall around a doorway, in front of the screen: `opening` is
+    the (x0, y0, x1) of the gap the camera films through."""
+    x0, y0, x1 = opening
+    img, d = blank()
+    dark = tuple(int(c * shade) for c in wall) + (255,)
+    d.rectangle([0, 0, x0, H], fill=dark)
+    d.rectangle([x1, 0, W, H], fill=dark)
+    d.rectangle([x0, 0, x1, y0], fill=dark)
+    t = trim + (255,)
+    d.rectangle([x0 - 26, y0 - 26, x0, H], fill=t)
+    d.rectangle([x1, y0 - 26, x1 + 26, H], fill=t)
+    d.rectangle([x0 - 26, y0 - 26, x1 + 26, y0], fill=t)
+    if leaf:
+        d.polygon(leaf, fill=tuple(int(c * 0.95) for c in trim) + (255,))
+    if extra:
+        extra(d)
+    return img.filter(ImageFilter.GaussianBlur(blur)) if blur else img
+
+
+# -- kitchen ----------------------------------------------------------------
+
+def kitchen_reverse():
+    """From the counter, looking back: the table and chairs, the door to the
+    hallway (left), the fridge (right). The window is behind the camera on
+    the right, so its daylight lies across the floor on the right; the
+    coffee machine's corner pokes into the bottom left."""
+    back = gradient(W, H, (250, 236, 210), (230, 210, 180))
+    d = ImageDraw.Draw(back)
+    wood_floor(d, 500, (170, 130, 95), (150, 112, 80))
+    d.rectangle([0, 492, W, 502], fill=(215, 195, 165))   # skirting
+    s = Scene(back, 1.0)
+    hall, d = s.new("hallway", 1.05)
+    d.rectangle([120, 150, 330, 500], fill=(205, 182, 155, 255))
+    d.rectangle([120, 440, 330, 500], fill=(150, 112, 80, 255))
+    d.rounded_rectangle([250, 220, 300, 360], 18, fill=(60, 80, 120, 255))   # a coat on a hook
+    d.ellipse([268, 205, 282, 219], fill=(120, 90, 60, 255))
+    s.add("hall lamp", light((200, 200), 120, (255, 220, 160), 120), 1.04, PULSE(0.8, 7))
+    wall, d = s.new("wall things", 0.95)
+    d.rectangle([110, 140, 340, 500], outline=(255, 250, 240, 255), width=16)   # door frame
+    d.ellipse([590, 110, 690, 210], fill=(255, 255, 255, 255), outline=(150, 110, 80, 255), width=6)
+    d.line([640, 160, 640, 120], fill=(40, 40, 40, 255), width=4)             # 7:07
+    d.line([640, 160, 658, 128], fill=(40, 40, 40, 255), width=3)
+    d.rectangle([760, 150, 860, 280], fill=(255, 255, 250, 255), outline=(200, 180, 150, 255), width=3)
+    d.rectangle([760, 150, 860, 180], fill=(220, 90, 80, 255))
+    for k in range(12):
+        x, y = 768 + (k % 4) * 23, 190 + (k // 4) * 28
+        d.rectangle([x, y, x + 16, y + 20], outline=(200, 180, 150, 255), width=2)
+    fridge, d = s.new("fridge", 0.7)
+    d.rounded_rectangle([980, 100, 1190, 505], 16, fill=(242, 242, 236, 255))
+    d.line([985, 230, 1185, 230], fill=(200, 200, 195, 255), width=4)
+    d.rectangle([1000, 150, 1012, 210], fill=(190, 190, 185, 255))
+    d.rectangle([1000, 250, 1012, 330], fill=(190, 190, 185, 255))
+    d.rectangle([1060, 270, 1140, 330], fill=(250, 250, 250, 255), outline=(180, 180, 180, 255), width=2)
+    d.ellipse([1075, 282, 1095, 302], fill=(200, 70, 35, 255))    # a photo: her red hair
+    d.ellipse([1105, 282, 1125, 302], fill=(40, 40, 50, 255))     # his dark hair
+    for x, y, c in [(1050, 120, (230, 180, 60)), (1150, 160, (90, 150, 220)), (1120, 380, (120, 190, 120))]:
+        d.ellipse([x - 9, y - 9, x + 9, y + 9], fill=c + (255,))
+    s.add("daylight", window_patch([(760, 520), (1080, 520), (1230, 715), (840, 715)], (255, 245, 215), 80),
+          0.6, PULSE(0.8, 9))
+    bird, d = s.new("bird shadow", 0.59)   # the bird on the wire, its shadow perfectly still
+    d.ellipse([985, 600, 1015, 614], fill=(150, 120, 90, 160))
+    table, d = s.new("table", 0.35)
+    for x in (330, 950):   # chairs, left and right of the table
+        d.rounded_rectangle([x - 50, 330, x + 50, 470], 18, fill=(150, 105, 75, 255))
+        d.rectangle([x - 55, 470, x + 55, 488], fill=(140, 98, 70, 255))
+        d.rectangle([x - 48, 488, x - 38, 600], fill=(130, 90, 65, 255))
+        d.rectangle([x + 38, 488, x + 48, 600], fill=(130, 90, 65, 255))
+    d.rectangle([400, 440, 880, 466], fill=(190, 150, 110, 255))
+    d.rectangle([420, 466, 860, 480], fill=(165, 125, 90, 255))
+    for x in (430, 840):
+        d.rectangle([x, 480, x + 16, 610], fill=(150, 112, 80, 255))
+    d.ellipse([460, 424, 580, 448], fill=(245, 245, 250, 255))   # her plate
+    d.rounded_rectangle([760, 412, 795, 446], 6, fill=(240, 240, 245, 255))   # his cup
+    d.arc([785, 418, 805, 438], 270, 90, fill=(240, 240, 245, 255), width=5)
+    counter, d = s.new("counter corner", -0.2)
+    d.rectangle([0, 600, 300, H], fill=(190, 150, 110, 255))
+    d.rectangle([0, 585, 310, 605], fill=(150, 110, 80, 255))
+    d.rounded_rectangle([-40, 400, 110, 590], 12, fill=(60, 60, 70, 255))   # the coffee machine's side
+    d.ellipse([60, 430, 84, 454], fill=(120, 220, 255, 255))
+    s.layers[-1][1] = s.layers[-1][1].filter(ImageFilter.GaussianBlur(3))
+    s.add("indicator", light((72, 442), 45, (120, 220, 255), 150), -0.21, PULSE(0.3, 2))
+    s.add("dust", motes(101, 30, (255, 245, 220, 130), 3, 300, 700), -0.3, RISE(H, 36))
+    return s
+
+
+def kitchen_door():
+    """The kitchen filmed from the hallway, through its doorway."""
+    s = kitchen()
+    s.add("doorway", door_frame((236, 214, 190), (250, 245, 235), (250, 70, 1030),
+                                leaf=[(1056, 44), (1150, 0), (1150, H), (1056, H)],
+                                extra=lambda d: (d.rounded_rectangle([70, 180, 150, 420], 30, fill=(60, 80, 120, 255)),
+                                                 d.ellipse([100, 160, 120, 180], fill=(120, 90, 60, 255)))),
+          -0.25)
+    return s
+
+
+def kitchen_night_reverse():
+    return night_of(kitchen_reverse, (1000, 600), [((200, 220), 1.0), ((72, 442), -0.21)])
+
+
+# -- living room --------------------------------------------------------------
+
+def room_reverse():
+    """From the window, looking back into the living room: the sofa under
+    the lighthouse picture, the plant by its arm, the door to the hallway on
+    the right. The window is behind the camera on the left (its cross of
+    light lies on the floor); the bookshelf's end is the blurred edge right."""
+    back = gradient(W, H, (236, 214, 190), (200, 170, 140))
+    d = ImageDraw.Draw(back)
+    d.rectangle([0, 520, W, H], fill=(120, 84, 60))
+    for x in range(-60, W, 80):
+        d.line([x, 520, x + 60, H], fill=(104, 72, 52), width=3)
+    d.rectangle([975, 150, 1135, 520], fill=(205, 180, 150))   # doorway to the hallway
+    d.rectangle([975, 470, 1135, 520], fill=(104, 72, 52))
+    s = Scene(back, 1.0)
+    pic, d = s.new("lighthouse picture", 0.95)
+    d.rectangle([470, 140, 700, 300], fill=(250, 245, 235, 255))
+    d.rectangle([482, 152, 688, 288], fill=(40, 60, 100, 255))
+    d.rectangle([482, 230, 688, 288], fill=(40, 80, 120, 255))
+    d.polygon([(575, 230), (582, 185), (590, 185), (597, 230)], fill=(235, 235, 240, 255))
+    d.ellipse([580, 176, 592, 188], fill=(255, 240, 170, 255))
+    d.rectangle([965, 140, 1145, 520], outline=(250, 245, 235, 255), width=14)   # door frame
+    s.add("hall light", light((1055, 300), 130, (255, 220, 160), 110), 0.94, PULSE(0.8, 8))
+    s.add("daylight", window_patch([(60, 540), (430, 540), (520, 715), (40, 715)], (255, 250, 230), 85),
+          0.6, PULSE(0.85, 11))
+    sofa, d = s.new("sofa", 0.45)
+    d.rounded_rectangle([290, 330, 880, 450], 40, fill=(110, 140, 165, 255))
+    d.rounded_rectangle([270, 420, 900, 540], 30, fill=(100, 128, 152, 255))
+    for x in (290, 580):
+        d.rounded_rectangle([x + 20, 400, x + 290, 450], 20, fill=(125, 155, 180, 255))
+    d.rounded_rectangle([250, 380, 320, 540], 25, fill=(95, 120, 145, 255))
+    d.rounded_rectangle([850, 380, 920, 540], 25, fill=(95, 120, 145, 255))
+    d.rounded_rectangle([700, 360, 770, 410], 16, fill=(230, 180, 60, 255))   # a cushion
+    d.rectangle([290, 540, 305, 560], fill=(70, 50, 40, 255))
+    d.rectangle([865, 540, 880, 560], fill=(70, 50, 40, 255))
+    plant, d = s.new("plant", 0.42, SWAY(1, 0, 9))
+    d.ellipse([925, 470, 1015, 505], fill=(90, 140, 90, 255))
+    for k in range(5):
+        d.ellipse([935 + k * 14, 440 - (k % 2) * 10, 960 + k * 14, 485], fill=(70, 130, 80, 255))
+    d.rectangle([945, 490, 995, 545], fill=(170, 100, 70, 255))
+    table, d = s.new("coffee table", 0.2)
+    d.rounded_rectangle([420, 560, 780, 585], 8, fill=(150, 105, 70, 255))
+    d.rectangle([440, 585, 455, 650], fill=(120, 84, 60, 255))
+    d.rectangle([745, 585, 760, 650], fill=(120, 84, 60, 255))
+    d.polygon([(480, 560), (600, 556), (604, 548), (484, 552)], fill=(245, 240, 225, 255))   # the notebook
+    d.rounded_rectangle([680, 528, 710, 560], 6, fill=(240, 240, 245, 255))                # a mug
+    shelf, d = s.new("bookshelf end", -0.3)
+    d.rectangle([1190, 0, W, H], fill=(110, 70, 45, 255))
+    colors = [(200, 60, 60), (60, 120, 200), (230, 180, 60), (80, 160, 90), (150, 80, 170)]
+    for row in range(6):
+        y = 30 + row * 115
+        d.rectangle([1190, y + 100, W, y + 110], fill=(80, 50, 30, 255))
+        for k in range(2):
+            d.rectangle([1200 + k * 40, y + 20 + (k * 13) % 30, 1230 + k * 40, y + 100],
+                        fill=colors[(row + k) % 5] + (255,))
+    s.layers[-1][1] = s.layers[-1][1].filter(ImageFilter.GaussianBlur(5))
+    s.add("dust", motes(102, 40, (255, 240, 210, 150), 4), -0.3, RISE(H, 40))
+    return s
+
+
+def room_corner():
+    """The living room as in bg room, filmed from behind the plant: its
+    leaves blur across the left of the frame."""
+    s = room()
+    s.layers = [l for l in s.layers if l[0] != "plant"]
+    leaves, d = s.new("plant", -0.35, SWAY(3, 1, 9))
+    d.ellipse([-120, 560, 330, 820], fill=(80, 120, 80, 255))
+    for k, (x, y, r) in enumerate([(40, 470, 120), (180, 560, 100), (-30, 250, 130), (130, 330, 90),
+                                   (300, 660, 90), (-60, 640, 110)]):
+        d.ellipse([x - r, y - r * 0.6, x + r, y + r * 0.6], fill=((60, 115, 70), (75, 135, 85))[k % 2] + (255,))
+    s.layers[-1][1] = s.layers[-1][1].filter(ImageFilter.GaussianBlur(7))
+    return s
+
+
+def room_night_reverse():
+    return night_of(room_reverse, (280, 620), [((1055, 300), 0.94), ((880, 300), 0.4)])
+
+
+# -- bedroom -----------------------------------------------------------------
+
+def bedroom_reverse():
+    """From the window, looking at the door: the bed along the left (its
+    head at the right end), the open door with the hallway light, the 7:07
+    clock on the far nightstand. Dawn comes from the window behind the camera
+    on the right and lands on the wall beside the door."""
+    back = gradient(W, H, (90, 80, 120), (170, 130, 130))
+    d = ImageDraw.Draw(back)
+    d.rectangle([0, 540, W, H], fill=(80, 60, 70))
+    d.rectangle([640, 130, 860, 545], fill=(250, 230, 180))   # the doorway, hall beyond
+    s = Scene(back, 1.0)
+    s.add("hall light", light((750, 330), 260, (255, 220, 160), 120), 0.98, PULSE(0.8, 7))
+    frame, d = s.new("door frame", 0.9)
+    d.rectangle([622, 112, 878, 545], outline=(70, 55, 60, 255), width=20)
+    d.polygon([(860, 130), (960, 95), (960, 585), (860, 545)], fill=(110, 80, 70, 255))   # the open leaf
+    d.ellipse([930, 330, 946, 346], fill=(200, 170, 120, 255))
+    stand, d = s.new("nightstand", 0.75)
+    d.rectangle([40, 400, 160, 480], fill=(110, 80, 70, 255))
+    d.rounded_rectangle([60, 372, 140, 402], 6, fill=(30, 30, 40, 255))
+    d.text((70, 374), "7:07", fill=(255, 90, 90, 255), font=font(24))
+    s.add("dawn", window_patch([(1000, 190), (1240, 190), (1250, 470), (990, 470)], (255, 180, 110), 120),
+          0.88, PULSE(0.6, 6))
+    bed, d = s.new("bed", 0.35)
+    d.rounded_rectangle([-40, 450, 560, 650], 30, fill=(200, 200, 225, 255))
+    d.rounded_rectangle([-40, 480, 400, 610], 30, fill=(120, 140, 200, 255))
+    d.rounded_rectangle([400, 420, 530, 490], 25, fill=(245, 245, 255, 255))
+    d.rounded_rectangle([530, 360, 590, 660], 18, fill=(110, 80, 70, 255))
+    s.add("dust", motes(103, 50, (255, 230, 200, 140)), -0.25, RISE(H, 30))
+    return s
+
+
+def bedroom_night_reverse():
+    return night_of(bedroom_reverse, (1120, 330), [((100, 387), 0.75), ((750, 330), 0.98)])
+
+
+# -- cafe --------------------------------------------------------------------
+
+def cafe_reverse():
+    """From the window seats, looking at the bar: the espresso machine, the
+    chalk menu, the pastry case, the three tables now in front of the bar.
+    The big window (and its blue daylight) is behind the camera on the right."""
+    back = gradient(W, H, (120, 80, 60), (170, 120, 90))
+    d = ImageDraw.Draw(back)
+    d.rectangle([0, 540, W, H], fill=(90, 60, 45))
+    s = Scene(back, 1.0)
+    board, d = s.new("menu", 0.95)
+    d.rectangle([470, 90, 830, 230], fill=(40, 35, 30, 255), outline=(150, 110, 80, 255), width=6)
+    f = font(26)
+    for i, (a, b) in enumerate([("coffee", "3.20"), ("the same", "3.20"), ("tea", "2.80")]):
+        d.text((495, 102 + i * 40), a, fill=(240, 235, 220, 255), font=f)
+        d.text((740, 102 + i * 40), b, fill=(240, 235, 220, 255), font=f)
+    bar, d = s.new("bar", 0.7)
+    d.rectangle([80, 370, 1200, 395], fill=(200, 170, 140, 255))
+    d.rectangle([90, 395, 1190, 560], fill=(90, 60, 45, 255))
+    for x in range(120, 1180, 120):
+        d.rectangle([x, 410, x + 90, 545], outline=(110, 75, 55, 255), width=4)
+    d.rounded_rectangle([250, 260, 430, 372], 12, fill=(190, 190, 200, 255))   # espresso machine
+    d.rectangle([280, 330, 400, 345], fill=(80, 80, 90, 255))
+    for x in (300, 370):
+        d.rectangle([x, 345, x + 14, 360], fill=(60, 60, 70, 255))
+    for k in range(4):
+        d.rounded_rectangle([470 + k * 8, 352 - k * 20, 520 + k * 8, 372 - k * 20], 6,
+                            fill=(250, 250, 250, 255))   # stacked cups
+    d.rectangle([720, 290, 980, 372], fill=(200, 225, 230, 255), outline=(160, 140, 120, 255), width=4)
+    for k, c in enumerate([(220, 160, 80), (180, 110, 70), (230, 190, 120), (200, 140, 90)]):
+        d.ellipse([740 + k * 58, 335, 790 + k * 58, 365], fill=c + (255,))
+    lamps, d = s.new("lamps", 0.6, SWAY(2, 0, 5))
+    for x in range(0, W, 200):
+        d.line([x + 100, 0, x + 100, 70], fill=(40, 30, 25, 255), width=3)
+        d.ellipse([x + 80, 70, x + 120, 110], fill=(255, 220, 150, 255))
+    for i, x in enumerate(range(0, W, 200)):
+        s.add(f"lampglow{i}", light((x + 100, 95), 90, (255, 210, 140), 110), 0.62, PULSE(0.6, 3 + i % 3))
+    s.add("window light", window_patch([(760, 580), (1200, 580), (1280, 715), (700, 715)], (170, 200, 235),
+                                       70, panes=(3, 1)), 0.4, PULSE(0.85, 10))
+    tables, d = s.new("tables", 0.45)
+    for x in (180, 640, 1100):
+        d.ellipse([x - 95, 520, x + 95, 556], fill=(200, 170, 140, 255))
+        d.rectangle([x - 8, 552, x + 8, 660], fill=(60, 45, 35, 255))
+        d.rounded_rectangle([x - 6, 496, x + 26, 524], 6, fill=(250, 250, 250, 255))
+    s.add("steam", motes(104, 16, (255, 255, 255, 110), 4, 220, 520), 0.4, RISE(160, 6))
+    return s
+
+
+def cafe_corner():
+    """The cafe as in bg cafe, filmed from the end of the bar: the espresso
+    machine and the cups blur across the bottom right."""
+    s = cafe()
+    bar, d = s.new("bar end", -0.3)
+    d.rectangle([880, 560, W, H], fill=(90, 60, 45, 255))
+    d.rectangle([860, 535, W, 565], fill=(200, 170, 140, 255))
+    d.rounded_rectangle([1060, 300, 1320, 545], 18, fill=(190, 190, 200, 255))
+    d.rectangle([1090, 440, 1320, 470], fill=(80, 80, 90, 255))
+    for k in range(3):
+        d.rounded_rectangle([900 + k * 10, 500 - k * 30, 980 + k * 10, 535 - k * 30], 8, fill=(250, 250, 250, 255))
+    s.layers[-1][1] = s.layers[-1][1].filter(ImageFilter.GaussianBlur(5))
+    s.add("machine steam", motes(105, 14, (255, 255, 255, 120), 6, 160, 320), -0.32, RISE(180, 4))
+    return s
+
+
+# -- park --------------------------------------------------------------------
+
+def park_reverse():
+    """Up the hill, looking back the way the path came: the town on the
+    horizon, the big tree now on the left, the pond and its bench on the
+    right, the path running down the middle towards the camera."""
+    back = gradient(W, H, (110, 170, 235), (225, 240, 250))
+    s = Scene(back, 1.4)
+    clouds, d = s.new("clouds", 1.3, SWAY(12, 0, 25))
+    for x, y in [(200, 120), (700, 70), (1080, 110)]:
+        for dx, dy, r in [(0, 0, 40), (40, 10, 30), (-40, 12, 28)]:
+            d.ellipse([x + dx - r, y + dy - r, x + dx + r, y + dy + r], fill=(255, 255, 255, 255))
+    town, d = s.new("town", 1.0)
+    rng = np.random.default_rng(111)
+    x = 0
+    while x < W:
+        bw, bh = int(rng.integers(50, 110)), int(rng.integers(50, 140))
+        c = tuple(int(v) for v in rng.integers(150, 190, 3))
+        d.rectangle([x, 430 - bh, x + bw, 440], fill=(c[0] - 20, c[1] - 5, c[2] + 20, 255))
+        x += bw + 4
+    far, d = s.new("far hill", 0.9)
+    d.ellipse([480, 400, 1580, 920], fill=(110, 170, 90, 255))
+    near, d = s.new("near hill", 0.5)
+    d.ellipse([-320, 430, 780, 960], fill=(95, 155, 80, 255))
+    d.ellipse([700, 470, 1500, 960], fill=(100, 160, 85, 255))
+    d.polygon([(520, H), (760, H), (660, 450), (625, 450)], fill=(220, 200, 150, 255))
+    pond, d = s.new("pond", 0.45, SWAY(2, 0, 8))
+    d.ellipse([790, 520, 1160, 590], fill=(120, 175, 220, 255))
+    d.arc([840, 535, 960, 565], 200, 340, fill=(200, 230, 250, 255), width=3)
+    bench, d = s.new("bench", 0.32)
+    d.rectangle([900, 470, 1080, 488], fill=(110, 75, 50, 255))
+    d.rectangle([900, 500, 1080, 516], fill=(110, 75, 50, 255))
+    for x in (910, 1060):
+        d.rectangle([x, 488, x + 10, 545], fill=(70, 70, 75, 255))
+    d.rectangle([1170, 330, 1180, 560], fill=(60, 60, 65, 255))   # lamp post
+    d.ellipse([1158, 310, 1192, 340], fill=(250, 240, 200, 255))
+    trees, d = s.new("trees", 0.3, SWAY(2, 0, 6))
+    for x, y, r in [(1130, 330, 90), (230, 300, 110), (400, 360, 70)]:
+        d.rectangle([x - 12, y, x + 12, y + 180], fill=(110, 75, 50, 255))
+        d.ellipse([x - r, y - r, x + r, y + r // 2], fill=(60, 130, 70, 255))
+    grass, d = s.new("grass", -0.2, SWAY(2, 0, 4))
+    rng = np.random.default_rng(112)
+    for _ in range(90):
+        x = int(rng.integers(0, W))
+        d.line([x, H, x + int(rng.integers(-10, 10)), H - int(rng.integers(20, 50))], fill=(70, 140, 70, 255), width=4)
+    return s
+
+
+# -- ward --------------------------------------------------------------------
+
+def ward_reverse():
+    """From the window, looking at the door: the bed is on the right now
+    (the monitor at its left end), the visitor's chair, the whiteboard, the
+    door with its little window, a sink in the corner. The barred window is
+    behind the camera on the left; its striped light lies on the floor."""
+    back = gradient(W, H, (215, 235, 232), (190, 215, 212))
+    d = ImageDraw.Draw(back)
+    d.rectangle([250, 150, 470, 520], fill=(175, 198, 205))       # the door
+    d.rectangle([310, 200, 410, 280], fill=(235, 245, 245))       # its little window
+    d.line([360, 200, 360, 280], fill=(175, 198, 205), width=4)
+    d.rectangle([430, 330, 450, 345], fill=(150, 160, 170))
+    s = Scene(back, 1.0)
+    s.add("corridor light", light((360, 240), 90, (240, 255, 255), 120), 0.98, PULSE(0.85, 0.4))
+    board, d = s.new("whiteboard", 0.95)
+    d.rectangle([495, 100, 665, 235], fill=(250, 250, 250, 255), outline=(160, 170, 175, 255), width=5)
+    f = font(22)
+    for i, line in enumerate(["Nurse: Hale", "Dr: Okafor", "Today: rest"]):
+        d.text((510, 112 + i * 38), line, fill=(70, 100, 150, 255), font=f)
+    sink, d = s.new("sink", 0.9)
+    d.rectangle([40, 300, 170, 400], fill=(225, 235, 238, 255), outline=(170, 180, 185, 255), width=4)
+    d.rectangle([30, 420, 190, 445], fill=(240, 245, 245, 255))
+    d.rectangle([60, 445, 160, 520], fill=(200, 210, 212, 255))
+    floor, d = s.new("floor", 0.6)
+    d.rectangle([0, 520, W, H], fill=(170, 190, 195, 255))
+    for x in range(0, W, 120):
+        d.line([x + 40, 520, x, H], fill=(160, 180, 185, 255), width=2)
+    s.add("window light", window_patch([(30, 545), (560, 545), (640, 715), (0, 715)], (235, 245, 250), 110,
+                                       panes=(6, 1), bar=30), 0.58, PULSE(0.85, 9))
+    chair, d = s.new("chair", 0.4)
+    d.rounded_rectangle([520, 400, 620, 470], 12, fill=(120, 150, 180, 255))
+    d.rectangle([515, 470, 625, 488], fill=(110, 140, 170, 255))
+    for x in (522, 610):
+        d.rectangle([x, 488, x + 8, 570], fill=(150, 160, 170, 255))
+    mon, d = s.new("monitor", 0.3)
+    d.rectangle([700, 330, 760, 560], fill=(200, 205, 210, 255))
+    d.rounded_rectangle([680, 250, 780, 330], 10, fill=(60, 70, 80, 255))
+    s.add("heartbeat", Image.new("RGBA", (W, H)), 0.29)
+    hb = s.layers[-1][1]
+    ImageDraw.Draw(hb).line([690, 300, 715, 300, 725, 270, 740, 320, 750, 300, 770, 300],
+                            fill=(90, 255, 140, 255), width=3)
+    s.layers[-1][3] = PULSE(0.2, 1.1)
+    bed, d = s.new("bed", 0.25)
+    d.rounded_rectangle([800, 400, 1300, 600], 20, fill=(250, 250, 250, 255))
+    d.rounded_rectangle([1110, 380, 1260, 440], 22, fill=(235, 240, 245, 255))   # pillow, head end
+    d.rectangle([800, 380, 830, 640], fill=(160, 170, 180, 255))
+    d.rectangle([840, 450, 1290, 470], fill=(200, 210, 220, 255))   # folded blanket edge
+    s.add("fluorescent", light((640, 0), 600, (230, 255, 255), 60), -0.1, PULSE(0.85, 0.35))
+    return s
+
+
+def ward_door():
+    """The ward room as in bg ward, filmed from the corridor through its
+    open door."""
+    s = ward()
+    s.add("doorway", door_frame((200, 215, 212), (150, 175, 185), (210, 60, 1060),
+                                leaf=[(1086, 34), (1200, -20), (1200, H), (1086, H)],
+                                extra=lambda d: d.rectangle([1110, 160, 1180, 250], fill=(225, 238, 238, 255))),
+          -0.25)
+    return s
+
+
+def ward_night_reverse():
+    s = recolor(ward_reverse(), (0.3, 0.38, 0.5), (0, 5, 15))
+    s.add("monitor glow", light((730, 290), 140, (90, 255, 160), 120), 0.29, PULSE(0.4, 1.1))
+    s.add("corridor glow", light((360, 240), 110, (230, 250, 255), 110), 0.97, PULSE(0.8, 5))
+    return s
+
+
+# -- office ------------------------------------------------------------------
+
+def office_reverse():
+    """From the glass wall, looking back into the office: the long low
+    sideboard under the seven principle cards, the doorway on the left, the
+    table with the model world now on the right under its lamp. The glass
+    wall is behind the camera on the left; its daylight floods the floor."""
+    back = gradient(W, H, (246, 244, 238), (226, 222, 214))
+    d = ImageDraw.Draw(back)
+    d.rectangle([140, 90, 330, 470], fill=(240, 238, 232))        # a doorway to a brighter room
+    d.rectangle([140, 90, 330, 470], outline=(215, 210, 200), width=6)
+    s = Scene(back, 0.9)
+    s.add("next room", light((235, 260), 160, (255, 255, 245), 110), 0.88, PULSE(0.9, 9))
+    cards, d = s.new("principles", 0.8)
+    cols = [(230, 120, 40), (120, 160, 210), (200, 200, 195), (60, 60, 60), (150, 190, 140),
+            (230, 190, 90), (190, 150, 190)]
+    for k, c in enumerate(cols):
+        x = 450 + k * 100
+        d.rectangle([x, 95, x + 80, 175], fill=(252, 252, 250, 255), outline=(220, 216, 208, 255), width=3)
+        d.ellipse([x + 22, 117, x + 58, 153], fill=c + (255,))
+    floor, d = s.new("floor", 0.5)
+    d.rectangle([0, 470, W, H], fill=(205, 198, 186, 255))
+    s.add("daylight", window_patch([(0, 490), (520, 490), (600, 715), (0, 715)], (255, 255, 245), 120,
+                                   panes=(4, 1), bar=18), 0.48, PULSE(0.9, 12))
+    side, d = s.new("sideboard", 0.45)
+    d.rectangle([420, 380, 1180, 470], fill=(250, 250, 248, 255))
+    d.line([420, 425, 1180, 425], fill=(225, 222, 215, 255), width=3)
+    d.rounded_rectangle([470, 330, 600, 380], 6, fill=(235, 230, 220, 255))   # the radio
+    for x in range(482, 545, 10):
+        d.line([x, 338, x, 372], fill=(180, 175, 165, 255), width=3)
+    d.ellipse([555, 340, 585, 370], fill=(230, 120, 40, 255))
+    d.rounded_rectangle([660, 320, 700, 380], 4, fill=(60, 60, 60, 255))      # a calculator
+    d.rounded_rectangle([1050, 300, 1090, 380], 14, fill=(200, 200, 195, 255))  # a vase
+    table, d = s.new("table", 0.15)
+    d.rectangle([700, 440, 1210, 460], fill=(60, 60, 60, 255))
+    for x in (730, 1190):
+        d.rectangle([x, 460, x + 10, 640], fill=(60, 60, 60, 255))
+    model, d = s.new("model world", 0.05, BREATHE(0.03, 5))
+    d.ellipse([860, 330, 1020, 440], outline=(240, 120, 40, 255), width=5)
+    d.ellipse([900, 360, 980, 410], fill=(240, 120, 40, 255))
+    lamp, d = s.new("lamp", -0.1)
+    d.line([940, 0, 940, 200], fill=(70, 70, 70, 255), width=3)
+    d.chord([890, 190, 990, 250], 180, 360, fill=(70, 70, 70, 255))
+    s.add("lamplight", light((940, 260), 180, (255, 230, 170), 90), -0.12, PULSE(0.8, 6))
+    return s
+
+
+# -- street ------------------------------------------------------------------
+
+def street_reverse():
+    """From across the road, looking back: the other row of houses (the
+    cafe's blue window among them), the same wire, now on the far side with
+    the same three birds, evenly spaced, at the right."""
+    back = gradient(W, H, (150, 180, 220), (230, 220, 210))
+    s = Scene(back, 1.4)
+    town, d = s.new("buildings", 0.8)
+    rng = np.random.default_rng(12)
+    xs, k = 0, 0
+    while xs < W:
+        bw, bh = int(rng.integers(140, 260)), int(rng.integers(220, 420))
+        col = tuple(int(c) for c in rng.integers(120, 200, 3)) + (255,)
+        d.rectangle([xs, 520 - bh, xs + bw, 520], fill=col)
+        for wx in range(xs + 20, xs + bw - 30, 50):
+            for wy in range(520 - bh + 30, 420, 60):
+                d.rectangle([wx, wy, wx + 26, wy + 34], fill=(240, 240, 220, 255))
+        if k == 1:   # the cafe's front, its window and name
+            d.rectangle([xs + 10, 430, xs + bw - 10, 520], fill=(60, 90, 110, 255))
+            d.rectangle([xs + 10, 405, xs + bw - 10, 428], fill=(120, 80, 60, 255))
+            d.text((xs + 18, 405), "THE SAME CAFE", fill=(255, 230, 180, 255), font=font(18))
+        else:
+            d.rectangle([xs + bw // 2 - 20, 450, xs + bw // 2 + 20, 520], fill=(90, 70, 60, 255))
+        xs += bw + 6
+        k += 1
+    wire, d = s.new("wire", 0.55)
+    d.line([0, 260, W, 230], fill=(40, 40, 40, 255), width=3)
+    for bx in (870, 910, 950):
+        y = 260 - 30 * (bx + 15) / W
+        d.ellipse([bx, y - 9, bx + 30, y + 11], fill=(50, 50, 60, 255))
+    road, d = s.new("road", 0.35)
+    d.rectangle([0, 520, W, H], fill=(90, 90, 100, 255))
+    for x in range(0, W, 160):
+        d.rectangle([x + 40, 590, x + 120, 602], fill=(230, 230, 230, 255))
+    curb, d = s.new("sidewalk", -0.15)
+    d.rectangle([0, 668, W, H], fill=(175, 172, 168, 255))
+    d.rectangle([0, 660, W, 670], fill=(150, 148, 145, 255))
+    return s
+
+
+def street_rain_reverse():
+    s = recolor(street_reverse(), (0.7, 0.75, 0.85))
+    s.add("rain far", rain(161, 200, (170, 180, 210, 160), 18), 0.6, FALL(H, 1.5))
+    s.add("rain near", rain(162, 120, (200, 210, 235, 210), 34), -0.3, FALL(H, 0.85))
+    return s
+
+
+def street_dusk_reverse():
+    s = recolor(street_reverse(), (1.0, 0.7, 0.6), (20, 0, 10))
+    s.add("sunset", light((640, 520), 700, (255, 150, 90), 110), 1.1, PULSE(0.8, 10))
+    return s
+
+
+# -- angel ops -----------------------------------------------------------------
+
+def command_reverse():
+    """Angel ops from the wall of worlds, looking back at the deck: tiers of
+    operators at their desks, the great doors, the commander's dais in the
+    middle. The screens are behind the camera; their colours (and the red
+    alarm) wash over the floor."""
+    back = gradient(W, H, (255, 250, 235), (225, 210, 170))
+    d = ImageDraw.Draw(back)
+    for x in range(-200, W + 200, 90):
+        d.line([W // 2, 260, x, H], fill=(230, 210, 160), width=2)
+    d.rounded_rectangle([540, 90, 740, 470], 90, fill=(250, 240, 210), outline=(220, 180, 80), width=6)
+    d.line([640, 120, 640, 470], fill=(220, 180, 80), width=4)
+    for x in (380, 900):
+        d.rectangle([x - 25, 0, x + 25, 470], fill=(245, 240, 225))
+    s = Scene(glow(back, (W // 2, 280), 360, (60, 50, 20), 0.5), 1.2)
+    floor, d = s.new("floor", 0.65)
+    d.rectangle([0, 470, W, H], fill=(235, 220, 180, 255))
+    for depth, y, n, size in [(0.6, 470, 9, 0.6), (0.45, 530, 7, 0.8), (0.3, 600, 5, 1.0)]:
+        tier, d = s.new(f"tier{depth}", depth)
+        span = W / n
+        for k in range(n):
+            if depth == 0.3 and k == n // 2:
+                continue   # the gap in front of the dais
+            x = span * (k + 0.5)
+            w = 60 * size
+            d.ellipse([x - w * 0.9, y - 70 * size, x - 6, y - 15 * size], fill=(255, 255, 255, 200))
+            d.ellipse([x + 6, y - 70 * size, x + w * 0.9, y - 15 * size], fill=(255, 255, 255, 200))
+            d.rectangle([x - 14 * size, y - 55 * size, x + 14 * size, y - 10 * size], fill=(250, 245, 230, 255))
+            d.ellipse([x - 12 * size, y - 80 * size, x + 12 * size, y - 56 * size], fill=(240, 225, 215, 255))
+            d.ellipse([x - 16 * size, y - 92 * size, x + 16 * size, y - 84 * size], outline=(255, 210, 90, 255),
+                      width=2)
+            d.rounded_rectangle([x - w, y - 20 * size, x + w, y + 30 * size], 6, fill=(240, 228, 195, 255),
+                                outline=(220, 180, 80, 255), width=2)
+            d.rectangle([x - w * 0.5, y - 18 * size, x + w * 0.5, y - 8 * size], fill=(170, 200, 230, 255))
+    dais, d = s.new("dais", 0.15)
+    d.rounded_rectangle([470, 590, 810, 640], 12, fill=(245, 238, 215, 255), outline=(220, 180, 80, 255), width=5)
+    d.rectangle([500, 640, 780, 700], fill=(235, 225, 195, 255))
+    screens = soft_shape(lambda dd: [dd.ellipse([x - 260, 560, x + 260, 820], fill=255) for x in (200, 640, 1080)],
+                         (150, 190, 230), 70, 40)
+    s.add("screen light", screens, 0.1, PULSE(0.7, 5))
+    s.add("alarm", light((760, 690), 260, (230, 60, 60), 90), 0.05, PULSE(0.15, 1.4))
+    s.add("radiance", light((W // 2, 280), 520, (255, 240, 200), 60), -0.2, PULSE(0.6, 7))
+    return s
+
+
+# -- clinic ------------------------------------------------------------------
+
+def clinic_reverse():
+    """Dr. Okafor's room from the poster wall, looking back: her desk under
+    the window on the left, the patient's armchair (with tissues) in the
+    middle, the plant by the door, the door with her name on the right. The
+    bookshelf and the breathing poster are behind the camera."""
+    back = gradient(W, H, (230, 225, 215), (205, 200, 190))
+    d = ImageDraw.Draw(back)
+    d.rectangle([110, 100, 430, 320], fill=(250, 250, 245))
+    back.paste(gradient(290, 190, (170, 210, 240), (215, 235, 245)), (125, 115))
+    d.line([270, 115, 270, 305], fill=(250, 250, 245), width=10)
+    d.rectangle([0, 500, W, H], fill=(140, 120, 100))
+    s = Scene(back, 1.0)
+    s.add("window light", light((270, 210), 260, (255, 250, 230), 90), 0.95, PULSE(0.85, 9))
+    door, d = s.new("door", 0.9)
+    d.rectangle([930, 140, 1120, 505], fill=(170, 130, 95, 255), outline=(120, 90, 60, 255), width=8)
+    d.rectangle([975, 200, 1075, 235], fill=(240, 235, 220, 255))
+    d.text((985, 204), "Dr. Okafor", fill=(70, 70, 70, 255), font=font(20))
+    d.ellipse([1085, 320, 1103, 338], fill=(210, 190, 120, 255))
+    d.rectangle([1170, 150, 1180, 505], fill=(90, 65, 45, 255))     # coat rack
+    d.rounded_rectangle([1145, 170, 1205, 320], 24, fill=(200, 120, 70, 255))
+    desk, d = s.new("desk", 0.55)
+    d.rounded_rectangle([90, 400, 520, 440], 8, fill=(110, 80, 55, 255))
+    d.rectangle([110, 440, 135, 560], fill=(90, 65, 45, 255))
+    d.rectangle([475, 440, 500, 560], fill=(90, 65, 45, 255))
+    d.rounded_rectangle([230, 330, 330, 400], 20, fill=(70, 70, 80, 255))   # her chair's back
+    d.rectangle([380, 380, 460, 400], fill=(245, 245, 235, 255))           # notes
+    plant, d = s.new("plant", 0.5, BREATHE(0.02, 4))
+    d.ellipse([820, 400, 880, 460], fill=(90, 150, 90, 255))
+    d.rectangle([835, 455, 865, 500], fill=(160, 100, 70, 255))
+    chair, d = s.new("armchair", 0.25)
+    d.rounded_rectangle([560, 380, 800, 520], 40, fill=(120, 150, 180, 255))
+    d.rounded_rectangle([540, 470, 820, 580], 30, fill=(110, 140, 170, 255))
+    for x in (550, 790):
+        d.rectangle([x, 580, x + 14, 630], fill=(80, 80, 90, 255))
+    d.rectangle([830, 520, 900, 600], fill=(110, 80, 55, 255))           # side table
+    d.rounded_rectangle([838, 490, 892, 520], 6, fill=(140, 190, 220, 255))
+    d.polygon([(855, 490), (865, 474), (875, 490)], fill=(255, 255, 255, 255))
+    return s
+
+
+SCENES.update({
+    "bg kitchen reverse": kitchen_reverse, "bg kitchen door": kitchen_door,
+    "bg kitchen night reverse": kitchen_night_reverse,
+    "bg room reverse": room_reverse, "bg room corner": room_corner,
+    "bg room night reverse": room_night_reverse,
+    "bg bedroom reverse": bedroom_reverse, "bg bedroom night reverse": bedroom_night_reverse,
+    "bg cafe reverse": cafe_reverse, "bg cafe corner": cafe_corner,
+    "bg park reverse": park_reverse,
+    "bg ward reverse": ward_reverse, "bg ward door": ward_door, "bg ward night reverse": ward_night_reverse,
+    "bg office reverse": office_reverse,
+    "bg street reverse": street_reverse, "bg street rain reverse": street_rain_reverse,
+    "bg street dusk reverse": street_dusk_reverse,
+    "bg command reverse": command_reverse, "bg clinic reverse": clinic_reverse,
+})

@@ -1071,8 +1071,8 @@ class Song:
     def _write_meta(self, path):
         """examples/music/build/<cue>.json: tempo and bar length, for check.py and score.md."""
         import json
-        os.makedirs(BUILD_DIR, exist_ok=True)
-        name = os.path.splitext(os.path.basename(path))[0]
+        name = meta_name(path)
+        os.makedirs(os.path.dirname(os.path.join(BUILD_DIR, name + ".json")), exist_ok=True)
         with open(os.path.join(BUILD_DIR, name + ".json"), "w") as f:
             json.dump(dict(bpm=self.bpm, bars=self.bars, beats_per_bar=self.bpb, bar_s=self.bar_s,
                            length_s=self.length_s, tracks=sorted(self.tracks)), f)
@@ -1193,11 +1193,23 @@ GAME_AUDIO = os.path.join(os.path.dirname(HERE), "demo", "game", "audio")
 _OUT_OVERRIDE = []
 
 
-def out(name):
-    """Where a cue renders to: the game's audio folder."""
+def out(name, sub=None):
+    """Where a cue renders to: the game's audio folder (or a subfolder of it,
+    e.g. out("quiz", sub="minigame") -> audio/minigame/quiz.ogg)."""
     if _OUT_OVERRIDE:
         name = _OUT_OVERRIDE[-1]
+    if sub:
+        name = sub + "/" + name
     return os.path.join(GAME_AUDIO, name + ".ogg")
+
+
+def meta_name(path):
+    """A cue's name relative to the game's audio folder, without extension
+    ('theme', 'minigame/quiz'): build/<name>.json holds its tempo grid."""
+    rel = os.path.relpath(os.path.abspath(path), GAME_AUDIO)
+    if rel.startswith(".."):
+        rel = os.path.basename(path)
+    return os.path.splitext(rel)[0].replace(os.sep, "/")
 
 
 def reseed(seed=1):

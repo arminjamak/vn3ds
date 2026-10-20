@@ -1,5 +1,8 @@
 """Sanity-check the rendered cues: python3 examples/music/check.py [cue ...]
 
+Names as for render.py: `theme`, `minigame/quiz`, or `minigame` for all the
+minigame loops (levelled against the median of the main score).
+
 For every audio/<cue>.ogg: duration, peak (clipping), RMS and loudness
 against the median of all cues, and the loop seam: the level step from the
 last 50 ms into the first 50 ms must lie within the range of the steps across
@@ -19,7 +22,9 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from vnsynth import BUILD_DIR, GAME_AUDIO, SR, k_weight  # noqa: E402
+from vnsynth import BUILD_DIR, GAME_AUDIO, SR, k_weight, meta_name  # noqa: E402
+
+SUBFOLDERS = ("minigame",)
 
 
 def decode(path):
@@ -47,7 +52,7 @@ def analyse(path):
     # across every internal bar line (a downbeat after a decaying bar is
     # normal; a dropout or a sudden wall of sound is not).
     step = lvl(head) - lvl(tail)
-    meta = os.path.join(BUILD_DIR, os.path.splitext(os.path.basename(path))[0] + ".json")
+    meta = os.path.join(BUILD_DIR, meta_name(path) + ".json")
     bar_s = json.load(open(meta))["bar_s"] if os.path.exists(meta) else None
     inner = []
     if bar_s:
@@ -76,12 +81,29 @@ def analyse(path):
                 clip=int((np.abs(x) > 0.995).sum()))
 
 
+def loops_in(sub):
+    """The looping cues of a subfolder (those with a tempo grid in build/; sound effects have none)."""
+    folder = os.path.join(GAME_AUDIO, sub)
+    return sorted(sub + "/" + f[:-4] for f in os.listdir(folder)
+                  if f.endswith(".ogg") and os.path.exists(os.path.join(BUILD_DIR, sub, f[:-4] + ".json")))
+
+
 def main():
-    names = sys.argv[1:] or sorted(f[:-4] for f in os.listdir(GAME_AUDIO) if f.endswith(".ogg"))
+    # names: 'theme', 'minigame/quiz', or a subfolder ('minigame') for all its loops
+    args = sys.argv[1:]
+    names = []
+    for a in args:
+        names += loops_in(a) if a in SUBFOLDERS else [a]
+    main_cues = sorted(f[:-4] for f in os.listdir(GAME_AUDIO) if f.endswith(".ogg"))
+    names = names or main_cues
     rows = {n: analyse(os.path.join(GAME_AUDIO, n + ".ogg")) for n in names}
-    med = np.median([r["rms"] for r in rows.values()])
-    kmed = np.median([r["lufs"] for r in rows.values()])
-    print(f"{'cue':<22}{'dur':>7}{'peak':>7}{'rms':>7}{'d':>6}{'krms':>7}{'d':>6}{'seam':>7}{'tail':>6}{'jump':>6}{'1-3k':>6}{'>6k':>6}  flags")
+    ref = rows
+    if any("/" in n for n in names):
+        # cues in a subfolder are levelled against the main score
+        ref = {n: rows.get(n) or analyse(os.path.join(GAME_AUDIO, n + ".ogg")) for n in main_cues}
+    med = np.median([r["rms"] for r in ref.values()])
+    kmed = np.median([r["lufs"] for r in ref.values()])
+    print(f"{'cue':<26}{'dur':>7}{'peak':>7}{'rms':>7}{'d':>6}{'krms':>7}{'d':>6}{'seam':>7}{'tail':>6}{'jump':>6}{'1-3k':>6}{'>6k':>6}  flags")
     bad = 0
     for n, r in rows.items():
         flags = []
@@ -98,7 +120,7 @@ def main():
         if not 30 <= r["dur"] <= 66:
             flags.append("LENGTH")
         bad += bool(flags)
-        print(f"{n:<22}{r['dur']:7.1f}{r['peak']:7.1f}{r['rms']:7.1f}{r['rms'] - med:+6.1f}{r['lufs']:7.1f}"
+        print(f"{n:<26}{r['dur']:7.1f}{r['peak']:7.1f}{r['rms']:7.1f}{r['rms'] - med:+6.1f}{r['lufs']:7.1f}"
               f"{r['lufs'] - kmed:+6.1f}{r['seam']:+7.1f}{r['tail']:+6.1f}{r['jump']:6.1f}{r['vband']:6.1f}{r['hi']:6.1f}  {' '.join(flags)}")
     print(f"median rms {med:.1f} dBFS; {bad} cue(s) flagged")
 

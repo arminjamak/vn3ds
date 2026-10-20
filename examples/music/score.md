@@ -94,6 +94,55 @@ cue.
 | `the_record` | the record closes | aron (unresolved), light (broken off) | Farewell Blues | F# minor | 60 | 64.0 s (16 bars) |
 39
 
+## Minigames
+
+The seven minigames have their own loops and sound effects in
+`cues/minigame/`, rendered into `../demo/game/audio/minigame/` (the engine
+plays them by name, e.g. `minigame/tower_3`). Shared helpers live in
+`cues/minigame/_mg.py` (exact tempo grid, pizzicato, bubble, hungry bass,
+beat kick, crush/dive); `_tower.py` builds the four tower tiers.
+
+    python3 examples/music/render.py minigame            # all minigame loops + sfx
+    python3 examples/music/render.py minigame/lantern    # one of them
+    python3 examples/music/check.py minigame             # loops, levelled against the main score
+
+Every minigame loop is a whole number of bars to the sample (`exact_bpm()`
+nudges the tempo by at most a few thousandths of a BPM so the bars fill whole
+128-sample blocks).
+
+| cue (`cues/minigame/<name>.py`) | game | motifs | samples | key | BPM | loop |
+|---|---|---|---|---|---|---|
+| `quiz` | The Big Questions | aron, aron_rising, clock (+ tick-tock) | April Showers | E dorian | 84 | 45.7 s (16 bars) |
+| `miso` | Miso's Hunt | miso (minor, pizzicato), aron, system (crushed) | Ogopogo | D minor, swing | 104 | 36.9 s (16 bars) |
+| `draw` | Echo of a Shape | aron + its echo, light's last turn | My Buddy | C lydian | 64 | 45.0 s (12 bars) |
+| `lantern` | Lantern Rhythm | lantern (in every section), aron answered | My Buddy | E major | 96 exactly | 40.000 s = 1 280 000 samples (16 bars) |
+| `snake` | Crown of the Worm | system (as bubbles), aron (grinning) | Krooked Blues, Ogopogo | G dorian | 116 | 33.1 s (16 bars) |
+| `tower_1`..`tower_4` | The Tower, tiers 1-4 | aron_rising; tier 4 ends on light | Wooden Soldiers (tiers 2-4) | D minor | 100 / 112 / 124 / 138 | 38.4 / 42.9 / 46.5 / 41.7 s (16 / 20 / 24 / 24 bars) |
+| `invaders` | The Hungry Sky | system (fanfare), lantern, ashveil (bass strings) | Wooden Soldiers, St. Louis Blues | B minor | 120 | 48.0 s (24 bars) |
+| `invaders_boss` | the energy vampire | ashveil_box, ashveil (as the bass line), lantern | St. Louis Blues | C minor | 96 | 40.0 s (16 bars) |
+
+`lantern` is a rhythm-game grid: beat 1 of bar 1 is sample 0, a warm kick on
+every beat, and the density rises every 4 bars (quarters, eighths,
+syncopation, fuller). Don't change its tempo or length without the chart.
+
+Sound effects (`cues/minigame/sfx.py`, one generator for all 117 clips: the
+115 in `sfx_requests.md` (shared, quiz, tower, draw, lantern, snake, miso,
+invaders) plus the leaderboard's `board_tick` and `board_land`).
+Each is a function registered with `@sfx(loudness, peak)`, written in its
+game's key and timbre: the tower in D minor (vibes, plucks, wood), draw in C
+lydian (felt piano, glass, paper), lantern in E major (its hit bells on E5,
+pitched per lane at runtime), snake in G dorian (bubbles, bit-crush, dives),
+Miso in D minor (pizzicato and the synthesized cat), invaders in B minor and
+the boss in C minor (choir, glass, the hungry voice). Each starts on its
+first sample with a short ramp, ends on an exact zero, gets the score's soft
+top end, and is levelled by loudness with a peak ceiling (transients gently
+limited); rapid ones (steps, ticks, clicks) sit 8-12 dB lower. Every clip has
+its own random seed, so `SFX=tower_,draw_ python3 examples/music/render.py
+minigame/sfx` re-renders just those and matches a full render. The ffmpeg
+Vorbis encoder here only writes stereo, so they are dual mono (the engine
+folds them to mono), padded with a little silence because the encoder can
+drop a final partial block.
+
 ## The motifs
 
 All motifs live in `MOTIFS` in vnsynth.py as scale degrees, so each cue

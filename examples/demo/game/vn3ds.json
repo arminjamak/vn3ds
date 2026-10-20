@@ -295,16 +295,16 @@
     "depth": 1.5
    },
    {
-    "file": "layers/bg rooftop/1-stars.png",
+    "file": "layers/bg rooftop/1-stars faint.png",
     "depth": 1.5
    },
    {
-    "file": "layers/bg rooftop/2-twinkle.png",
-    "depth": 1.45,
+    "file": "layers/bg rooftop/2-stars.png",
+    "depth": 1.48,
     "anim": {
-     "type": "pulse",
-     "a": 0.1,
-     "period": 2.3
+     "type": "stars",
+     "a": 110,
+     "b": 6
     }
    },
    {
@@ -475,11 +475,20 @@
     "depth": 0.85
    },
    {
-    "file": "layers/bg watch/2-aron's window.png",
+    "file": "layers/bg watch/2-stars.png",
+    "depth": 0.86,
+    "anim": {
+     "type": "stars",
+     "a": 16,
+     "b": 5
+    }
+   },
+   {
+    "file": "layers/bg watch/3-aron's window.png",
     "depth": 0.9
    },
    {
-    "file": "layers/bg watch/3-his light.png",
+    "file": "layers/bg watch/4-his light.png",
     "depth": 0.88,
     "anim": {
      "type": "pulse",
@@ -488,19 +497,19 @@
     }
    },
    {
-    "file": "layers/bg watch/4-beams.png",
+    "file": "layers/bg watch/5-beams.png",
     "depth": 0.5
    },
    {
-    "file": "layers/bg watch/5-floor.png",
+    "file": "layers/bg watch/6-floor.png",
     "depth": 0.25
    },
    {
-    "file": "layers/bg watch/6-boxes.png",
+    "file": "layers/bg watch/7-boxes.png",
     "depth": -0.1
    },
    {
-    "file": "layers/bg watch/7-embers.png",
+    "file": "layers/bg watch/8-embers.png",
     "depth": -0.3,
     "anim": {
      "type": "rise",
@@ -761,16 +770,16 @@
     "depth": 1.5
    },
    {
-    "file": "layers/bg earth/1-stars.png",
+    "file": "layers/bg earth/1-stars faint.png",
     "depth": 1.5
    },
    {
-    "file": "layers/bg earth/2-twinkle.png",
-    "depth": 1.45,
+    "file": "layers/bg earth/2-stars.png",
+    "depth": 1.48,
     "anim": {
-     "type": "pulse",
-     "a": 0.1,
-     "period": 2.8
+     "type": "stars",
+     "a": 170,
+     "b": 7
     }
    },
    {
@@ -1423,7 +1432,20 @@
     "depth": 1.4
    },
    {
-    "file": "layers/bg park night/1-clouds.png",
+    "file": "layers/bg park night/1-stars faint.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg park night/2-stars.png",
+    "depth": 1.38,
+    "anim": {
+     "type": "stars",
+     "a": 80,
+     "b": 6
+    }
+   },
+   {
+    "file": "layers/bg park night/3-clouds.png",
     "depth": 1.3,
     "anim": {
      "type": "sway",
@@ -1433,15 +1455,15 @@
     }
    },
    {
-    "file": "layers/bg park night/2-far hill.png",
+    "file": "layers/bg park night/4-far hill.png",
     "depth": 0.9
    },
    {
-    "file": "layers/bg park night/3-near hill.png",
+    "file": "layers/bg park night/5-near hill.png",
     "depth": 0.5
    },
    {
-    "file": "layers/bg park night/4-trees.png",
+    "file": "layers/bg park night/6-trees.png",
     "depth": 0.3,
     "anim": {
      "type": "sway",
@@ -1451,7 +1473,7 @@
     }
    },
    {
-    "file": "layers/bg park night/5-grass.png",
+    "file": "layers/bg park night/7-grass.png",
     "depth": -0.2,
     "anim": {
      "type": "sway",
@@ -1461,7 +1483,7 @@
     }
    },
    {
-    "file": "layers/bg park night/6-moonlight.png",
+    "file": "layers/bg park night/8-moonlight.png",
     "depth": 1.0,
     "anim": {
      "type": "pulse",
@@ -1470,7 +1492,7 @@
     }
    },
    {
-    "file": "layers/bg park night/7-light0.png",
+    "file": "layers/bg park night/9-light0.png",
     "depth": 0.3,
     "anim": {
      "type": "pulse",
@@ -1479,7 +1501,7 @@
     }
    },
    {
-    "file": "layers/bg park night/8-light1.png",
+    "file": "layers/bg park night/10-light1.png",
     "depth": 0.3,
     "anim": {
      "type": "pulse",
@@ -1488,7 +1510,7 @@
     }
    },
    {
-    "file": "layers/bg park night/9-fireflies.png",
+    "file": "layers/bg park night/11-fireflies.png",
     "depth": 0.0,
     "anim": {
      "type": "sway",
@@ -1606,16 +1628,16 @@
     "depth": 1.5
    },
    {
-    "file": "layers/bg rooftop dawn/1-stars.png",
+    "file": "layers/bg rooftop dawn/1-stars faint.png",
     "depth": 1.5
    },
    {
-    "file": "layers/bg rooftop dawn/2-twinkle.png",
-    "depth": 1.45,
+    "file": "layers/bg rooftop dawn/2-stars.png",
+    "depth": 1.48,
     "anim": {
-     "type": "pulse",
-     "a": 0.1,
-     "period": 2.3
+     "type": "stars",
+     "a": 35,
+     "b": 4
     }
    },
    {
@@ -2010,11 +2032,20 @@
     "depth": 1.5
    },
    {
-    "file": "layers/bg staircase/1-stars.png",
-    "depth": 1.5
+    "file": "layers/bg staircase/1-stars faint.png",
+    "depth": 1.52
    },
    {
-    "file": "layers/bg staircase/2-sea.png",
+    "file": "layers/bg staircase/2-stars.png",
+    "depth": 1.5,
+    "anim": {
+     "type": "stars",
+     "a": 90,
+     "b": 6
+    }
+   },
+   {
+    "file": "layers/bg staircase/3-sea.png",
     "depth": 1.1,
     "anim": {
      "type": "sway",
@@ -2024,11 +2055,11 @@
     }
    },
    {
-    "file": "layers/bg staircase/3-lighthouse.png",
+    "file": "layers/bg staircase/4-lighthouse.png",
     "depth": 1.2
    },
    {
-    "file": "layers/bg staircase/4-three flickers.png",
+    "file": "layers/bg staircase/5-three flickers.png",
     "depth": 1.2,
     "anim": {
      "type": "pulse",
@@ -2037,39 +2068,39 @@
     }
    },
    {
-    "file": "layers/bg staircase/5-step0.png",
+    "file": "layers/bg staircase/6-step0.png",
     "depth": -0.3
    },
    {
-    "file": "layers/bg staircase/6-step1.png",
+    "file": "layers/bg staircase/7-step1.png",
     "depth": -0.12999999999999998
    },
    {
-    "file": "layers/bg staircase/7-step2.png",
+    "file": "layers/bg staircase/8-step2.png",
     "depth": 0.040000000000000036
    },
    {
-    "file": "layers/bg staircase/8-step3.png",
+    "file": "layers/bg staircase/9-step3.png",
     "depth": 0.21000000000000002
    },
    {
-    "file": "layers/bg staircase/9-step4.png",
+    "file": "layers/bg staircase/10-step4.png",
     "depth": 0.38000000000000006
    },
    {
-    "file": "layers/bg staircase/10-step5.png",
+    "file": "layers/bg staircase/11-step5.png",
     "depth": 0.55
    },
    {
-    "file": "layers/bg staircase/11-step6.png",
+    "file": "layers/bg staircase/12-step6.png",
     "depth": 0.72
    },
    {
-    "file": "layers/bg staircase/12-step7.png",
+    "file": "layers/bg staircase/13-step7.png",
     "depth": 0.8900000000000001
    },
    {
-    "file": "layers/bg staircase/13-step8.png",
+    "file": "layers/bg staircase/14-step8.png",
     "depth": 1.06
    }
   ],
@@ -2079,11 +2110,20 @@
     "depth": 1.4
    },
    {
-    "file": "layers/bg lighthouse/1-stars.png",
-    "depth": 1.4
+    "file": "layers/bg lighthouse/1-stars faint.png",
+    "depth": 1.42
    },
    {
-    "file": "layers/bg lighthouse/2-beam.png",
+    "file": "layers/bg lighthouse/2-stars.png",
+    "depth": 1.4,
+    "anim": {
+     "type": "stars",
+     "a": 110,
+     "b": 6
+    }
+   },
+   {
+    "file": "layers/bg lighthouse/3-beam.png",
     "depth": 0.6,
     "anim": {
      "type": "sway",
@@ -2093,11 +2133,11 @@
     }
    },
    {
-    "file": "layers/bg lighthouse/3-tower.png",
+    "file": "layers/bg lighthouse/4-tower.png",
     "depth": 0.4
    },
    {
-    "file": "layers/bg lighthouse/4-lamp.png",
+    "file": "layers/bg lighthouse/5-lamp.png",
     "depth": 0.38,
     "anim": {
      "type": "pulse",
@@ -2106,7 +2146,7 @@
     }
    },
    {
-    "file": "layers/bg lighthouse/5-rocks.png",
+    "file": "layers/bg lighthouse/6-rocks.png",
     "depth": -0.2
    }
   ],
@@ -2204,15 +2244,24 @@
     "depth": 1.4
    },
    {
-    "file": "layers/bg bridge/1-stars.png",
-    "depth": 1.4
+    "file": "layers/bg bridge/1-stars faint.png",
+    "depth": 1.42
    },
    {
-    "file": "layers/bg bridge/2-far shore.png",
+    "file": "layers/bg bridge/2-stars.png",
+    "depth": 1.4,
+    "anim": {
+     "type": "stars",
+     "a": 70,
+     "b": 5
+    }
+   },
+   {
+    "file": "layers/bg bridge/3-far shore.png",
     "depth": 1.0
    },
    {
-    "file": "layers/bg bridge/3-river.png",
+    "file": "layers/bg bridge/4-river.png",
     "depth": 0.7,
     "anim": {
      "type": "sway",
@@ -2222,17 +2271,8 @@
     }
    },
    {
-    "file": "layers/bg bridge/4-railing.png",
+    "file": "layers/bg bridge/5-railing.png",
     "depth": -0.15
-   },
-   {
-    "file": "layers/bg bridge/5-dust.png",
-    "depth": -0.3,
-    "anim": {
-     "type": "rise",
-     "a": 720,
-     "period": 34
-    }
    }
   ],
   "bg forest": [
@@ -3076,16 +3116,16 @@
     "depth": 1.5
    },
    {
-    "file": "layers/pov sky/1-stars.png",
+    "file": "layers/pov sky/1-stars faint.png",
     "depth": 1.5
    },
    {
-    "file": "layers/pov sky/2-twinkle.png",
-    "depth": 1.45,
+    "file": "layers/pov sky/2-stars.png",
+    "depth": 1.48,
     "anim": {
-     "type": "pulse",
-     "a": 0.1,
-     "period": 2.3
+     "type": "stars",
+     "a": 110,
+     "b": 6
     }
    },
    {
@@ -3575,6 +3615,1258 @@
      "a": 0.85,
      "period": 0.4
     }
+   }
+  ],
+  "bg kitchen reverse": [
+   {
+    "file": "layers/bg kitchen reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen reverse/1-hallway.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/bg kitchen reverse/2-hall lamp.png",
+    "depth": 1.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg kitchen reverse/3-wall things.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg kitchen reverse/4-fridge.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg kitchen reverse/5-daylight.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg kitchen reverse/6-bird shadow.png",
+    "depth": 0.59
+   },
+   {
+    "file": "layers/bg kitchen reverse/7-table.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg kitchen reverse/8-counter corner.png",
+    "depth": -0.2
+   },
+   {
+    "file": "layers/bg kitchen reverse/9-indicator.png",
+    "depth": -0.21,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg kitchen reverse/10-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 36
+    }
+   }
+  ],
+  "bg kitchen door": [
+   {
+    "file": "layers/bg kitchen door/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen door/1-bird.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/bg kitchen door/2-counter.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg kitchen door/3-coffee.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg kitchen door/4-steam.png",
+    "depth": 0.15,
+    "anim": {
+     "type": "rise",
+     "a": 140,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg kitchen door/5-indicator.png",
+    "depth": 0.24,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg kitchen door/6-doorway.png",
+    "depth": -0.25
+   }
+  ],
+  "bg kitchen night reverse": [
+   {
+    "file": "layers/bg kitchen night reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg kitchen night reverse/1-hallway.png",
+    "depth": 1.05
+   },
+   {
+    "file": "layers/bg kitchen night reverse/2-hall lamp.png",
+    "depth": 1.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/3-wall things.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg kitchen night reverse/4-fridge.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg kitchen night reverse/5-daylight.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/6-bird shadow.png",
+    "depth": 0.59
+   },
+   {
+    "file": "layers/bg kitchen night reverse/7-table.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg kitchen night reverse/8-counter corner.png",
+    "depth": -0.2
+   },
+   {
+    "file": "layers/bg kitchen night reverse/9-indicator.png",
+    "depth": -0.21,
+    "anim": {
+     "type": "pulse",
+     "a": 0.3,
+     "period": 2
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/10-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 36
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/11-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/12-light0.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg kitchen night reverse/13-light1.png",
+    "depth": -0.21,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 5
+    }
+   }
+  ],
+  "bg room reverse": [
+   {
+    "file": "layers/bg room reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg room reverse/1-lighthouse picture.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg room reverse/2-hall light.png",
+    "depth": 0.94,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg room reverse/3-daylight.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg room reverse/4-sofa.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg room reverse/5-plant.png",
+    "depth": 0.42,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room reverse/6-coffee table.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg room reverse/7-bookshelf end.png",
+    "depth": -0.3
+   },
+   {
+    "file": "layers/bg room reverse/8-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 40
+    }
+   }
+  ],
+  "bg room corner": [
+   {
+    "file": "layers/bg room corner/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg room corner/1-clouds.png",
+    "depth": 1.25,
+    "anim": {
+     "type": "sway",
+     "x": 6,
+     "y": 0,
+     "period": 18
+    }
+   },
+   {
+    "file": "layers/bg room corner/2-window.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg room corner/3-bookshelf.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg room corner/4-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 40
+    }
+   },
+   {
+    "file": "layers/bg room corner/5-plant.png",
+    "depth": -0.35,
+    "anim": {
+     "type": "sway",
+     "x": 3,
+     "y": 1,
+     "period": 9
+    }
+   }
+  ],
+  "bg room night reverse": [
+   {
+    "file": "layers/bg room night reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg room night reverse/1-lighthouse picture.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg room night reverse/2-hall light.png",
+    "depth": 0.94,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/3-daylight.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/4-sofa.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg room night reverse/5-plant.png",
+    "depth": 0.42,
+    "anim": {
+     "type": "sway",
+     "x": 1,
+     "y": 0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/6-coffee table.png",
+    "depth": 0.2
+   },
+   {
+    "file": "layers/bg room night reverse/7-bookshelf end.png",
+    "depth": -0.3
+   },
+   {
+    "file": "layers/bg room night reverse/8-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 40
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/9-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/10-light0.png",
+    "depth": 0.94,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg room night reverse/11-light1.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 5
+    }
+   }
+  ],
+  "bg bedroom reverse": [
+   {
+    "file": "layers/bg bedroom reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bedroom reverse/1-hall light.png",
+    "depth": 0.98,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg bedroom reverse/2-door frame.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg bedroom reverse/3-nightstand.png",
+    "depth": 0.75
+   },
+   {
+    "file": "layers/bg bedroom reverse/4-dawn.png",
+    "depth": 0.88,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg bedroom reverse/5-bed.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg bedroom reverse/6-dust.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 30
+    }
+   }
+  ],
+  "bg bedroom night reverse": [
+   {
+    "file": "layers/bg bedroom night reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg bedroom night reverse/1-hall light.png",
+    "depth": 0.98,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 7
+    }
+   },
+   {
+    "file": "layers/bg bedroom night reverse/2-door frame.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg bedroom night reverse/3-nightstand.png",
+    "depth": 0.75
+   },
+   {
+    "file": "layers/bg bedroom night reverse/4-dawn.png",
+    "depth": 0.88,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg bedroom night reverse/5-bed.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg bedroom night reverse/6-dust.png",
+    "depth": -0.25,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 30
+    }
+   },
+   {
+    "file": "layers/bg bedroom night reverse/7-moonlight.png",
+    "depth": 1.0,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg bedroom night reverse/8-light0.png",
+    "depth": 0.75,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg bedroom night reverse/9-light1.png",
+    "depth": 0.98,
+    "anim": {
+     "type": "pulse",
+     "a": 0.75,
+     "period": 5
+    }
+   }
+  ],
+  "bg cafe reverse": [
+   {
+    "file": "layers/bg cafe reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg cafe reverse/1-menu.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg cafe reverse/2-bar.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/bg cafe reverse/3-lamps.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/4-lampglow0.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/5-lampglow1.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/6-lampglow2.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/7-lampglow3.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/8-lampglow4.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/9-lampglow5.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/10-lampglow6.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/11-window light.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg cafe reverse/12-tables.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg cafe reverse/13-steam.png",
+    "depth": 0.4,
+    "anim": {
+     "type": "rise",
+     "a": 160,
+     "period": 6
+    }
+   }
+  ],
+  "bg cafe corner": [
+   {
+    "file": "layers/bg cafe corner/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg cafe corner/1-lamps.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/2-lampglow0.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/3-lampglow1.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/4-lampglow2.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/5-lampglow3.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/6-lampglow4.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/7-lampglow5.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/8-lampglow6.png",
+    "depth": 0.62,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 3
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/9-floor.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg cafe corner/10-tables.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg cafe corner/11-steam.png",
+    "depth": 0.1,
+    "anim": {
+     "type": "rise",
+     "a": 200,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg cafe corner/12-bar end.png",
+    "depth": -0.3
+   },
+   {
+    "file": "layers/bg cafe corner/13-machine steam.png",
+    "depth": -0.32,
+    "anim": {
+     "type": "rise",
+     "a": 180,
+     "period": 4
+    }
+   }
+  ],
+  "bg park reverse": [
+   {
+    "file": "layers/bg park reverse/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg park reverse/1-clouds.png",
+    "depth": 1.3,
+    "anim": {
+     "type": "sway",
+     "x": 12,
+     "y": 0,
+     "period": 25
+    }
+   },
+   {
+    "file": "layers/bg park reverse/2-town.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg park reverse/3-far hill.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg park reverse/4-near hill.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg park reverse/5-pond.png",
+    "depth": 0.45,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 8
+    }
+   },
+   {
+    "file": "layers/bg park reverse/6-bench.png",
+    "depth": 0.32
+   },
+   {
+    "file": "layers/bg park reverse/7-trees.png",
+    "depth": 0.3,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/bg park reverse/8-grass.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "sway",
+     "x": 2,
+     "y": 0,
+     "period": 4
+    }
+   }
+  ],
+  "bg ward reverse": [
+   {
+    "file": "layers/bg ward reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ward reverse/1-corridor light.png",
+    "depth": 0.98,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.4
+    }
+   },
+   {
+    "file": "layers/bg ward reverse/2-whiteboard.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg ward reverse/3-sink.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg ward reverse/4-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ward reverse/5-window light.png",
+    "depth": 0.58,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg ward reverse/6-chair.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg ward reverse/7-monitor.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg ward reverse/8-heartbeat.png",
+    "depth": 0.29,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward reverse/9-bed.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg ward reverse/10-fluorescent.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.35
+    }
+   }
+  ],
+  "bg ward door": [
+   {
+    "file": "layers/bg ward door/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ward door/1-bars.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg ward door/2-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ward door/3-bed.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg ward door/4-monitor.png",
+    "depth": 0.05
+   },
+   {
+    "file": "layers/bg ward door/5-heartbeat.png",
+    "depth": 0.04,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward door/6-fluorescent.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.35
+    }
+   },
+   {
+    "file": "layers/bg ward door/7-doorway.png",
+    "depth": -0.25
+   }
+  ],
+  "bg ward night reverse": [
+   {
+    "file": "layers/bg ward night reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg ward night reverse/1-corridor light.png",
+    "depth": 0.98,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.4
+    }
+   },
+   {
+    "file": "layers/bg ward night reverse/2-whiteboard.png",
+    "depth": 0.95
+   },
+   {
+    "file": "layers/bg ward night reverse/3-sink.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg ward night reverse/4-floor.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg ward night reverse/5-window light.png",
+    "depth": 0.58,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg ward night reverse/6-chair.png",
+    "depth": 0.4
+   },
+   {
+    "file": "layers/bg ward night reverse/7-monitor.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg ward night reverse/8-heartbeat.png",
+    "depth": 0.29,
+    "anim": {
+     "type": "pulse",
+     "a": 0.2,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward night reverse/9-bed.png",
+    "depth": 0.25
+   },
+   {
+    "file": "layers/bg ward night reverse/10-fluorescent.png",
+    "depth": -0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 0.35
+    }
+   },
+   {
+    "file": "layers/bg ward night reverse/11-monitor glow.png",
+    "depth": 0.29,
+    "anim": {
+     "type": "pulse",
+     "a": 0.4,
+     "period": 1.1
+    }
+   },
+   {
+    "file": "layers/bg ward night reverse/12-corridor glow.png",
+    "depth": 0.97,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 5
+    }
+   }
+  ],
+  "bg office reverse": [
+   {
+    "file": "layers/bg office reverse/0-back.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg office reverse/1-next room.png",
+    "depth": 0.88,
+    "anim": {
+     "type": "pulse",
+     "a": 0.9,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg office reverse/2-principles.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg office reverse/3-floor.png",
+    "depth": 0.5
+   },
+   {
+    "file": "layers/bg office reverse/4-daylight.png",
+    "depth": 0.48,
+    "anim": {
+     "type": "pulse",
+     "a": 0.9,
+     "period": 12
+    }
+   },
+   {
+    "file": "layers/bg office reverse/5-sideboard.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg office reverse/6-table.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg office reverse/7-model world.png",
+    "depth": 0.05,
+    "anim": {
+     "type": "breathe",
+     "a": 0.03,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg office reverse/8-lamp.png",
+    "depth": -0.1
+   },
+   {
+    "file": "layers/bg office reverse/9-lamplight.png",
+    "depth": -0.12,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 6
+    }
+   }
+  ],
+  "bg street reverse": [
+   {
+    "file": "layers/bg street reverse/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street reverse/1-buildings.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/bg street reverse/2-wire.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg street reverse/3-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street reverse/4-sidewalk.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg street reverse/5-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg street rain reverse": [
+   {
+    "file": "layers/bg street rain reverse/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street rain reverse/1-buildings.png",
+    "depth": 0.8
+   },
+   {
+    "file": "layers/bg street rain reverse/2-wire.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg street rain reverse/3-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street rain reverse/4-sidewalk.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg street rain reverse/5-rain far.png",
+    "depth": 0.6,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 1.5
+    }
+   },
+   {
+    "file": "layers/bg street rain reverse/6-rain near.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "fall",
+     "a": 720,
+     "period": 0.85
+    }
+   }
+  ],
+  "bg street dusk reverse": [
+   {
+    "file": "layers/bg street dusk reverse/0-back.png",
+    "depth": 1.4
+   },
+   {
+    "file": "layers/bg street dusk reverse/1-buildings.png",
+    "depth": 0.8,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 0.8,
+     "period": 13
+    }
+   },
+   {
+    "file": "layers/bg street dusk reverse/2-wire.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg street dusk reverse/3-road.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/bg street dusk reverse/4-sidewalk.png",
+    "depth": -0.15
+   },
+   {
+    "file": "layers/bg street dusk reverse/5-sunset.png",
+    "depth": 1.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.8,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/bg street dusk reverse/6-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
+    }
+   }
+  ],
+  "bg command reverse": [
+   {
+    "file": "layers/bg command reverse/0-back.png",
+    "depth": 1.2
+   },
+   {
+    "file": "layers/bg command reverse/1-floor.png",
+    "depth": 0.65
+   },
+   {
+    "file": "layers/bg command reverse/2-tier0.6.png",
+    "depth": 0.6
+   },
+   {
+    "file": "layers/bg command reverse/3-tier0.45.png",
+    "depth": 0.45
+   },
+   {
+    "file": "layers/bg command reverse/4-tier0.3.png",
+    "depth": 0.3
+   },
+   {
+    "file": "layers/bg command reverse/5-dais.png",
+    "depth": 0.15
+   },
+   {
+    "file": "layers/bg command reverse/6-screen light.png",
+    "depth": 0.1,
+    "anim": {
+     "type": "pulse",
+     "a": 0.7,
+     "period": 5
+    }
+   },
+   {
+    "file": "layers/bg command reverse/7-alarm.png",
+    "depth": 0.05,
+    "anim": {
+     "type": "pulse",
+     "a": 0.15,
+     "period": 1.4
+    }
+   },
+   {
+    "file": "layers/bg command reverse/8-radiance.png",
+    "depth": -0.2,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 7
+    }
+   }
+  ],
+  "bg clinic reverse": [
+   {
+    "file": "layers/bg clinic reverse/0-back.png",
+    "depth": 1.0
+   },
+   {
+    "file": "layers/bg clinic reverse/1-window light.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "pulse",
+     "a": 0.85,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/bg clinic reverse/2-door.png",
+    "depth": 0.9
+   },
+   {
+    "file": "layers/bg clinic reverse/3-desk.png",
+    "depth": 0.55
+   },
+   {
+    "file": "layers/bg clinic reverse/4-plant.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "breathe",
+     "a": 0.02,
+     "period": 4
+    }
+   },
+   {
+    "file": "layers/bg clinic reverse/5-armchair.png",
+    "depth": 0.25
    }
   ]
  },

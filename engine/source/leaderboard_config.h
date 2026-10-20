@@ -20,6 +20,12 @@
 #endif
 #endif
 
+/* The desktop test build never talks to the real server on its own (bots
+ * would fill the board); point it at one with leaderboard.cfg instead. */
+#ifndef __3DS__
+#undef LEADERBOARD_URL
+#endif
+
 #ifndef LEADERBOARD_URL
 #define LEADERBOARD_URL ""
 #endif

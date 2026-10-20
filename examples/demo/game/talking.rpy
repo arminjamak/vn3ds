@@ -2,31 +2,17 @@
 
 define config.speaking_attribute = "talk"
 
-image mira happy talk:
-    "mira happy open"
+image mira neutral talk:
+    "mira neutral open"
     pause 0.11
-    "mira happy"
+    "mira neutral"
     pause 0.09
     repeat
 
-image mira sad talk:
-    "mira sad open"
+image mira normal talk:
+    "mira normal open"
     pause 0.11
-    "mira sad"
-    pause 0.09
-    repeat
-
-image mira surprised talk:
-    "mira surprised open"
-    pause 0.11
-    "mira surprised"
-    pause 0.09
-    repeat
-
-image mira worried talk:
-    "mira worried open"
-    pause 0.11
-    "mira worried"
+    "mira normal"
     pause 0.09
     repeat
 
@@ -37,10 +23,108 @@ image mira smile talk:
     pause 0.09
     repeat
 
-image mira neutral talk:
-    "mira neutral open"
+image mira happy talk:
+    "mira happy open"
     pause 0.11
-    "mira neutral"
+    "mira happy"
+    pause 0.09
+    repeat
+
+image mira laugh talk:
+    "mira laugh open"
+    pause 0.11
+    "mira laugh"
+    pause 0.09
+    repeat
+
+image mira grin talk:
+    "mira grin open"
+    pause 0.11
+    "mira grin"
+    pause 0.09
+    repeat
+
+image mira curious talk:
+    "mira curious open"
+    pause 0.11
+    "mira curious"
+    pause 0.09
+    repeat
+
+image mira thinking talk:
+    "mira thinking open"
+    pause 0.11
+    "mira thinking"
+    pause 0.09
+    repeat
+
+image mira surprised talk:
+    "mira surprised open"
+    pause 0.11
+    "mira surprised"
+    pause 0.09
+    repeat
+
+image mira awe talk:
+    "mira awe open"
+    pause 0.11
+    "mira awe"
+    pause 0.09
+    repeat
+
+image mira worried talk:
+    "mira worried open"
+    pause 0.11
+    "mira worried"
+    pause 0.09
+    repeat
+
+image mira sad talk:
+    "mira sad open"
+    pause 0.11
+    "mira sad"
+    pause 0.09
+    repeat
+
+image mira tired talk:
+    "mira tired open"
+    pause 0.11
+    "mira tired"
+    pause 0.09
+    repeat
+
+image mira embarrassed talk:
+    "mira embarrassed open"
+    pause 0.11
+    "mira embarrassed"
+    pause 0.09
+    repeat
+
+image mira tender talk:
+    "mira tender open"
+    pause 0.11
+    "mira tender"
+    pause 0.09
+    repeat
+
+image mira annoyed talk:
+    "mira annoyed open"
+    pause 0.11
+    "mira annoyed"
+    pause 0.09
+    repeat
+
+image mira determined talk:
+    "mira determined open"
+    pause 0.11
+    "mira determined"
+    pause 0.09
+    repeat
+
+image aron neutral talk:
+    "aron neutral open"
+    pause 0.11
+    "aron neutral"
     pause 0.09
     repeat
 
@@ -51,6 +135,27 @@ image aron normal talk:
     pause 0.09
     repeat
 
+image aron smile talk:
+    "aron smile open"
+    pause 0.11
+    "aron smile"
+    pause 0.09
+    repeat
+
+image aron happy talk:
+    "aron happy open"
+    pause 0.11
+    "aron happy"
+    pause 0.09
+    repeat
+
+image aron laugh talk:
+    "aron laugh open"
+    pause 0.11
+    "aron laugh"
+    pause 0.09
+    repeat
+
 image aron grin talk:
     "aron grin open"
     pause 0.11
@@ -58,17 +163,24 @@ image aron grin talk:
     pause 0.09
     repeat
 
-image aron worried talk:
-    "aron worried open"
+image aron curious talk:
+    "aron curious open"
     pause 0.11
-    "aron worried"
+    "aron curious"
     pause 0.09
     repeat
 
-image aron tired talk:
-    "aron tired open"
+image aron thinking talk:
+    "aron thinking open"
     pause 0.11
-    "aron tired"
+    "aron thinking"
+    pause 0.09
+    repeat
+
+image aron surprised talk:
+    "aron surprised open"
+    pause 0.11
+    "aron surprised"
     pause 0.09
     repeat
 
@@ -79,6 +191,13 @@ image aron awe talk:
     pause 0.09
     repeat
 
+image aron worried talk:
+    "aron worried open"
+    pause 0.11
+    "aron worried"
+    pause 0.09
+    repeat
+
 image aron sad talk:
     "aron sad open"
     pause 0.11
@@ -86,17 +205,108 @@ image aron sad talk:
     pause 0.09
     repeat
 
-image aron smile talk:
-    "aron smile open"
+image aron tired talk:
+    "aron tired open"
     pause 0.11
-    "aron smile"
+    "aron tired"
     pause 0.09
     repeat
 
-image aron ward tired talk:
-    "aron ward tired open"
+image aron embarrassed talk:
+    "aron embarrassed open"
     pause 0.11
-    "aron ward tired"
+    "aron embarrassed"
+    pause 0.09
+    repeat
+
+image aron tender talk:
+    "aron tender open"
+    pause 0.11
+    "aron tender"
+    pause 0.09
+    repeat
+
+image aron annoyed talk:
+    "aron annoyed open"
+    pause 0.11
+    "aron annoyed"
+    pause 0.09
+    repeat
+
+image aron determined talk:
+    "aron determined open"
+    pause 0.11
+    "aron determined"
+    pause 0.09
+    repeat
+
+image aron ward neutral talk:
+    "aron ward neutral open"
+    pause 0.11
+    "aron ward neutral"
+    pause 0.09
+    repeat
+
+image aron ward normal talk:
+    "aron ward normal open"
+    pause 0.11
+    "aron ward normal"
+    pause 0.09
+    repeat
+
+image aron ward smile talk:
+    "aron ward smile open"
+    pause 0.11
+    "aron ward smile"
+    pause 0.09
+    repeat
+
+image aron ward happy talk:
+    "aron ward happy open"
+    pause 0.11
+    "aron ward happy"
+    pause 0.09
+    repeat
+
+image aron ward laugh talk:
+    "aron ward laugh open"
+    pause 0.11
+    "aron ward laugh"
+    pause 0.09
+    repeat
+
+image aron ward grin talk:
+    "aron ward grin open"
+    pause 0.11
+    "aron ward grin"
+    pause 0.09
+    repeat
+
+image aron ward curious talk:
+    "aron ward curious open"
+    pause 0.11
+    "aron ward curious"
+    pause 0.09
+    repeat
+
+image aron ward thinking talk:
+    "aron ward thinking open"
+    pause 0.11
+    "aron ward thinking"
+    pause 0.09
+    repeat
+
+image aron ward surprised talk:
+    "aron ward surprised open"
+    pause 0.11
+    "aron ward surprised"
+    pause 0.09
+    repeat
+
+image aron ward awe talk:
+    "aron ward awe open"
+    pause 0.11
+    "aron ward awe"
     pause 0.09
     repeat
 
@@ -107,10 +317,178 @@ image aron ward worried talk:
     pause 0.09
     repeat
 
+image aron ward sad talk:
+    "aron ward sad open"
+    pause 0.11
+    "aron ward sad"
+    pause 0.09
+    repeat
+
+image aron ward tired talk:
+    "aron ward tired open"
+    pause 0.11
+    "aron ward tired"
+    pause 0.09
+    repeat
+
+image aron ward embarrassed talk:
+    "aron ward embarrassed open"
+    pause 0.11
+    "aron ward embarrassed"
+    pause 0.09
+    repeat
+
+image aron ward tender talk:
+    "aron ward tender open"
+    pause 0.11
+    "aron ward tender"
+    pause 0.09
+    repeat
+
+image aron ward annoyed talk:
+    "aron ward annoyed open"
+    pause 0.11
+    "aron ward annoyed"
+    pause 0.09
+    repeat
+
+image aron ward determined talk:
+    "aron ward determined open"
+    pause 0.11
+    "aron ward determined"
+    pause 0.09
+    repeat
+
+image aron light neutral talk:
+    "aron light neutral open"
+    pause 0.11
+    "aron light neutral"
+    pause 0.09
+    repeat
+
+image aron light normal talk:
+    "aron light normal open"
+    pause 0.11
+    "aron light normal"
+    pause 0.09
+    repeat
+
+image aron light smile talk:
+    "aron light smile open"
+    pause 0.11
+    "aron light smile"
+    pause 0.09
+    repeat
+
+image aron light happy talk:
+    "aron light happy open"
+    pause 0.11
+    "aron light happy"
+    pause 0.09
+    repeat
+
+image aron light laugh talk:
+    "aron light laugh open"
+    pause 0.11
+    "aron light laugh"
+    pause 0.09
+    repeat
+
+image aron light grin talk:
+    "aron light grin open"
+    pause 0.11
+    "aron light grin"
+    pause 0.09
+    repeat
+
+image aron light curious talk:
+    "aron light curious open"
+    pause 0.11
+    "aron light curious"
+    pause 0.09
+    repeat
+
+image aron light thinking talk:
+    "aron light thinking open"
+    pause 0.11
+    "aron light thinking"
+    pause 0.09
+    repeat
+
+image aron light surprised talk:
+    "aron light surprised open"
+    pause 0.11
+    "aron light surprised"
+    pause 0.09
+    repeat
+
+image aron light awe talk:
+    "aron light awe open"
+    pause 0.11
+    "aron light awe"
+    pause 0.09
+    repeat
+
+image aron light worried talk:
+    "aron light worried open"
+    pause 0.11
+    "aron light worried"
+    pause 0.09
+    repeat
+
+image aron light sad talk:
+    "aron light sad open"
+    pause 0.11
+    "aron light sad"
+    pause 0.09
+    repeat
+
+image aron light tired talk:
+    "aron light tired open"
+    pause 0.11
+    "aron light tired"
+    pause 0.09
+    repeat
+
+image aron light embarrassed talk:
+    "aron light embarrassed open"
+    pause 0.11
+    "aron light embarrassed"
+    pause 0.09
+    repeat
+
+image aron light tender talk:
+    "aron light tender open"
+    pause 0.11
+    "aron light tender"
+    pause 0.09
+    repeat
+
+image aron light annoyed talk:
+    "aron light annoyed open"
+    pause 0.11
+    "aron light annoyed"
+    pause 0.09
+    repeat
+
+image aron light determined talk:
+    "aron light determined open"
+    pause 0.11
+    "aron light determined"
+    pause 0.09
+    repeat
+
 image okafor neutral talk:
     "okafor neutral open"
     pause 0.11
     "okafor neutral"
+    pause 0.09
+    repeat
+
+image okafor normal talk:
+    "okafor normal open"
+    pause 0.11
+    "okafor normal"
     pause 0.09
     repeat
 
@@ -121,6 +499,55 @@ image okafor smile talk:
     pause 0.09
     repeat
 
+image okafor happy talk:
+    "okafor happy open"
+    pause 0.11
+    "okafor happy"
+    pause 0.09
+    repeat
+
+image okafor laugh talk:
+    "okafor laugh open"
+    pause 0.11
+    "okafor laugh"
+    pause 0.09
+    repeat
+
+image okafor grin talk:
+    "okafor grin open"
+    pause 0.11
+    "okafor grin"
+    pause 0.09
+    repeat
+
+image okafor curious talk:
+    "okafor curious open"
+    pause 0.11
+    "okafor curious"
+    pause 0.09
+    repeat
+
+image okafor thinking talk:
+    "okafor thinking open"
+    pause 0.11
+    "okafor thinking"
+    pause 0.09
+    repeat
+
+image okafor surprised talk:
+    "okafor surprised open"
+    pause 0.11
+    "okafor surprised"
+    pause 0.09
+    repeat
+
+image okafor awe talk:
+    "okafor awe open"
+    pause 0.11
+    "okafor awe"
+    pause 0.09
+    repeat
+
 image okafor worried talk:
     "okafor worried open"
     pause 0.11
@@ -128,10 +555,45 @@ image okafor worried talk:
     pause 0.09
     repeat
 
-image nurse smile talk:
-    "nurse smile open"
+image okafor sad talk:
+    "okafor sad open"
     pause 0.11
-    "nurse smile"
+    "okafor sad"
+    pause 0.09
+    repeat
+
+image okafor tired talk:
+    "okafor tired open"
+    pause 0.11
+    "okafor tired"
+    pause 0.09
+    repeat
+
+image okafor embarrassed talk:
+    "okafor embarrassed open"
+    pause 0.11
+    "okafor embarrassed"
+    pause 0.09
+    repeat
+
+image okafor tender talk:
+    "okafor tender open"
+    pause 0.11
+    "okafor tender"
+    pause 0.09
+    repeat
+
+image okafor annoyed talk:
+    "okafor annoyed open"
+    pause 0.11
+    "okafor annoyed"
+    pause 0.09
+    repeat
+
+image okafor determined talk:
+    "okafor determined open"
+    pause 0.11
+    "okafor determined"
     pause 0.09
     repeat
 
@@ -142,10 +604,122 @@ image nurse neutral talk:
     pause 0.09
     repeat
 
-image theo grin talk:
-    "theo grin open"
+image nurse normal talk:
+    "nurse normal open"
     pause 0.11
-    "theo grin"
+    "nurse normal"
+    pause 0.09
+    repeat
+
+image nurse smile talk:
+    "nurse smile open"
+    pause 0.11
+    "nurse smile"
+    pause 0.09
+    repeat
+
+image nurse happy talk:
+    "nurse happy open"
+    pause 0.11
+    "nurse happy"
+    pause 0.09
+    repeat
+
+image nurse laugh talk:
+    "nurse laugh open"
+    pause 0.11
+    "nurse laugh"
+    pause 0.09
+    repeat
+
+image nurse grin talk:
+    "nurse grin open"
+    pause 0.11
+    "nurse grin"
+    pause 0.09
+    repeat
+
+image nurse curious talk:
+    "nurse curious open"
+    pause 0.11
+    "nurse curious"
+    pause 0.09
+    repeat
+
+image nurse thinking talk:
+    "nurse thinking open"
+    pause 0.11
+    "nurse thinking"
+    pause 0.09
+    repeat
+
+image nurse surprised talk:
+    "nurse surprised open"
+    pause 0.11
+    "nurse surprised"
+    pause 0.09
+    repeat
+
+image nurse awe talk:
+    "nurse awe open"
+    pause 0.11
+    "nurse awe"
+    pause 0.09
+    repeat
+
+image nurse worried talk:
+    "nurse worried open"
+    pause 0.11
+    "nurse worried"
+    pause 0.09
+    repeat
+
+image nurse sad talk:
+    "nurse sad open"
+    pause 0.11
+    "nurse sad"
+    pause 0.09
+    repeat
+
+image nurse tired talk:
+    "nurse tired open"
+    pause 0.11
+    "nurse tired"
+    pause 0.09
+    repeat
+
+image nurse embarrassed talk:
+    "nurse embarrassed open"
+    pause 0.11
+    "nurse embarrassed"
+    pause 0.09
+    repeat
+
+image nurse tender talk:
+    "nurse tender open"
+    pause 0.11
+    "nurse tender"
+    pause 0.09
+    repeat
+
+image nurse annoyed talk:
+    "nurse annoyed open"
+    pause 0.11
+    "nurse annoyed"
+    pause 0.09
+    repeat
+
+image nurse determined talk:
+    "nurse determined open"
+    pause 0.11
+    "nurse determined"
+    pause 0.09
+    repeat
+
+image theo neutral talk:
+    "theo neutral open"
+    pause 0.11
+    "theo neutral"
     pause 0.09
     repeat
 
@@ -153,6 +727,62 @@ image theo normal talk:
     "theo normal open"
     pause 0.11
     "theo normal"
+    pause 0.09
+    repeat
+
+image theo smile talk:
+    "theo smile open"
+    pause 0.11
+    "theo smile"
+    pause 0.09
+    repeat
+
+image theo happy talk:
+    "theo happy open"
+    pause 0.11
+    "theo happy"
+    pause 0.09
+    repeat
+
+image theo laugh talk:
+    "theo laugh open"
+    pause 0.11
+    "theo laugh"
+    pause 0.09
+    repeat
+
+image theo grin talk:
+    "theo grin open"
+    pause 0.11
+    "theo grin"
+    pause 0.09
+    repeat
+
+image theo curious talk:
+    "theo curious open"
+    pause 0.11
+    "theo curious"
+    pause 0.09
+    repeat
+
+image theo thinking talk:
+    "theo thinking open"
+    pause 0.11
+    "theo thinking"
+    pause 0.09
+    repeat
+
+image theo surprised talk:
+    "theo surprised open"
+    pause 0.11
+    "theo surprised"
+    pause 0.09
+    repeat
+
+image theo awe talk:
+    "theo awe open"
+    pause 0.11
+    "theo awe"
     pause 0.09
     repeat
 
@@ -170,10 +800,115 @@ image theo sad talk:
     pause 0.09
     repeat
 
+image theo tired talk:
+    "theo tired open"
+    pause 0.11
+    "theo tired"
+    pause 0.09
+    repeat
+
+image theo embarrassed talk:
+    "theo embarrassed open"
+    pause 0.11
+    "theo embarrassed"
+    pause 0.09
+    repeat
+
+image theo tender talk:
+    "theo tender open"
+    pause 0.11
+    "theo tender"
+    pause 0.09
+    repeat
+
+image theo annoyed talk:
+    "theo annoyed open"
+    pause 0.11
+    "theo annoyed"
+    pause 0.09
+    repeat
+
+image theo determined talk:
+    "theo determined open"
+    pause 0.11
+    "theo determined"
+    pause 0.09
+    repeat
+
+image seraph neutral talk:
+    "seraph neutral open"
+    pause 0.11
+    "seraph neutral"
+    pause 0.09
+    repeat
+
 image seraph stern talk:
     "seraph stern open"
     pause 0.11
     "seraph stern"
+    pause 0.09
+    repeat
+
+image seraph smile talk:
+    "seraph smile open"
+    pause 0.11
+    "seraph smile"
+    pause 0.09
+    repeat
+
+image seraph happy talk:
+    "seraph happy open"
+    pause 0.11
+    "seraph happy"
+    pause 0.09
+    repeat
+
+image seraph laugh talk:
+    "seraph laugh open"
+    pause 0.11
+    "seraph laugh"
+    pause 0.09
+    repeat
+
+image seraph grin talk:
+    "seraph grin open"
+    pause 0.11
+    "seraph grin"
+    pause 0.09
+    repeat
+
+image seraph curious talk:
+    "seraph curious open"
+    pause 0.11
+    "seraph curious"
+    pause 0.09
+    repeat
+
+image seraph thinking talk:
+    "seraph thinking open"
+    pause 0.11
+    "seraph thinking"
+    pause 0.09
+    repeat
+
+image seraph surprised talk:
+    "seraph surprised open"
+    pause 0.11
+    "seraph surprised"
+    pause 0.09
+    repeat
+
+image seraph awe talk:
+    "seraph awe open"
+    pause 0.11
+    "seraph awe"
+    pause 0.09
+    repeat
+
+image seraph worried talk:
+    "seraph worried open"
+    pause 0.11
+    "seraph worried"
     pause 0.09
     repeat
 
@@ -184,17 +919,45 @@ image seraph concerned talk:
     pause 0.09
     repeat
 
-image pim chatty talk:
-    "pim chatty open"
+image seraph sad talk:
+    "seraph sad open"
     pause 0.11
-    "pim chatty"
+    "seraph sad"
     pause 0.09
     repeat
 
-image dross chatty talk:
-    "dross chatty open"
+image seraph tired talk:
+    "seraph tired open"
     pause 0.11
-    "dross chatty"
+    "seraph tired"
+    pause 0.09
+    repeat
+
+image seraph embarrassed talk:
+    "seraph embarrassed open"
+    pause 0.11
+    "seraph embarrassed"
+    pause 0.09
+    repeat
+
+image seraph tender talk:
+    "seraph tender open"
+    pause 0.11
+    "seraph tender"
+    pause 0.09
+    repeat
+
+image seraph annoyed talk:
+    "seraph annoyed open"
+    pause 0.11
+    "seraph annoyed"
+    pause 0.09
+    repeat
+
+image seraph determined talk:
+    "seraph determined open"
+    pause 0.11
+    "seraph determined"
     pause 0.09
     repeat
 
@@ -212,6 +975,118 @@ image dross neutral talk:
     pause 0.09
     repeat
 
+image pim smile talk:
+    "pim smile open"
+    pause 0.11
+    "pim smile"
+    pause 0.09
+    repeat
+
+image dross smile talk:
+    "dross smile open"
+    pause 0.11
+    "dross smile"
+    pause 0.09
+    repeat
+
+image pim happy talk:
+    "pim happy open"
+    pause 0.11
+    "pim happy"
+    pause 0.09
+    repeat
+
+image dross happy talk:
+    "dross happy open"
+    pause 0.11
+    "dross happy"
+    pause 0.09
+    repeat
+
+image pim laugh talk:
+    "pim laugh open"
+    pause 0.11
+    "pim laugh"
+    pause 0.09
+    repeat
+
+image dross laugh talk:
+    "dross laugh open"
+    pause 0.11
+    "dross laugh"
+    pause 0.09
+    repeat
+
+image pim grin talk:
+    "pim grin open"
+    pause 0.11
+    "pim grin"
+    pause 0.09
+    repeat
+
+image dross grin talk:
+    "dross grin open"
+    pause 0.11
+    "dross grin"
+    pause 0.09
+    repeat
+
+image pim curious talk:
+    "pim curious open"
+    pause 0.11
+    "pim curious"
+    pause 0.09
+    repeat
+
+image dross curious talk:
+    "dross curious open"
+    pause 0.11
+    "dross curious"
+    pause 0.09
+    repeat
+
+image pim thinking talk:
+    "pim thinking open"
+    pause 0.11
+    "pim thinking"
+    pause 0.09
+    repeat
+
+image dross thinking talk:
+    "dross thinking open"
+    pause 0.11
+    "dross thinking"
+    pause 0.09
+    repeat
+
+image pim surprised talk:
+    "pim surprised open"
+    pause 0.11
+    "pim surprised"
+    pause 0.09
+    repeat
+
+image dross surprised talk:
+    "dross surprised open"
+    pause 0.11
+    "dross surprised"
+    pause 0.09
+    repeat
+
+image pim awe talk:
+    "pim awe open"
+    pause 0.11
+    "pim awe"
+    pause 0.09
+    repeat
+
+image dross awe talk:
+    "dross awe open"
+    pause 0.11
+    "dross awe"
+    pause 0.09
+    repeat
+
 image pim worried talk:
     "pim worried open"
     pause 0.11
@@ -226,10 +1101,227 @@ image dross worried talk:
     pause 0.09
     repeat
 
+image pim sad talk:
+    "pim sad open"
+    pause 0.11
+    "pim sad"
+    pause 0.09
+    repeat
+
+image dross sad talk:
+    "dross sad open"
+    pause 0.11
+    "dross sad"
+    pause 0.09
+    repeat
+
+image pim tired talk:
+    "pim tired open"
+    pause 0.11
+    "pim tired"
+    pause 0.09
+    repeat
+
+image dross tired talk:
+    "dross tired open"
+    pause 0.11
+    "dross tired"
+    pause 0.09
+    repeat
+
+image pim embarrassed talk:
+    "pim embarrassed open"
+    pause 0.11
+    "pim embarrassed"
+    pause 0.09
+    repeat
+
+image dross embarrassed talk:
+    "dross embarrassed open"
+    pause 0.11
+    "dross embarrassed"
+    pause 0.09
+    repeat
+
+image pim tender talk:
+    "pim tender open"
+    pause 0.11
+    "pim tender"
+    pause 0.09
+    repeat
+
+image dross tender talk:
+    "dross tender open"
+    pause 0.11
+    "dross tender"
+    pause 0.09
+    repeat
+
+image pim annoyed talk:
+    "pim annoyed open"
+    pause 0.11
+    "pim annoyed"
+    pause 0.09
+    repeat
+
+image pim grumpy talk:
+    "pim grumpy open"
+    pause 0.11
+    "pim grumpy"
+    pause 0.09
+    repeat
+
+image dross annoyed talk:
+    "dross annoyed open"
+    pause 0.11
+    "dross annoyed"
+    pause 0.09
+    repeat
+
+image dross grumpy talk:
+    "dross grumpy open"
+    pause 0.11
+    "dross grumpy"
+    pause 0.09
+    repeat
+
+image pim determined talk:
+    "pim determined open"
+    pause 0.11
+    "pim determined"
+    pause 0.09
+    repeat
+
+image dross determined talk:
+    "dross determined open"
+    pause 0.11
+    "dross determined"
+    pause 0.09
+    repeat
+
+image pim chatty talk:
+    "pim chatty open"
+    pause 0.11
+    "pim chatty"
+    pause 0.09
+    repeat
+
+image dross chatty talk:
+    "dross chatty open"
+    pause 0.11
+    "dross chatty"
+    pause 0.09
+    repeat
+
+image patron neutral talk:
+    "patron neutral open"
+    pause 0.11
+    "patron neutral"
+    pause 0.09
+    repeat
+
 image patron smile talk:
     "patron smile open"
     pause 0.11
     "patron smile"
+    pause 0.09
+    repeat
+
+image patron happy talk:
+    "patron happy open"
+    pause 0.11
+    "patron happy"
+    pause 0.09
+    repeat
+
+image patron laugh talk:
+    "patron laugh open"
+    pause 0.11
+    "patron laugh"
+    pause 0.09
+    repeat
+
+image patron grin talk:
+    "patron grin open"
+    pause 0.11
+    "patron grin"
+    pause 0.09
+    repeat
+
+image patron curious talk:
+    "patron curious open"
+    pause 0.11
+    "patron curious"
+    pause 0.09
+    repeat
+
+image patron thinking talk:
+    "patron thinking open"
+    pause 0.11
+    "patron thinking"
+    pause 0.09
+    repeat
+
+image patron surprised talk:
+    "patron surprised open"
+    pause 0.11
+    "patron surprised"
+    pause 0.09
+    repeat
+
+image patron awe talk:
+    "patron awe open"
+    pause 0.11
+    "patron awe"
+    pause 0.09
+    repeat
+
+image patron worried talk:
+    "patron worried open"
+    pause 0.11
+    "patron worried"
+    pause 0.09
+    repeat
+
+image patron sad talk:
+    "patron sad open"
+    pause 0.11
+    "patron sad"
+    pause 0.09
+    repeat
+
+image patron tired talk:
+    "patron tired open"
+    pause 0.11
+    "patron tired"
+    pause 0.09
+    repeat
+
+image patron embarrassed talk:
+    "patron embarrassed open"
+    pause 0.11
+    "patron embarrassed"
+    pause 0.09
+    repeat
+
+image patron tender talk:
+    "patron tender open"
+    pause 0.11
+    "patron tender"
+    pause 0.09
+    repeat
+
+image patron annoyed talk:
+    "patron annoyed open"
+    pause 0.11
+    "patron annoyed"
+    pause 0.09
+    repeat
+
+image patron determined talk:
+    "patron determined open"
+    pause 0.11
+    "patron determined"
     pause 0.09
     repeat
 
@@ -240,10 +1332,66 @@ image patron cold talk:
     pause 0.09
     repeat
 
-image ember soft talk:
-    "ember soft open"
+image ember neutral talk:
+    "ember neutral open"
     pause 0.11
-    "ember soft"
+    "ember neutral"
+    pause 0.09
+    repeat
+
+image ember smile talk:
+    "ember smile open"
+    pause 0.11
+    "ember smile"
+    pause 0.09
+    repeat
+
+image ember happy talk:
+    "ember happy open"
+    pause 0.11
+    "ember happy"
+    pause 0.09
+    repeat
+
+image ember laugh talk:
+    "ember laugh open"
+    pause 0.11
+    "ember laugh"
+    pause 0.09
+    repeat
+
+image ember grin talk:
+    "ember grin open"
+    pause 0.11
+    "ember grin"
+    pause 0.09
+    repeat
+
+image ember curious talk:
+    "ember curious open"
+    pause 0.11
+    "ember curious"
+    pause 0.09
+    repeat
+
+image ember thinking talk:
+    "ember thinking open"
+    pause 0.11
+    "ember thinking"
+    pause 0.09
+    repeat
+
+image ember surprised talk:
+    "ember surprised open"
+    pause 0.11
+    "ember surprised"
+    pause 0.09
+    repeat
+
+image ember awe talk:
+    "ember awe open"
+    pause 0.11
+    "ember awe"
     pause 0.09
     repeat
 
@@ -254,10 +1402,66 @@ image ember worried talk:
     pause 0.09
     repeat
 
+image ember sad talk:
+    "ember sad open"
+    pause 0.11
+    "ember sad"
+    pause 0.09
+    repeat
+
+image ember tired talk:
+    "ember tired open"
+    pause 0.11
+    "ember tired"
+    pause 0.09
+    repeat
+
+image ember embarrassed talk:
+    "ember embarrassed open"
+    pause 0.11
+    "ember embarrassed"
+    pause 0.09
+    repeat
+
+image ember tender talk:
+    "ember tender open"
+    pause 0.11
+    "ember tender"
+    pause 0.09
+    repeat
+
+image ember soft talk:
+    "ember soft open"
+    pause 0.11
+    "ember soft"
+    pause 0.09
+    repeat
+
+image ember annoyed talk:
+    "ember annoyed open"
+    pause 0.11
+    "ember annoyed"
+    pause 0.09
+    repeat
+
+image ember determined talk:
+    "ember determined open"
+    pause 0.11
+    "ember determined"
+    pause 0.09
+    repeat
+
 image miso sit talk:
     "miso sit open"
     pause 0.11
     "miso sit"
+    pause 0.09
+    repeat
+
+image miso loaf talk:
+    "miso loaf open"
+    pause 0.11
+    "miso loaf"
     pause 0.09
     repeat
 
@@ -272,5 +1476,26 @@ image miso meow talk:
     "miso meow open"
     pause 0.11
     "miso meow"
+    pause 0.09
+    repeat
+
+image miso curious talk:
+    "miso curious open"
+    pause 0.11
+    "miso curious"
+    pause 0.09
+    repeat
+
+image miso sleepy talk:
+    "miso sleepy open"
+    pause 0.11
+    "miso sleepy"
+    pause 0.09
+    repeat
+
+image miso happy talk:
+    "miso happy open"
+    pause 0.11
+    "miso happy"
     pause 0.09
     repeat
