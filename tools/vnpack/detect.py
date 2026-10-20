@@ -3,6 +3,12 @@ computer, or a 3DS on the same Wi-Fi (vn3ds listening, the Homebrew
 Launcher's netloader, or the ftpd app).
 
     target = detect()   # Target(kind="sd" | "vn3ds" | "netloader" | "ftp" | None, where=...)
+
+For testing without a real card or console, these environment variables
+narrow down where it looks (nothing else changes):
+  VN3DS_VOLUMES             extra folders to check for an SD card (os.pathsep-separated)
+  VN3DS_SCAN_HOSTS          hosts to probe instead of the local /24 (comma-separated)
+  VN3DS_NETLOADER_ADDRESS   where to send the netloader ping (default: broadcast)
 """
 
 import concurrent.futures
@@ -26,6 +32,11 @@ SD_MARKERS = ("Nintendo 3DS", "boot.firm", "luma", "3ds")
 
 
 def _candidate_volumes():
+    extra = [v for v in os.environ.get("VN3DS_VOLUMES", "").split(os.pathsep) if v]
+    return extra + _system_volumes()
+
+
+def _system_volumes():
     if sys.platform == "darwin":
         return [v for v in glob.glob("/Volumes/*") if os.path.basename(v) != "Macintosh HD"]
     if sys.platform.startswith("win"):
@@ -71,14 +82,16 @@ def _open(ip, port, timeout):
         return False
 
 
-def find_netloader(timeout=1.5):
+def find_netloader(timeout=1.5, address=None):
     """The Homebrew Launcher answers 3dslink's broadcast while its netloader
-    (Y) is open; this asks the same way, so it never disturbs it."""
+    (Y) is open; this asks the same way, so it never disturbs it. With an
+    address, only that 3DS is asked."""
+    address = address or os.environ.get("VN3DS_NETLOADER_ADDRESS") or "255.255.255.255"
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         s.settimeout(timeout)
-        s.sendto(b"3dsboot", ("255.255.255.255", NETLOADER_PORT))
+        s.sendto(b"3dsboot", (address, NETLOADER_PORT))
         while True:
             data, (ip, _) = s.recvfrom(64)
             if data.startswith(b"boot3ds"):
@@ -89,13 +102,25 @@ def find_netloader(timeout=1.5):
         s.close()
 
 
+def ping_netloader(host, timeout=1.5):
+    """True if the Homebrew Launcher's netloader is open on that 3DS."""
+    return find_netloader(timeout, address=host) is not None
+
+
+def listening(host, port=VN3DS_PORT, timeout=1.0):
+    """True if something accepts connections on host:port."""
+    return _open(host, port, timeout)
+
+
 def scan_lan(ports=(VN3DS_PORT, FTPD_PORT), timeout=0.35):
     """{port: [ips]} for the /24 around this computer."""
-    me = local_ipv4()
-    if not me:
-        return {}
-    net = ipaddress.ip_network(f"{me}/24", strict=False)
-    hosts = [str(h) for h in net.hosts() if str(h) != me]
+    hosts = [h.strip() for h in os.environ.get("VN3DS_SCAN_HOSTS", "").split(",") if h.strip()]
+    if not hosts:
+        me = local_ipv4()
+        if not me:
+            return {}
+        net = ipaddress.ip_network(f"{me}/24", strict=False)
+        hosts = [str(h) for h in net.hosts() if str(h) != me]
     found = {p: [] for p in ports}
     with concurrent.futures.ThreadPoolExecutor(max_workers=96) as ex:
         jobs = {ex.submit(_open, ip, port, timeout): (ip, port) for ip in hosts for port in ports}

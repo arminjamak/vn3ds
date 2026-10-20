@@ -1,6 +1,13 @@
 """vn3ds-port: port a Ren'Py game to the Nintendo 3DS in one command.
 
-    tools/vn3ds-port GAME [MORE INPUTS...] [--sd /Volumes/3DS]
+    tools/vn3ds-port GAME [MORE INPUTS...] [--sd /Volumes/3DS | --3ds IP]
+
+With no destination given it finds one: the 3DS's SD card if it is plugged
+into this computer (best quality, copied there with vn3ds), otherwise the 3DS
+on the Wi-Fi (compact quality). Over Wi-Fi it first sends vn3ds itself
+through the Homebrew Launcher's netloader when vn3ds isn't open yet, then
+the game, in one go. It waits for the 3DS and retries dropped connections
+until everything has arrived.
 
 GAME can be any of the shapes Ren'Py games are shipped in (or a folder that
 vn3ds-port already produced, which is then just delivered):
@@ -13,8 +20,7 @@ vn3ds-port already produced, which is then just delivered):
 
 Compiled-only games (.rpyc, no .rpy) are decompiled automatically with the
 bundled unrpyc. The result is a folder for sdmc:/3ds/vn3ds/games/, plus a
-compatibility report. With --sd it is copied onto the SD card together with
-vn3ds.3dsx.
+compatibility report.
 """
 
 import argparse
@@ -31,14 +37,42 @@ from . import __main__ as vnpack
 from .assets import AssetFS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(os.path.dirname(HERE))
-UNRPYC = os.path.join(REPO, "tools", "third_party", "unrpyc", "unrpyc.py")
-ENGINE_3DSX = os.path.join(REPO, "engine", "vn3ds.3dsx")
+FROZEN = bool(getattr(sys, "frozen", False))
+if FROZEN:   # a PyInstaller build: everything sits next to the program
+    REPO = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    UNRPYC = os.path.join(REPO, "unrpyc", "unrpyc.py")
+else:
+    REPO = os.path.dirname(os.path.dirname(HERE))
+    UNRPYC = os.path.join(REPO, "tools", "third_party", "unrpyc", "unrpyc.py")
+ENGINE_3DSX = os.environ.get("VN3DS_ENGINE") or os.path.join(REPO, "engine", "vn3ds.3dsx")
 GAME_EXTS = (".rpy", ".rpyc", ".rpa")
+
+
+class PortError(SystemExit):
+    """A problem with the inputs. A SystemExit, so the command line exits
+    with the message as before; the app catches it and shows it."""
 
 
 def say(msg):
     print(f"[vn3ds-port] {msg}", flush=True)
+
+
+def unrpyc_command():
+    """How to run the bundled unrpyc. A frozen build has no separate Python:
+    it runs itself with --vn3ds-unrpyc (see run_unrpyc)."""
+    if FROZEN:
+        return [sys.executable, "--vn3ds-unrpyc"]
+    return [sys.executable, UNRPYC]
+
+
+def run_unrpyc(argv):
+    """unrpyc's command line, in this process (for frozen builds)."""
+    folder = os.path.dirname(UNRPYC)
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    import unrpyc   # noqa: E402 - bundled third-party module
+    sys.argv = ["unrpyc"] + list(argv)
+    unrpyc.main()
 
 
 def has_game_files(folder):
@@ -65,9 +99,9 @@ def find_game_dir(folder):
     return None
 
 
-def unpack_zip(path, work):
+def unpack_zip(path, work, progress=None):
     """Unpack a downloaded .zip as far as needed: game files and nested
-    archives. Returns the folder holding them."""
+    archives. Returns the folder holding them. progress(done, total)."""
     dest = os.path.join(work, "unzipped", os.path.splitext(os.path.basename(path))[0])
     os.makedirs(dest, exist_ok=True)
     with zipfile.ZipFile(path) as z:
@@ -76,15 +110,18 @@ def unpack_zip(path, work):
         total = sum(i.file_size for i in wanted)
         free = shutil.disk_usage(work).free
         if total > free * 0.9:
-            sys.exit(f"vn3ds-port: unpacking {path} needs {total >> 20} MiB but only "
+            raise PortError(f"vn3ds-port: unpacking {path} needs {total >> 20} MiB but only "
                      f"{free >> 20} MiB are free in {work}; pass --work on a bigger disk")
-        say(f"unpacking {len(wanted)} files ({total >> 20} MiB) from {os.path.basename(path)}")
-        for i in wanted:
+        if progress is None:
+            say(f"unpacking {len(wanted)} files ({total >> 20} MiB) from {os.path.basename(path)}")
+        for k, i in enumerate(wanted):
             z.extract(i, dest)
+            if progress:
+                progress(k + 1, len(wanted))
     return dest
 
 
-def collect(inputs, work):
+def collect(inputs, work, progress=None):
     """Turn the user's inputs into (primary, overlay folders)."""
     primary, overlays = None, []
     queue = list(inputs)
@@ -96,7 +133,7 @@ def collect(inputs, work):
             nested = [os.path.join(r, f) for r, _, fs in os.walk(item) for f in fs
                       if f.lower().endswith((".apk", ".zip"))]
             if gd is None and not nested:
-                sys.exit(f"vn3ds-port: no Ren'Py game files in {item}")
+                raise PortError(f"vn3ds-port: no Ren'Py game files in {item}")
             if gd:
                 if primary is None:
                     primary = gd
@@ -109,25 +146,25 @@ def collect(inputs, work):
                     overlays.append(primary)
                 primary = item
         elif low.endswith(".zip"):
-            queue.append(unpack_zip(item, work))
+            queue.append(unpack_zip(item, work, progress))
         elif low.endswith(".rpa"):
             overlays.append(os.path.dirname(item))
         else:
-            sys.exit(f"vn3ds-port: don't know what to do with {item}")
+            raise PortError(f"vn3ds-port: don't know what to do with {item}")
     if primary is None:
-        sys.exit("vn3ds-port: no game found in the inputs")
+        raise PortError("vn3ds-port: no game found in the inputs")
     # An apk with its art shipped beside it: the folder is an overlay.
     return primary, [o for o in dict.fromkeys(overlays) if o != primary]
 
 
-def decompile_if_needed(primary, overlays, work):
+def decompile_if_needed(primary, overlays, work, started=None):
     fs = AssetFS(primary, lambda *a: None, overlay_dirs=overlays)
     keys = [k for k in fs.keys() if not k.startswith(("renpy/", "tl/"))]
     if any(k.endswith(".rpy") for k in keys):
         return None
     rpyc = [k for k in keys if k.endswith(".rpyc")]
     if not rpyc:
-        sys.exit("vn3ds-port: no scripts (.rpy or .rpyc) in the game")
+        raise PortError("vn3ds-port: no scripts (.rpy or .rpyc) in the game")
     out = os.path.join(work, "scripts")
     os.makedirs(out, exist_ok=True)
     for k in rpyc:
@@ -135,11 +172,16 @@ def decompile_if_needed(primary, overlays, work):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, "wb") as f:
             f.write(fs.read(k))
-    say(f"only compiled scripts found; decompiling {len(rpyc)} .rpyc files with unrpyc")
-    r = subprocess.run([sys.executable, UNRPYC, "-c", out], capture_output=True, text=True)
+    if started:
+        started(len(rpyc))
+    else:
+        say(f"only compiled scripts found; decompiling {len(rpyc)} .rpyc files with unrpyc")
+    kw = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {}
+    r = subprocess.run(unrpyc_command() + ["-c", out], capture_output=True, text=True, **kw)
     made = sum(1 for _, _, fs_ in os.walk(out) for f in fs_ if f.endswith(".rpy"))
     if made == 0:
-        sys.exit("vn3ds-port: unrpyc could not decompile the scripts:\n" + r.stdout[-2000:] + r.stderr[-2000:])
+        raise PortError("vn3ds-port: unrpyc could not decompile the scripts:\n" +
+                        r.stdout[-2000:] + r.stderr[-2000:])
     if made < len(rpyc):
         say(f"warning: only {made} of {len(rpyc)} scripts decompiled")
     for root, _, files in os.walk(out):   # keep only the .rpy text
@@ -191,44 +233,17 @@ def report(summary, path):
     return text
 
 
-def install(out_dir, game_id, sd):
+def install(out_dir, game_id, sd, engine=None):
+    """Copy a ported game (and vn3ds.3dsx) onto an SD card."""
+    from . import flow
     dest = os.path.join(sd, "3ds", "vn3ds", "games", game_id)
-    if os.path.exists(dest):
-        shutil.rmtree(dest)
     say(f"copying to {dest}")
-    shutil.copytree(out_dir, dest)
-    if os.path.exists(ENGINE_3DSX):
-        shutil.copy2(ENGINE_3DSX, os.path.join(sd, "3ds", "vn3ds.3dsx"))
+    flow.install_game_sd(out_dir, game_id, sd)
+    engine = engine or ENGINE_3DSX
+    if os.path.exists(engine):
+        flow.install_engine_sd(sd, engine)
     else:
         say("engine/vn3ds.3dsx isn't built yet (run make in engine/); copy it to sdmc:/3ds/ yourself")
-
-
-def deliver(args, game_dirs):
-    """Wireless delivery (--3ds / --ftp), optionally with the engine."""
-    from . import send
-    engine = ENGINE_3DSX if args.install else None
-    files = send.plan(game_dirs, engine)
-    if not files or not (args.console or args.ftp):
-        return
-    total = sum(os.path.getsize(p) for _, p in files) / 1e6
-    if args.ftp:
-        say(f"uploading {len(files)} files ({total:.1f} MB) over FTP to {args.ftp}")
-        send.send_ftp(args.ftp, files)
-        say("uploaded. Start vn3ds from the Homebrew Launcher.")
-        return
-    host = args.console
-    if not send.wait_for_receiver(host, seconds=3):
-        if args.install:
-            send.install_via_3dslink(host, ENGINE_3DSX)
-        else:
-            say(f"waiting for vn3ds on {host}: open vn3ds and press Y (Receive over Wi-Fi)")
-        if not send.wait_for_receiver(host, seconds=120):
-            sys.exit(f"vn3ds-port: nothing is listening on {host}:{send.VN3DS_PORT}. Is vn3ds on "
-                     "the receive screen, and is the 3DS on the same Wi-Fi?")
-    say(f"sending {len(files)} files ({total:.1f} MB) to {host}")
-    sent, refused = send.send_vn3ds(host, files, forever=True)   # retries until done (Ctrl+C stops)
-    say(f"sent {sent} files" + (f", {refused} refused" if refused else "") +
-        (". vn3ds updated: restart it." if engine else ". The game is in vn3ds's list."))
 
 
 # What each quality mode asks of the packager. Options the packager doesn't
@@ -241,25 +256,164 @@ QUALITY = {
 
 
 def quality_args(mode):
-    src = open(os.path.join(os.path.dirname(__file__), "__main__.py"), encoding="utf-8").read()
+    try:
+        src = open(os.path.join(os.path.dirname(__file__), "__main__.py"), encoding="utf-8").read()
+    except OSError:   # a frozen build has no sources: the packager is the matching one
+        src = None
     out = []
     for flag, val in QUALITY.get(mode, []):
-        if f'"{flag}"' in src:
+        if src is None or f'"{flag}"' in src:
             out += [flag] + ([val] if val is not None else [])
     return out
 
 
+def vnpack_args(opts, quality, primary, overlays, scripts):
+    """The packager's command line for these options (the same for the
+    command line and the app, so both produce the same files)."""
+    vargs = [primary, "-o", opts.output, "-q"]
+    for o in ([scripts] if scripts else []) + overlays:
+        vargs += ["--scripts", o]
+    for flag, val in (("--id", opts.id), ("--title", opts.title), ("-j", opts.jobs or None)):
+        if val:
+            vargs += [flag, str(val)]
+    for flag in ("rgb565", "no_audio", "no_video", "fit"):
+        if getattr(opts, flag):
+            vargs.append("--" + flag.replace("_", "-"))
+    vargs += quality_args(quality)
+    for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps)):
+        if val:   # after the quality preset, so these win
+            vargs += [flag, str(val)]
+    if opts.jpeg is not None:
+        vargs += ["--jpeg", str(opts.jpeg)]
+    return vargs
+
+
+def convert(opts, quality, ui):
+    """Convert opts.inputs into a game folder under opts.output, reporting
+    the steps to ui (see flow.UI). Returns vnpack's summary plus "report"
+    (the compatibility report's text)."""
+    from . import flow
+    work = opts.work or tempfile.mkdtemp(
+        prefix="vn3ds-port-", dir=os.path.dirname(os.path.abspath(opts.output)) or ".")
+    os.makedirs(work, exist_ok=True)
+    os.makedirs(opts.output, exist_ok=True)
+    unpacked = []
+
+    def unpack_progress(done, total):
+        unpacked.append(1)
+        ui.step("unpack", "active", "", done=done, total=total)
+        if ui.stopped():
+            raise flow.Cancelled()
+    try:
+        primary, overlays = collect(opts.inputs, work, unpack_progress)
+        ui.step("unpack", "done" if unpacked else "skip", "")
+        ui.log(f"game: {primary}" + (f" (+ {len(overlays)} more)" if overlays else ""))
+        if ui.stopped():
+            raise flow.Cancelled()
+        scripts = decompile_if_needed(
+            primary, overlays, work,
+            started=lambda n: ui.step("decompile", "active", f"{n} compiled scripts (unrpyc)"))
+        ui.step("decompile", "done" if scripts else "skip",
+                "with unrpyc" if scripts else "")
+        seen = set()
+
+        def progress(step, state=None, done=None, total=None, **info):
+            if ui.stopped():
+                raise flow.Cancelled()
+            seen.add(step)
+            if step == "scripts":
+                ui.step("scripts", state, f"{info['labels']} labels" if state == "done" else "")
+            elif step == "pack":
+                ui.step("pack", state, f"{info['bytes'] / 1e6:.1f} MB" if state == "done" else "")
+            else:
+                if total == 0:
+                    ui.step(step, "skip")
+                else:
+                    ui.step(step, state or "active", "", done=done, total=total)
+        summary = vnpack.main(vnpack_args(opts, quality, primary, overlays, scripts), progress)
+        if "video" not in seen:
+            ui.step("video", "skip")
+        text = report(summary, os.path.join(summary["out_dir"], "port-report.txt"))
+        summary["report"] = text
+        ui.log(text)
+        return summary
+    finally:
+        if not opts.keep_work and not opts.work:
+            shutil.rmtree(work, ignore_errors=True)
+
+
+def default_output():
+    """build/ next to where the command runs; a frozen build keeps its
+    games in the user's data folder instead."""
+    if not FROZEN:
+        return "build"
+    return os.path.join(user_data_dir(), "games")
+
+
+def user_data_dir():
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(base, "vn3ds")
+
+
+def clean_path(arg):
+    """A path as a terminal pastes it when a file is dragged in: maybe in
+    quotes, maybe with backslash-escaped spaces, maybe with a trailing space."""
+    p = arg.strip()
+    if len(p) >= 2 and p[0] == p[-1] and p[0] in "'\"":
+        p = p[1:-1]
+    if not os.path.exists(p) and os.name != "nt" and "\\" in p:
+        unescaped = re.sub(r"\\(.)", r"\1", p)
+        if os.path.exists(unescaped):
+            p = unescaped
+    return p
+
+
+def split_pasted(line):
+    """The paths in a line pasted by dragging files into a terminal: quoted
+    or backslash-escaped (macOS), quoted (Windows), several at once."""
+    import shlex
+    line = line.strip()
+    if not line:
+        return []
+    if os.path.exists(clean_path(line)):
+        return [clean_path(line)]
+    try:
+        parts = shlex.split(line, posix=os.name != "nt")
+    except ValueError:
+        return [clean_path(line)]
+    return [clean_path(p) for p in parts]
+
+
+def ask_for_game():
+    print("Drag your visual novel (its folder, .zip, .apk or .app) into this window, "
+          "then press Enter:")
+    try:
+        return split_pasted(input("> "))
+    except EOFError:
+        return []
+
+
 def main(argv=None):
+    from . import flow
     ap = argparse.ArgumentParser(prog="vn3ds-port", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("inputs", nargs="*", help="game folder, build, .apk, .zip or .rpa")
-    ap.add_argument("-o", "--output", default="build", help="output folder (default: build)")
+    ap.add_argument("-o", "--output", default=None,
+                    help=f"output folder (default: {default_output()})")
     ap.add_argument("--sd", help="SD card (or emulator sdmc) root to install to")
     ap.add_argument("--3ds", dest="console", metavar="IP",
-                    help="send over Wi-Fi to vn3ds's receive screen (press Y in vn3ds)")
+                    help="send over Wi-Fi to the 3DS at IP (vn3ds's receive screen, or the "
+                         "Homebrew Launcher's netloader, which first gets vn3ds)")
     ap.add_argument("--install", action="store_true",
-                    help="also install/update vn3ds itself; with --3ds and no vn3ds running yet, "
-                         "starts it through the Homebrew Launcher's netloader (3dslink)")
+                    help="install/update vn3ds itself (the default whenever a game is "
+                         "delivered; on its own, sends just vn3ds)")
+    ap.add_argument("--no-engine", action="store_true",
+                    help="deliver only the game, not vn3ds.3dsx")
     ap.add_argument("--ftp", metavar="IP[:PORT]", help="upload with the ftpd homebrew app instead")
     ap.add_argument("--work", help="scratch folder for unpacking (default: a temp folder)")
     ap.add_argument("--keep-work", action="store_true", help="don't delete the scratch folder")
@@ -282,87 +436,37 @@ def main(argv=None):
                     help="wifi: compact files for sending over Wi-Fi; sd: best quality for "
                          "copying to the SD card (default: from where the game is going)")
     ap.add_argument("--no-detect", action="store_true",
-                    help="don't look for an SD card or a 3DS on the network")
+                    help="don't look for an SD card or a 3DS on the network: just build")
     args = ap.parse_args(argv)
-
-    # One command for everything: with no destination given, look for the
-    # 3DS's SD card, then for the 3DS on the Wi-Fi.
-    if not (args.sd or args.console or args.ftp or args.no_detect):
-        from . import detect
-        t = detect.detect(say)
-        if t.kind == "sd":
-            say(f"found the 3DS SD card at {t.where}: copying there, best quality")
-            args.sd = t.where
-        elif t.kind == "vn3ds":
-            say(f"found vn3ds on {t.where}: sending over Wi-Fi")
-            args.console = t.where
-        elif t.kind == "netloader":
-            say(f"found the Homebrew Launcher's netloader on {t.where}: installing vn3ds, then "
-                "sending over Wi-Fi")
-            args.console = t.where
-            args.install = True
-        elif t.kind == "ftp":
-            say(f"found an FTP server (ftpd) on {t.where}: uploading over Wi-Fi")
-            args.ftp = t.where
-        else:
-            say("no 3DS found: plug in its SD card, or open vn3ds (or the Homebrew Launcher "
-                "and press Y) on the same Wi-Fi. Building the game folder only.")
-    if args.quality == "auto":
-        args.quality = "wifi" if (args.console or args.ftp) else "sd"
-
-    if not args.inputs and not args.install:
-        ap.error("give a game to port, or --install to send just the engine")
-    if args.install and not os.path.exists(ENGINE_3DSX):
-        sys.exit("vn3ds-port: engine/vn3ds.3dsx isn't built yet (run make in engine/)")
-    if not args.inputs:
-        deliver(args, [])
-        return
-    # Already-ported games (folders with game.bin): just deliver them.
-    ported = [os.path.abspath(i) for i in args.inputs
-              if os.path.isfile(os.path.join(i, "game.bin"))]
-    if ported and len(ported) == len(args.inputs):
-        for d in ported:
-            if args.sd:
-                install(d, os.path.basename(d.rstrip("/")), args.sd)
-        if not (args.console or args.ftp or args.sd):
-            say("these are already-ported games; add --3ds IP, --ftp or --sd to deliver them")
-        deliver(args, ported)
-        return
-
-    work = args.work or tempfile.mkdtemp(prefix="vn3ds-port-",
-                                         dir=os.path.dirname(os.path.abspath(args.output)) or ".")
-    os.makedirs(work, exist_ok=True)
+    inputs = [clean_path(i) for i in args.inputs]
+    if not inputs and not args.install and sys.stdin.isatty():
+        inputs = ask_for_game()
+    if not inputs and not args.install:
+        ap.error("give a game to port, or --install to send just vn3ds")
+    missing = [i for i in inputs if not os.path.exists(i)]
+    if missing:
+        ap.error(f"{missing[0]} does not exist")
+    opts = flow.Options(
+        inputs=inputs, output=args.output or default_output(), quality=args.quality,
+        sd=args.sd, console=args.console, ftp=args.ftp, detect=not args.no_detect,
+        with_engine=not args.no_engine or not inputs, work=args.work, keep_work=args.keep_work,
+        id=args.id, title=args.title, rgb565=args.rgb565, jpeg=args.jpeg,
+        no_audio=args.no_audio, no_video=args.no_video, video_codec=args.video_codec,
+        video_kbps=args.video_kbps, fit=args.fit, jobs=args.jobs)
+    ui = flow.ConsoleUI()
     try:
-        primary, overlays = collect(args.inputs, work)
-        say(f"game: {primary}" + (f" (+ {len(overlays)} more)" if overlays else ""))
-        scripts = decompile_if_needed(primary, overlays, work)
-        vargs = [primary, "-o", args.output, "-q"]
-        for o in ([scripts] if scripts else []) + overlays:
-            vargs += ["--scripts", o]
-        for flag, val in (("--id", args.id), ("--title", args.title), ("-j", args.jobs or None)):
-            if val:
-                vargs += [flag, str(val)]
-        for flag in ("rgb565", "no_audio", "no_video", "fit"):
-            if getattr(args, flag):
-                vargs.append("--" + flag.replace("_", "-"))
-        vargs += quality_args(args.quality)
-        for flag, val in (("--video-codec", args.video_codec), ("--video-kbps", args.video_kbps)):
-            if val:   # after the quality preset, so these win
-                vargs += [flag, str(val)]
-        if args.jpeg is not None:
-            vargs += ["--jpeg", str(args.jpeg)]
-        say(f"quality: {'compact for Wi-Fi' if args.quality == 'wifi' else 'best, for the SD card'}")
-        say("converting (images are the slow part)")
-        summary = vnpack.main(vargs)
-        text = report(summary, os.path.join(summary["out_dir"], "port-report.txt"))
-        print("\n" + text)
-        if args.sd:
-            install(summary["out_dir"], summary["id"], args.sd)
-        deliver(args, [summary["out_dir"]])
-        say(f"done. Full report: {os.path.join(summary['out_dir'], 'port-report.txt')}")
-    finally:
-        if not args.keep_work and not args.work:
-            shutil.rmtree(work, ignore_errors=True)
+        r = flow.run(opts, ui)
+    except KeyboardInterrupt:
+        ui._end_live()
+        print("\nStopped. Run the same command again to carry on: only what's missing is sent.")
+        sys.exit(130)
+    if r["target"] == "sd":
+        print("Done. Eject the SD card, put it back in the 3DS and start vn3ds from the "
+              "Homebrew Launcher.")
+    elif r["target"] in ("wifi", "ftp"):
+        print("Done. The game is in vn3ds's list on the 3DS." if r["out_dir"] else "Done.")
+    elif r["out_dir"]:
+        print(f"Done. Full report: {os.path.join(r['out_dir'], 'port-report.txt')}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,45 @@
+# Publishes site/ to GitHub Pages (https://arminjamak.github.io/vn3ds/) on every push to main.
+# The one-command installers in tools/install/ are copied to the site root, so
+#   https://arminjamak.github.io/vn3ds/install.sh and .../install.ps1
+# always match the commit that was deployed.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; let a running one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/configure-pages@v6
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -R site/. _site/
+          cp tools/install/install.sh tools/install/install.ps1 _site/
+          ls -la _site
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -39,12 +39,31 @@ RenPy/
 
 ### 1. Port a game (on your computer): one command
 
-Requirements: Python 3.9+, `pip install pillow numpy scipy`, and `ffmpeg` (only
-needed when a game's audio isn't already Ogg Vorbis).
+Without installing anything (the standalone command, with Python and ffmpeg
+inside; see [tools/cli-release/README.md](tools/cli-release/README.md)):
+
+- **macOS**, in Terminal: type `curl -fsSL https://arminjamak.github.io/vn3ds/install.sh | sh -s -- `,
+  drag the game into the window and press Enter.
+- **Windows**, in PowerShell: type
+  `& ([scriptblock]::Create([Text.Encoding]::UTF8.GetString((iwr -useb https://arminjamak.github.io/vn3ds/install.ps1).RawContentStream.ToArray()))) `,
+  drag the game into the window and press Enter.
+
+From this repository: Python 3.9+, `pip install pillow numpy scipy`, and
+`ffmpeg` (only needed when a game's audio isn't already Ogg Vorbis).
 
 ```bash
-tools/vn3ds-port path/to/Game --sd /Volumes/3DS
+tools/vn3ds-port path/to/Game
 ```
+
+With no destination given, `vn3ds-port` finds one and prints each step: the
+3DS's SD card if it is plugged into this computer (best quality; the game and
+`vn3ds.3dsx` are copied, the engine only when it is missing or different),
+otherwise the 3DS on the Wi-Fi (compact quality). Over Wi-Fi it first sends
+vn3ds itself through the Homebrew Launcher's netloader when vn3ds isn't open
+yet, then the game, in one run; it waits for the 3DS and retries dropped
+connections until everything has arrived. `--sd /Volumes/3DS` or
+`--3ds 192.168.1.23` choose the destination yourself, `--no-detect` only
+builds the game folder.
 
 `vn3ds-port` accepts a game in any of the shapes Ren'Py games ship in, and
 it does the rest:
@@ -99,10 +118,12 @@ tools/vn3ds-port --install --3ds 192.168.1.23
 - **If vn3ds is already on the receive screen**, this updates it in place;
   restart vn3ds afterwards.
 - **If it isn't installed yet**, open the Homebrew Launcher and press **Y**
-  (netloader). vn3ds-port sends the engine with devkitPro's `3dslink`, vn3ds
-  starts, opens its receiver on its own and saves itself to
-  `sdmc:/3ds/vn3ds.3dsx`.
-- `--install` can be combined with a game to send both at once.
+  (netloader). vn3ds-port sends the engine the way devkitPro's `3dslink`
+  does (built in, nothing to install), vn3ds starts, opens its receiver on
+  its own and saves itself to `sdmc:/3ds/vn3ds.3dsx`.
+- Whenever a game is sent, vn3ds is sent with it (only if the 3DS's copy is
+  missing or different), so `--install` is only needed to send vn3ds alone;
+  `--no-engine` leaves it out.
 
 **Using the ftpd homebrew app instead:** `--ftp 192.168.1.23:5000` uploads
 the engine (with `--install`) and the game into `sdmc:/3ds/`.

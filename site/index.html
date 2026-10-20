@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vn3ds</title>
+<meta name="description" content="Ren'Py visual novels on the Nintendo 3DS, in stereoscopic 3D. Port any Ren'Py game with one command and send it over Wi-Fi.">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f3ef;
+    --surface: #fbfaf8;
+    --ink: #24272b;
+    --muted: #6d7176;
+    --faint: #9a9ea3;
+    --line: #e3dfd8;
+    --accent: #557487;
+    --accent-soft: #e4ebee;
+    --sage: #7c9283;
+    --warn: #a2704a;
+    --code-bg: #efece6;
+    --shell: #dcd8d1;
+    --shell-edge: #c9c4bb;
+    --radius: 10px;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161819;
+      --surface: #1c1f21;
+      --ink: #e7e5e0;
+      --muted: #a0a4a8;
+      --faint: #6f7478;
+      --line: #2b2f32;
+      --accent: #93b2c3;
+      --accent-soft: #22303a;
+      --sage: #9db3a4;
+      --warn: #d0a07a;
+      --code-bg: #202427;
+      --shell: #2a2d30;
+      --shell-edge: #383c40;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161819; --surface: #1c1f21; --ink: #e7e5e0; --muted: #a0a4a8; --faint: #6f7478;
+    --line: #2b2f32; --accent: #93b2c3; --accent-soft: #22303a; --sage: #9db3a4; --warn: #d0a07a;
+    --code-bg: #202427; --shell: #2a2d30; --shell-edge: #383c40;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 17px/1.65 var(--sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  code, kbd { font-family: var(--mono); font-size: 0.88em; }
+  :not(pre) > code {
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  kbd {
+    display: inline-block;
+    min-width: 1.6em;
+    padding: 0 0.4em;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 0.8em;
+    line-height: 1.6;
+    background: var(--surface);
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  @media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+  /* ---------- top bar ---------- */
+  .top {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .wordmark { font-weight: 600; font-size: 19px; letter-spacing: -0.02em; text-decoration: none; }
+  .wordmark span { color: var(--accent); }
+  .top nav { display: flex; align-items: center; gap: 28px; font-size: 15px; }
+  .top nav a.plain { text-decoration: none; color: var(--muted); }
+  .top nav a.plain:hover { color: var(--ink); }
+  .gh {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 500;
+    background: var(--surface);
+    transition: border-color .2s;
+  }
+  .gh:hover { border-color: var(--faint); }
+  .gh svg { width: 17px; height: 17px; fill: currentColor; }
+  @media (max-width: 640px) { .top nav a.plain { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 96px 0 104px; }
+  .hero .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+  .eyebrow {
+    font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 20px;
+  }
+  h1 {
+    font-weight: 500; font-size: clamp(34px, 4.6vw, 52px);
+    line-height: 1.12; letter-spacing: -0.03em; margin: 0 0 24px;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lede { font-size: 19px; color: var(--muted); max-width: 30em; margin: 0 0 36px; font-weight: 300; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px; border-radius: 999px;
+    font: 500 15px var(--sans); text-decoration: none;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn:hover { opacity: .88; }
+  @media (max-width: 860px) {
+    .hero { padding: 56px 0 72px; }
+    .hero .wrap { grid-template-columns: 1fr; gap: 56px; }
+  }
+
+  /* ---------- the console ---------- */
+  .ds { width: 100%; max-width: 440px; margin: 0 auto; user-select: none; }
+  .ds .shell {
+    background: var(--shell);
+    border: 1px solid var(--shell-edge);
+    border-radius: 18px;
+    padding: 6%;
+  }
+  .ds .upper { padding: 5.5% 9% 7%; border-radius: 18px 18px 8px 8px; }
+  .ds .lower { padding: 5% 19% 8%; border-radius: 8px 8px 22px 22px; margin-top: 6px; position: relative; }
+  .ds .hinge { height: 10px; margin: 0 14%; background: var(--shell-edge); border-radius: 0 0 6px 6px; opacity: .6; }
+  .screen { position: relative; overflow: hidden; border-radius: 3px; background: #0d0f12; }
+  .screen.top-s { aspect-ratio: 400 / 240; }
+  .screen.bot-s { aspect-ratio: 320 / 240; }
+  .layer {
+    position: absolute; inset: -4% -6%;
+    background-size: cover; background-position: center;
+    transform: translate3d(calc(var(--px, 0) * var(--d) * 1px), calc(var(--py, 0) * var(--d) * 0.4px), 0);
+    transition: transform .25s ease-out;
+    will-change: transform;
+  }
+  .sprite {
+    position: absolute; left: 34%; bottom: -10%; height: 84%;
+    transform: translate3d(calc(-50% + var(--px, 0) * var(--d) * 1px), 0, 0);
+    transition: transform .25s ease-out;
+  }
+  .textbox {
+    position: absolute; left: 4%; right: 4%; bottom: 5%;
+    padding: 2.6% 4% 3%;
+    background: rgba(18, 22, 30, .78);
+    border-radius: 4px;
+    color: #f1efe9;
+    font-size: clamp(9px, 2.3vw, 12.5px);
+    line-height: 1.4;
+    transform: translate3d(calc(var(--px, 0) * var(--d) * 1px), 0, 0);
+    transition: transform .25s ease-out;
+  }
+  .textbox b { display: block; color: #ff9a6b; font-weight: 600; margin-bottom: 1px; }
+  .bot-s {
+    background: linear-gradient(#1b1f26, #121418);
+    color: #c9ccd1;
+    font-size: clamp(7.5px, 1.9vw, 10px);
+    display: flex; flex-direction: column;
+  }
+  .bot-s .bar { display: flex; justify-content: space-between; padding: 3% 5%; color: #e8e8e8; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .bot-s .bar i { font-style: normal; color: #7fb6e8; }
+  .bot-s .log { flex: 1; padding: 4% 5%; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
+  .bot-s .log p { margin: 0; opacity: .55; }
+  .bot-s .log p:last-child { opacity: 1; }
+  .bot-s .log b { color: #ff9a6b; font-weight: 500; }
+  .bot-s .btns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; padding: 0 4% 4%; }
+  .bot-s .btns span { text-align: center; padding: 6% 0; background: rgba(255,255,255,.06); border-radius: 3px; }
+  .ds .slider {
+    position: absolute; right: 3.5%; top: 14%;
+    width: 4px; height: 26%; border-radius: 2px; background: var(--shell-edge);
+  }
+  .touch-only { display: none; }
+  @media (hover: none) { .touch-only { display: inline; } .hover-only { display: none; } }
+  .ds-caption { text-align: center; font-size: 13px; color: var(--faint); margin-top: 18px; }
+
+  /* ---------- sections ---------- */
+  section { padding: 96px 0; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) { section { padding: 64px 0; } }
+  .section-head { display: grid; grid-template-columns: 1fr 2fr; gap: 64px; margin-bottom: 56px; }
+  @media (max-width: 860px) { .section-head { grid-template-columns: 1fr; gap: 12px; margin-bottom: 40px; } }
+  h2 { font-weight: 500; font-size: 30px; letter-spacing: -0.02em; line-height: 1.2; margin: 0; }
+  .section-head p { margin: 0; color: var(--muted); max-width: 36em; }
+
+  /* ---------- steps ---------- */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .step {
+    counter-increment: step;
+    display: grid; grid-template-columns: 1fr 2fr; gap: 64px;
+    padding: 36px 0; border-top: 1px solid var(--line);
+  }
+  .step:first-child { border-top: 0; padding-top: 0; }
+  .step-title { display: flex; gap: 16px; align-items: baseline; }
+  .step-title::before {
+    content: counter(step, decimal-leading-zero);
+    font: 400 13px var(--mono); color: var(--faint); flex: none;
+  }
+  .step h3 { font-size: 18px; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+  .step .body > p { margin: 0 0 16px; color: var(--muted); }
+  .step .body > p:last-child { margin-bottom: 0; }
+  .step .note { font-size: 15px; }
+  @media (max-width: 860px) {
+    .step { grid-template-columns: 1fr; gap: 16px; padding: 32px 0; }
+  }
+  .or { display: flex; align-items: center; gap: 14px; color: var(--faint); font-size: 13px; margin: 18px 0; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---------- command blocks ---------- */
+  .cmd {
+    display: flex; align-items: stretch;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin: 0 0 14px;
+    overflow: hidden;
+  }
+  .cmd pre {
+    margin: 0; flex: 1; min-width: 0;
+    padding: 14px 18px;
+    overflow-x: auto;
+    font: 14px/1.6 var(--mono);
+    white-space: pre;
+    scrollbar-width: thin;
+  }
+  .cmd pre::before { content: "$ "; color: var(--faint); user-select: none; -webkit-user-select: none; }
+  .cmd.plainpre pre::before { content: none; }
+  .ip-slot { color: var(--accent); font-weight: 600; }
+  .ip-slot.empty { color: var(--warn); font-weight: 400; font-style: italic; }
+  .copy {
+    flex: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 16px;
+    border: 0; border-left: 1px solid var(--line);
+    background: transparent; color: var(--muted);
+    font: 500 13px var(--sans);
+    cursor: pointer;
+    min-width: 86px; justify-content: center;
+  }
+  .copy:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .copy svg { width: 15px; height: 15px; }
+  .copy.done { color: var(--sage); }
+  .copy .lbl-done { display: none; }
+  .copy.done .lbl-copy { display: none; }
+  .copy.done .lbl-done { display: inline; }
+  @media (max-width: 640px) {
+    .cmd pre { font-size: 13px; padding: 12px 14px; white-space: pre-wrap; }
+    .cmd pre .nw { white-space: nowrap; }
+    .copy { min-width: 0; padding: 0 12px; }
+    .copy .lbl-copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  }
+
+  /* ---------- IP field ---------- */
+  .ip-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .ip-card label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .ip-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .ip-input {
+    flex: 1; min-width: 0; max-width: 300px;
+    font: 500 22px/1 var(--mono);
+    letter-spacing: 0.02em;
+    padding: 14px 16px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .ip-input::placeholder { color: var(--faint); font-weight: 400; }
+  .ip-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .ip-input.bad { border-color: var(--warn); }
+  .ip-status { font-size: 14px; color: var(--muted); min-height: 1.6em; margin: 12px 0 0; }
+  .ip-status.ok { color: var(--sage); }
+  .ip-status.warn { color: var(--warn); }
+  .ip-help { margin: 18px 0 0; padding-top: 18px; border-top: 1px solid var(--line); font-size: 15px; color: var(--muted); }
+  .ip-help p { margin: 0 0 8px; }
+  .ip-help p:last-child { margin: 0; }
+
+  /* ---------- computer IP helper ---------- */
+  .helper { display: grid; grid-template-columns: 1fr 2fr; gap: 64px; }
+  @media (max-width: 860px) { .helper { grid-template-columns: 1fr; gap: 24px; } }
+  .os { display: grid; grid-template-columns: 90px 1fr; gap: 0 16px; align-items: center; }
+  .os .name { font-size: 14px; color: var(--muted); margin-bottom: 14px; }
+  @media (max-width: 480px) { .os { grid-template-columns: 1fr; } .os .name { margin-bottom: 6px; } }
+  .net-check { margin-top: 28px; }
+  .net-check .ip-input { font-size: 17px; padding: 11px 14px; }
+
+  /* ---------- features ---------- */
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .feature { padding: 32px 28px 36px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .feature svg { width: 28px; height: 28px; stroke: var(--accent); fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 20px; }
+  .feature h3 { font-size: 17px; font-weight: 500; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .feature p { margin: 0; font-size: 15px; color: var(--muted); }
+  @media (max-width: 860px) { .features { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } .feature { padding: 26px 20px 28px; } }
+
+  /* ---------- showcase ---------- */
+  .showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+  .showcase figure { margin: 0; }
+  .showcase img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid var(--line); }
+  .showcase figcaption { font-size: 13px; color: var(--faint); margin-top: 12px; }
+  .showcase p { color: var(--muted); }
+  @media (max-width: 860px) { .showcase { grid-template-columns: 1fr; gap: 32px; } }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 1px solid var(--line); padding: 48px 0 64px; font-size: 14px; color: var(--muted); }
+  footer .wrap { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+  footer p { margin: 0 0 6px; }
+  footer a { color: var(--ink); text-decoration-color: var(--line); text-underline-offset: 3px; }
+
+  /* ---------- download ---------- */
+  .section-head .req { margin: 14px 0 0; font-size: 15px; color: var(--muted); }
+  .req strong { color: var(--ink); font-weight: 500; }
+  .mobile-note {
+    display: none;
+    background: var(--accent-soft);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin: 0 0 32px;
+    font-size: 15px;
+  }
+  .mobile-note p { margin: 0 0 12px; }
+  .mobile-note .cmd { margin: 0; background: var(--surface); }
+  .is-mobile .mobile-note { display: block; }
+
+  .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 0 0 56px; }
+  .choice {
+    display: flex; flex-direction: column; gap: 4px;
+    text-align: left; font: inherit; color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 22px;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .choice:hover { border-color: var(--faint); }
+  .choice[aria-selected="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .choice .ch-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .choice .ch-name { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; }
+  .choice .ch-desc { font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .pill {
+    flex: none;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill.rec { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  @media (max-width: 640px) {
+    .choices { grid-template-columns: 1fr; gap: 8px; margin-bottom: 40px; }
+    .choice { padding: 14px 16px; }
+  }
+
+  .panel { display: grid; grid-template-columns: 1fr 2fr; gap: 64px; }
+  .panel[hidden] { display: none; }
+  @media (max-width: 860px) { .panel { grid-template-columns: 1fr; gap: 32px; } .get { max-width: 440px; } }
+  .get {
+    align-self: start;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .get .btn { width: 100%; justify-content: center; }
+  .get .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+  .get .meta { margin: 10px 0 0; font-size: 13px; color: var(--faint); text-align: center; }
+  .get .meta a { color: var(--muted); text-underline-offset: 3px; text-decoration-color: var(--faint); }
+  .get .lead { margin: 0 0 16px; font-size: 15px; color: var(--muted); }
+  .seg { display: flex; margin: 0 0 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
+  .seg button {
+    flex: 1;
+    font: 500 14px var(--sans); color: var(--muted);
+    background: transparent; border: 0; border-radius: 999px;
+    padding: 8px 14px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .mini { list-style: none; margin: 0; padding: 0; counter-reset: mini; }
+  .mini > li { counter-increment: mini; position: relative; padding: 0 0 26px 46px; color: var(--muted); font-size: 16px; }
+  .mini > li:last-child { padding-bottom: 0; }
+  .mini > li::before {
+    content: counter(mini);
+    position: absolute; left: 0; top: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--surface);
+    font: 500 13px/26px var(--mono); text-align: center; color: var(--ink);
+  }
+  .mini > li > strong { display: block; color: var(--ink); font-weight: 500; margin-bottom: 2px; }
+  .mini p { margin: 0 0 8px; }
+  .mini p:last-child { margin-bottom: 0; }
+  .mini .cmd { margin: 12px 0 0; }
+  .mini .small { font-size: 14.5px; }
+  .soon .mini > li::before { color: var(--faint); border-style: dashed; }
+  .drop-slot { color: var(--warn); font-style: italic; user-select: none; -webkit-user-select: none; }
+  .cmd pre.ps::before { content: "PS> "; }
+  .legal { margin: 56px 0 0; font-size: 14px; color: var(--faint); }
+  /* Long one-liners wrap instead of scrolling, so the whole command is visible before copying. */
+  .cmd pre.long { white-space: pre-wrap; }
+  .cmd pre.long .nw { white-space: pre-wrap; overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .legal { margin-top: 40px; } }
+
+  /* Grid columns may shrink below their longest command line; the line scrolls instead. */
+  .hero .wrap > *, .section-head > *, .step > *, .helper > *, .os > *, .showcase > *, .panel > * { min-width: 0; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .layer, .sprite, .textbox { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="wordmark" href="#">vn<span>3</span>ds</a>
+    <nav>
+      <a class="plain" href="#download">Download</a>
+      <a class="plain" href="#start">From source</a>
+      <a class="plain" href="#features">Features</a>
+      <a class="gh" data-repo href="https://github.com/arminjamak/vn3ds" rel="noopener">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">Open source &middot; MIT</p>
+        <h1>Ren'Py visual novels on the Nintendo 3DS, in <em>stereoscopic&nbsp;3D</em>.</h1>
+        <p class="lede">Paste one command, drag in a Ren'Py game, and it lands on your console, converted, over Wi-Fi. No Python on the 3DS: a native engine plays the game, with every layer at its own depth.</p>
+        <div class="cta">
+          <a class="btn primary" href="#download" data-open-tab="term">Download</a>
+          <a class="btn" data-repo href="https://github.com/arminjamak/vn3ds" rel="noopener">View source</a>
+        </div>
+      </div>
+
+      <div>
+        <div class="ds" id="ds" aria-label="A Nintendo 3DS showing the demo game Snapshot: Mira on a beach, with each layer at a different depth" role="img">
+          <div class="shell upper">
+            <div class="screen top-s">
+              <div class="layer" style="--d:-7;background-image:url(assets/beach-far.webp)"></div>
+              <div class="layer" style="--d:-4;background-image:url(assets/beach-mid.webp)"></div>
+              <div class="layer" style="--d:-1.5;background-image:url(assets/beach-near.webp)"></div>
+              <img class="sprite" style="--d:1.5" src="assets/mira.webp" alt="">
+              <div class="textbox" style="--d:4"><b>Mira</b>Did you sleep okay?</div>
+            </div>
+          </div>
+          <div class="hinge"></div>
+          <div class="shell lower">
+            <span class="slider"></span>
+            <div class="screen bot-s">
+              <div class="bar"><span>Snapshot</span><i>3D</i></div>
+              <div class="log">
+                <p><b>Mira</b> Coffee's on.</p>
+                <p><b>Mira</b> Did you sleep okay?</p>
+              </div>
+              <div class="btns"><span>Log</span><span>Auto</span><span>Skip</span><span>Save</span><span>Load</span><span>Menu</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="ds-caption">Snapshot, the demo game. <span class="hover-only">Move your pointer: each</span><span class="touch-only">Each</span> layer sits at its own depth.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= download ================= -->
+  <section id="download">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Download</h2>
+        <div>
+          <p>One command on your computer converts a visual novel and sends it to your 3DS, with vn3ds itself the first time. A version that runs right in the browser is on its way.</p>
+          <p class="req"><strong>You need</strong> a 3DS with custom firmware and the Homebrew Launcher, on the same Wi-Fi as your computer or with its SD card at hand.</p>
+        </div>
+      </div>
+
+      <div class="mobile-note" id="mobile-note">
+        <p><strong>Open this page on your computer.</strong> vn3ds converts games on a Mac or Windows PC, then sends them to the 3DS. Copy the link to open it there:</p>
+        <div class="cmd plainpre"><pre class="long" data-copied="Link copied">https://arminjamak.github.io/vn3ds/</pre></div>
+      </div>
+
+      <div class="choices" role="tablist" aria-label="How to get a game onto your 3DS">
+        <button class="choice" role="tab" id="tab-term" aria-controls="panel-term" aria-selected="true" type="button">
+          <span class="ch-top"><span class="ch-name">Terminal</span><span class="pill rec">One command</span></span>
+          <span class="ch-desc">macOS and Windows. Paste a command, drag the game in, press Enter.</span>
+        </button>
+        <button class="choice" role="tab" id="tab-web" aria-controls="panel-web" aria-selected="false" tabindex="-1" type="button">
+          <span class="ch-top"><span class="ch-name">Website</span><span class="pill">Coming soon</span></span>
+          <span class="ch-desc">Converts in your browser. Nothing to install.</span>
+        </button>
+      </div>
+
+      <!-- Terminal -->
+      <div class="panel" role="tabpanel" id="panel-term" aria-labelledby="tab-term">
+        <div class="get">
+          <p class="lead">Nothing to download by hand. The command fetches the converter, converts the game and sends vn3ds and the game together.</p>
+          <div class="seg" role="group" aria-label="Your computer">
+            <button type="button" data-term="mac" aria-pressed="true">macOS</button>
+            <button type="button" data-term="win" aria-pressed="false">Windows</button>
+          </div>
+          <p class="meta" id="term-for">Pick your computer.</p>
+        </div>
+        <ol class="mini">
+          <li>
+            <strong>Get your 3DS ready</strong>
+            <p><b>First time:</b> open the Homebrew Launcher and press <kbd>Y</kbd>. The command sends vn3ds through it, then your game.</p>
+            <p><b>Already have vn3ds?</b> Open it and press <kbd>Y</kbd>.</p>
+          </li>
+          <li>
+            <strong data-term-show="mac">Open Terminal and paste this</strong>
+            <strong data-term-show="win" hidden>Open PowerShell and paste this</strong>
+            <p class="small" data-term-show="mac">Press <kbd>&#8984;</kbd> <kbd>Space</kbd>, type <em>Terminal</em> and press <kbd>Return</kbd>.</p>
+            <p class="small" data-term-show="win" hidden>Press <kbd>Start</kbd>, type <em>PowerShell</em> and press <kbd>Enter</kbd>.</p>
+            <div class="cmd" data-term-show="mac"><pre class="long" data-copy="curl -fsSL https://arminjamak.github.io/vn3ds/install.sh | sh -s -- " data-copied="Copied. Now drag your game into Terminal and press Return.">curl -fsSL https://arminjamak.github.io/vn3ds/install.sh | sh -s -- <span class="drop-slot">your&nbsp;game</span></pre></div>
+            <div class="cmd" data-term-show="win" hidden><pre class="long ps" data-copy="&amp; ([scriptblock]::Create([Text.Encoding]::UTF8.GetString((iwr -useb https://arminjamak.github.io/vn3ds/install.ps1).RawContentStream.ToArray()))) " data-copied="Copied. Now drag your game into PowerShell and press Enter.">&amp; ([scriptblock]::Create([Text.Encoding]::UTF8.GetString((iwr -useb https://arminjamak.github.io/vn3ds/install.ps1).RawContentStream.ToArray()))) <span class="drop-slot">your&nbsp;game</span></pre></div>
+          </li>
+          <li>
+            <strong>Drag the game in</strong>
+            <p>Add a space after the command, then drag the visual novel (its folder or the <code>.zip</code> you downloaded) into the window. That pastes its path. Press <kbd data-term-show="mac">Return</kbd><kbd data-term-show="win" hidden>Enter</kbd>.</p>
+          </li>
+          <li>
+            <strong>Leave it running</strong>
+            <p>It converts the game and sends vn3ds and the game to your 3DS. The game shows up on the vn3ds home screen. Leave the window open until it finishes.</p>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Website -->
+      <div class="panel soon" role="tabpanel" id="panel-web" aria-labelledby="tab-web" hidden>
+        <div class="get">
+          <p class="lead">In the works: conversion right in your browser, with nothing to install.</p>
+          <span class="btn primary" aria-disabled="true">Coming soon</span>
+          <p class="meta">Until then, the terminal command does the same.</p>
+        </div>
+        <ol class="mini">
+          <li>
+            <strong>Open this page on your computer</strong>
+            <p>Any modern browser.</p>
+          </li>
+          <li>
+            <strong>Drop your game onto the page</strong>
+            <p>It converts right there in the browser. Nothing to install.</p>
+          </li>
+          <li>
+            <strong>Keep the tab open while it works</strong>
+            <p>Then send it to your 3DS.</p>
+          </li>
+        </ol>
+      </div>
+
+      <p class="legal">Only convert games you own. vn3ds doesn't include or distribute any games.</p>
+    </div>
+  </section>
+
+  <!-- ================= quick start ================= -->
+  <section id="start">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Quick start from source</h2>
+        <p>For developers, or if you'd rather build everything yourself. Everything runs from a terminal on your computer. Type your 3DS's IP address in step 3 and every command below fills it in, ready to copy.</p>
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <div class="step-title"><h3>Get the code</h3></div>
+          <div class="body">
+            <div class="cmd"><pre data-cmd="clone">git clone <span data-repo-text>https://github.com/arminjamak/vn3ds</span> &amp;&amp; cd vn3ds</pre></div>
+            <p class="note">The converter needs Python 3.9 or newer and three packages. <code>ffmpeg</code> is only needed when a game's audio isn't already Ogg Vorbis.</p>
+            <div class="cmd"><pre>pip install pillow numpy scipy</pre></div>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-title"><h3>Build the engine</h3></div>
+          <div class="body">
+            <p>Install <a href="https://devkitpro.org/wiki/Getting_Started" rel="noopener">devkitPro</a> with the 3DS packages, then build. This produces <code>engine/vn3ds.3dsx</code>.</p>
+            <div class="cmd"><pre>sudo dkp-pacman -S 3ds-dev 3ds-zlib 3ds-libogg 3ds-libvorbisidec</pre></div>
+            <div class="cmd"><pre>cd engine &amp;&amp; make &amp;&amp; cd ..</pre></div>
+            <div class="or">or</div>
+            <p class="note">Download <code>vn3ds.3dsx</code> from <a data-repo-releases href="https://github.com/arminjamak/vn3ds/releases" rel="noopener">Releases</a> and put it in the <code>engine/</code> folder.</p>
+          </div>
+        </li>
+
+        <li class="step" id="ip-step">
+          <div class="step-title"><h3>Enter your 3DS's IP</h3></div>
+          <div class="body">
+            <div class="ip-card">
+              <label for="ip">3DS IP address</label>
+              <div class="ip-row">
+                <input class="ip-input" id="ip" type="text" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="192.168.1.42" maxlength="15" aria-describedby="ip-status">
+              </div>
+              <p class="ip-status" id="ip-status" aria-live="polite">The commands below show <span class="ip-slot empty">3DS_IP</span> until you type one.</p>
+              <div class="ip-help">
+                <p><strong>Where to find it.</strong> Open the Homebrew Launcher and press <kbd>Y</kbd> (first time), or open vn3ds: the IP is shown at the bottom of its home screen, e.g. <code>192.168.1.42</code>.</p>
+                <p>Your computer and the 3DS must be on the same Wi-Fi.</p>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-title"><h3>First install: engine and demo game</h3></div>
+          <div class="body">
+            <p>With the Homebrew Launcher's netloader open (press <kbd>Y</kbd>), this sends vn3ds, which starts, saves itself to <code>sdmc:/3ds/vn3ds.3dsx</code> and opens its receiver. Snapshot follows straight after.</p>
+            <div class="cmd"><pre>tools/vn3ds-port examples/demo --install --3ds <span class="ip-slot">3DS_IP</span></pre></div>
+            <p class="note">This step uses <code>3dslink</code> from devkitPro's 3dstools. Without it, use the SD-card route in step 7 once; after that everything goes over Wi-Fi.</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-title"><h3>Port and send any Ren'Py game</h3></div>
+          <div class="body">
+            <p>Keep vn3ds open: it listens in the background, even while you play. Then point the tool at a game. It accepts a project folder, a PC, Linux or Mac build, an Android <code>.apk</code>, a <code>.zip</code> download or loose <code>.rpa</code> archives.</p>
+            <div class="cmd"><pre>tools/vn3ds-port path/to/Game --3ds <span class="ip-slot">3DS_IP</span></pre></div>
+            <p class="note">The game shows up on the home screen right away, with a progress bar and the time left, and opens once it's complete. Compiled-only games are decompiled automatically, and <code>port-report.txt</code> lists anything that was skipped or approximated.</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-title"><h3>Updates later</h3></div>
+          <div class="body">
+            <p>Run the same command again. Only changed files are sent, and a dropped connection reconnects and resumes on its own. vn3ds keeps receiving while you play.</p>
+            <div class="cmd"><pre>tools/vn3ds-port path/to/Game --3ds <span class="ip-slot">3DS_IP</span></pre></div>
+            <p class="note">To update vn3ds itself, add <code>--install</code>, then restart vn3ds.</p>
+            <div class="cmd"><pre>tools/vn3ds-port --install --3ds <span class="ip-slot">3DS_IP</span></pre></div>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-title"><h3>Alternative: SD card</h3></div>
+          <div class="body">
+            <p>Power the 3DS off, put its SD card in your computer and run this. It copies the game and the engine onto the card. Faster for very large games.</p>
+            <div class="cmd"><pre>tools/vn3ds-port path/to/Game --sd /Volumes/YOUR_SD</pre></div>
+            <p class="note">Using the ftpd homebrew app instead? Replace <code>--3ds <span class="ip-slot">3DS_IP</span></code> with <code>--ftp <span class="ip-slot">3DS_IP</span>:5000</code>.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= computer IP ================= -->
+  <section id="your-ip">
+    <div class="wrap helper">
+      <div>
+        <h2>Your computer's IP</h2>
+      </div>
+      <div>
+        <p style="color:var(--muted);margin:0 0 28px">You don't need it for the commands, but it's the quickest way to check that both devices are on the same network. A browser can't read it reliably, so ask your terminal:</p>
+        <div class="os">
+          <div class="name">macOS</div>
+          <div class="cmd"><pre>ipconfig getifaddr en0</pre></div>
+          <div class="name">Linux</div>
+          <div class="cmd"><pre>hostname -I</pre></div>
+          <div class="name">Windows</div>
+          <div class="cmd"><pre>ipconfig</pre></div>
+        </div>
+        <p class="note" style="color:var(--muted);font-size:15px;margin:4px 0 0">On Windows, look for <em>IPv4 Address</em> under your Wi-Fi adapter. On a Mac, if <code>en0</code> prints nothing, try <code>en1</code>.</p>
+
+        <div class="ip-card net-check">
+          <label for="pc-ip">Compare with your 3DS</label>
+          <div class="ip-row">
+            <input class="ip-input" id="pc-ip" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.20" maxlength="15" aria-describedby="pc-status">
+          </div>
+          <p class="ip-status" id="pc-status" aria-live="polite">Paste your computer's IP here.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= features ================= -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>What's inside</h2>
+        <p>vn3ds doesn't run Ren'Py on the console. A converter compiles the game to a small bytecode and 3DS-ready textures, and a native C engine plays it. Owning the renderer is what makes the rest possible.</p>
+      </div>
+      <div class="features">
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="16" height="12" rx="1"/><rect x="8" y="13" width="16" height="12" rx="1" opacity=".55"/><rect x="12" y="5" width="16" height="12" rx="1" opacity=".3"/></svg>
+          <h3>Stereoscopic depth per layer</h3>
+          <p>Backgrounds sink into the screen, sprites sit at its surface and the textbox floats in front. Tune any tag's depth, or split a picture into several planes.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="10" width="17" height="13" rx="2"/><path d="M21 14l7-4v13l-7-4"/><circle cx="12.5" cy="16.5" r="3"/></svg>
+          <h3>Handheld-documentary camera</h3>
+          <p>Ren'Py's <code>camera</code> statement with true parallax: slow drift, punch-ins and tilts that slide a scene's layers past each other.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 6h12v6a6 6 0 01-12 0z"/><path d="M10 8H6a4 4 0 004 4M22 8h4a4 4 0 01-4 4"/><path d="M16 18v5M11 27h10M13 23h6v4h-6z"/></svg>
+          <h3>Native minigames, online leaderboard</h3>
+          <p>A story can call a built-in minigame, such as Snake or Invaders, and get its score back. Best scores go to a shared online board.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 13a16 16 0 0122 0M9 17a10 10 0 0114 0M13 21a4 4 0 016 0"/><circle cx="16" cy="25" r="1"/></svg>
+          <h3>Wi-Fi transfer while playing</h3>
+          <p>Send a game from your computer in one command. Unchanged files are skipped, dropped connections resume, and the console keeps receiving while you play.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="11" y="8" width="10" height="15" rx="1"/><path d="M8 10l-4 1.5v12L8 25M24 10l4 1.5v12L24 25"/></svg>
+          <h3>Coverflow home screen</h3>
+          <p>Your games as cards, each showing a snapshot of where you left off. Autosave means you pick up exactly there.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 8h20v14H13l-5 4v-4H6z"/><path d="M11 14h10M11 18h6"/></svg>
+          <h3>Ports the Ren'Py you write</h3>
+          <p>Labels, menus, ATL transforms, transitions, music and voice, <code>Movie</code> scenes and a useful subset of Python. Tested on games with 12,000+ images.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= showcase ================= -->
+  <section id="snapshot">
+    <div class="wrap showcase">
+      <div>
+        <h2>Snapshot</h2>
+        <p>The bundled demo game, and the showcase for everything above. Its scenes are drawn as layered depth planes, its cast has a full range of expressions, and its chapters weave in the native minigames. It uses every optional engine feature, so it's also the reference for your own <code>vn3ds.json</code>.</p>
+        <p>It installs with the engine in step 4, or on its own:</p>
+        <div class="cmd"><pre>tools/vn3ds-port examples/demo --3ds <span class="ip-slot">3DS_IP</span></pre></div>
+      </div>
+      <figure>
+        <img src="assets/beach-preview.webp" width="800" height="450" alt="Snapshot's beach scene with Mira" loading="lazy">
+        <figcaption>The beach, composed from eight depth layers.</figcaption>
+      </figure>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <p><strong style="color:var(--ink);font-weight:500">vn3ds</strong> is open source under the <a data-repo-license href="https://github.com/arminjamak/vn3ds/blob/main/LICENSE" rel="noopener">MIT licence</a>.</p>
+      <p>Only convert games you own. vn3ds doesn't distribute games. Not affiliated with Nintendo or the Ren'Py project.</p>
+    </div>
+    <div>
+      <p><a data-repo href="https://github.com/arminjamak/vn3ds" rel="noopener">Source on GitHub</a></p>
+    </div>
+  </div>
+</footer>
+
+<span class="sr" id="copy-live" aria-live="polite"></span>
+
+<script>
+  const REPO_URL = "https://github.com/arminjamak/vn3ds";
+  const STORE_KEY = "vn3ds.ip";
+  const PLACEHOLDER = "3DS_IP";
+
+  // Repo links, kept in one place until the repository is public.
+  document.querySelectorAll("[data-repo]").forEach(a => a.href = REPO_URL);
+  document.querySelectorAll("[data-repo-text]").forEach(s => s.textContent = REPO_URL);
+  document.querySelectorAll("[data-repo-releases]").forEach(a => a.href = REPO_URL + "/releases");
+  document.querySelectorAll("[data-repo-license]").forEach(a => a.href = REPO_URL + "/blob/main/LICENSE");
+
+  // ---------- copy buttons ----------
+  const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3.5A1.5 1.5 0 014.5 2H11"/></svg>';
+  const live = document.getElementById("copy-live");
+
+  async function writeClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e2) {}
+      ta.remove();
+      return ok;
+    }
+  }
+
+  // Keep each word of a command together, so narrow screens wrap only at spaces.
+  function keepWordsTogether(pre) {
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) if (!walker.currentNode.parentElement.closest(".ip-slot, .drop-slot")) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      const frag = document.createDocumentFragment();
+      node.textContent.split(/(\s+)/).forEach(part => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+        const span = document.createElement("span");
+        span.className = "nw";
+        span.textContent = part;
+        frag.appendChild(span);
+      });
+      node.replaceWith(frag);
+    });
+  }
+
+  document.querySelectorAll(".cmd").forEach(block => {
+    const pre = block.querySelector("pre");
+    keepWordsTogether(pre);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy";
+    btn.innerHTML = COPY_ICON + '<span class="lbl-copy">Copy</span><span class="lbl-done">Copied</span>';
+    btn.setAttribute("aria-label", "Copy command");
+    let timer;
+    btn.addEventListener("click", async () => {
+      const text = pre.dataset.copy !== undefined ? pre.dataset.copy : pre.textContent.trim();
+      const ok = await writeClipboard(text);
+      if (!ok) { live.textContent = "Couldn't copy. Select the text instead."; return; }
+      btn.classList.add("done");
+      live.textContent = pre.dataset.copied || (text.includes(PLACEHOLDER) ? "Copied. Replace 3DS_IP with your console's address." : "Copied");
+      clearTimeout(timer);
+      timer = setTimeout(() => btn.classList.remove("done"), 1600);
+    });
+    block.appendChild(btn);
+  });
+
+  // ---------- IP handling ----------
+  const OCTET = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+  const IPV4 = new RegExp("^" + OCTET + "(\\." + OCTET + "){3}$");
+  const isIPv4 = s => IPV4.test(s);
+  // True while what's typed could still become a valid address.
+  const couldBecomeIPv4 = s => {
+    if (!/^[\d.]*$/.test(s)) return false;
+    const parts = s.split(".");
+    if (parts.length > 4) return false;
+    return parts.every((p, i) => p === "" ? i === parts.length - 1 || false : (Number(p) <= 255 && !(p.length > 1 && p[0] === "0")));
+  };
+  const clean = s => s.trim().replace(/\s+/g, "").replace(/,/g, ".");
+
+  const ipInput = document.getElementById("ip");
+  const ipStatus = document.getElementById("ip-status");
+  const pcInput = document.getElementById("pc-ip");
+  const pcStatus = document.getElementById("pc-status");
+  const slots = document.querySelectorAll(".ip-slot");
+  let currentIP = "";
+
+  function storeIP(ip) {
+    try { ip ? localStorage.setItem(STORE_KEY, ip) : localStorage.removeItem(STORE_KEY); } catch (e) {}
+  }
+  function loadIP() {
+    try { return localStorage.getItem(STORE_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function renderIP(final) {
+    const raw = clean(ipInput.value);
+    const valid = isIPv4(raw);
+    currentIP = valid ? raw : "";
+    slots.forEach(s => {
+      if (s.closest("#ip-status")) return;
+      s.textContent = valid ? raw : PLACEHOLDER;
+      s.classList.toggle("empty", !valid);
+    });
+
+    ipInput.classList.remove("bad");
+    ipStatus.className = "ip-status";
+    if (!raw) {
+      ipStatus.innerHTML = 'The commands below show <span class="ip-slot empty">' + PLACEHOLDER + "</span> until you type one.";
+    } else if (valid) {
+      ipStatus.classList.add("ok");
+      ipStatus.textContent = "All commands now use " + raw + ".";
+    } else if (!final && couldBecomeIPv4(raw)) {
+      ipStatus.textContent = "Four numbers separated by dots, as shown on the 3DS.";
+    } else {
+      ipInput.classList.add("bad");
+      ipStatus.classList.add("warn");
+      ipStatus.textContent = "That doesn't look like an IPv4 address yet. It should be four numbers from 0 to 255, like 192.168.1.42.";
+    }
+    if (valid || !raw) storeIP(raw);
+    renderNetCheck();
+  }
+
+  ipInput.addEventListener("input", () => renderIP(false));
+  ipInput.addEventListener("blur", () => renderIP(true));
+  ipInput.addEventListener("keydown", e => { if (e.key === "Enter") { renderIP(true); ipInput.blur(); } });
+  const saved = loadIP();
+  if (saved && isIPv4(saved)) ipInput.value = saved;
+  renderIP(true);
+
+  // ---------- same-network check ----------
+  function renderNetCheck() {
+    const pc = clean(pcInput.value);
+    pcStatus.className = "ip-status";
+    pcInput.classList.remove("bad");
+    if (!pc) { pcStatus.textContent = currentIP ? "Paste your computer's IP to compare it with " + currentIP + "." : "Paste your computer's IP here, and enter the 3DS's in step 3."; return; }
+    if (!isIPv4(pc)) {
+      if (couldBecomeIPv4(pc) && document.activeElement === pcInput) { pcStatus.textContent = "Four numbers separated by dots."; return; }
+      pcInput.classList.add("bad");
+      pcStatus.classList.add("warn");
+      pcStatus.textContent = "That doesn't look like an IPv4 address.";
+      return;
+    }
+    if (!currentIP) { pcStatus.textContent = "Now enter the 3DS's IP in step 3 to compare."; return; }
+    if (pc === currentIP) {
+      pcStatus.classList.add("warn");
+      pcStatus.textContent = "That's the same address as the 3DS. Each device has its own.";
+      return;
+    }
+    const net = ip => ip.split(".").slice(0, 3).join(".");
+    if (net(pc) === net(currentIP)) {
+      pcStatus.classList.add("ok");
+      pcStatus.textContent = "Looks like the same network (" + net(pc) + ".x). You're set.";
+    } else {
+      pcStatus.classList.add("warn");
+      pcStatus.textContent = "These usually share the first three numbers on a home network. Check that both are on the same Wi-Fi.";
+    }
+  }
+  pcInput.addEventListener("input", renderNetCheck);
+  pcInput.addEventListener("blur", renderNetCheck);
+  renderNetCheck();
+
+  // ---------- download: three-way choice ----------
+  const tabs = [...document.querySelectorAll('.choices [role="tab"]')];
+  function selectTab(tab, focus) {
+    tabs.forEach(t => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+    if (focus) tab.focus();
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", e => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (step) { e.preventDefault(); selectTab(tabs[(i + step + tabs.length) % tabs.length], true); }
+      else if (e.key === "Home") { e.preventDefault(); selectTab(tabs[0], true); }
+      else if (e.key === "End") { e.preventDefault(); selectTab(tabs[tabs.length - 1], true); }
+    });
+  });
+
+  // ---------- download: which computer is this? ----------
+  // Returns { os: "mac" | "win" | "linux" | "ios" | "android" | "other", mobile }.
+  // The install scripts pick the CPU architecture themselves.
+  function detectPlatform() {
+    const uad = navigator.userAgentData;
+    const ua = navigator.userAgent || "";
+    let os = "other", mobile = false;
+    if (uad && uad.platform) {
+      const p = uad.platform.toLowerCase();
+      mobile = !!uad.mobile;
+      if (p.includes("mac")) os = "mac";
+      else if (p.includes("win")) os = "win";
+      else if (p.includes("android")) os = "android";
+      else if (p.includes("ios") || p.includes("iphone") || p.includes("ipad")) os = "ios";
+      else if (p.includes("linux") || p.includes("chrome os") || p.includes("chromeos")) os = "linux";
+    } else {
+      // iPadOS reports itself as a Mac; touch points give it away.
+      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) os = "ios";
+      else if (/Android/.test(ua)) os = "android";
+      else if (/Macintosh|Mac OS X/.test(ua)) os = "mac";
+      else if (/Windows/.test(ua)) os = "win";
+      else if (/Linux|CrOS|X11/.test(ua)) os = "linux";
+      mobile = /Mobi/.test(ua);
+    }
+    if (os === "ios" || os === "android") mobile = true;
+    return { os, mobile };
+  }
+
+  const termFor = document.getElementById("term-for");
+  function showTerminal(os) {
+    document.querySelectorAll("[data-term]").forEach(b => b.setAttribute("aria-pressed", b.dataset.term === os));
+    document.querySelectorAll("[data-term-show]").forEach(el => el.hidden = el.dataset.termShow !== os);
+  }
+  document.querySelectorAll("[data-term]").forEach(b => b.addEventListener("click", () => {
+    showTerminal(b.dataset.term);
+    termFor.textContent = b.dataset.term === "win" ? "Showing the Windows command." : "Showing the macOS command.";
+  }));
+
+  function applyPlatform({ os, mobile }) {
+    document.documentElement.classList.toggle("is-mobile", mobile);
+    showTerminal(os === "win" ? "win" : "mac");
+    if (os === "mac") termFor.textContent = "Picked for your Mac.";
+    else if (os === "win") termFor.textContent = "Picked for your Windows PC.";
+    else if (os === "linux") termFor.innerHTML = 'On Linux? Use the <a href="#start">quick start from source</a> below.';
+    else termFor.textContent = "Pick your computer.";
+  }
+  window.vn3dsPlatform = { detect: () => { const p = detectPlatform(); applyPlatform(p); return p; }, apply: applyPlatform };
+  window.vn3dsPlatform.detect();
+
+  // The hero's Download button opens the Terminal choice.
+  document.querySelectorAll("[data-open-tab]").forEach(a => a.addEventListener("click", () => {
+    selectTab(document.getElementById("tab-" + a.dataset.openTab));
+  }));
+
+  // ---------- console parallax ----------
+  const ds = document.getElementById("ds");
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let pointerActive = false;
+  function setShift(x, y) {
+    ds.style.setProperty("--px", x.toFixed(2));
+    ds.style.setProperty("--py", y.toFixed(2));
+  }
+  window.addEventListener("pointermove", e => {
+    if (reduce.matches || e.pointerType !== "mouse") return;
+    pointerActive = true;
+    const r = ds.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const x = Math.max(-1, Math.min(1, (e.clientX - cx) / (window.innerWidth / 2)));
+    const y = Math.max(-1, Math.min(1, (e.clientY - cy) / (window.innerHeight / 2)));
+    setShift(x * 1.6, y * 1.6);
+  }, { passive: true });
+  // Without a mouse, a slow drift shows the depth instead.
+  function idle(t) {
+    if (!pointerActive && !reduce.matches) setShift(Math.sin(t / 2600) * 1.3, Math.sin(t / 3700) * 0.6);
+    requestAnimationFrame(idle);
+  }
+  requestAnimationFrame(idle);
+</script>
+</body>
+</html>

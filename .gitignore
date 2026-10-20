@@ -31,7 +31,8 @@ renders/
 # real leaderboard key and server address (never commit)
 engine/source/leaderboard_secret.h
 
-# packaging tools and downloads (tools/vn3ds-app/build_app.py)
+# packaging tools and downloads (tools/cli-release/build_cli.py)
 .venv/
-tools/vn3ds-app/vendor/
-tools/vn3ds-app/dist/
+tools/cli-release/vendor/
+tools/cli-release/dist/
+tools/cli-release/work/

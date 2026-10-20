@@ -187,7 +187,15 @@ def resolve_auto_audio(fs, name):
     return index.get(name.lower())
 
 
-def main(argv=None):
+def _no_progress(step, **info):
+    pass
+
+
+def main(argv=None, progress=None):
+    """Packs a game; returns a summary dict. `progress(step, **info)` is
+    called as the work goes along: step "scripts", "audio", "images",
+    "video" or "pack", with state="active"/"done" or done=n, total=N."""
+    progress = progress or _no_progress
     ap = argparse.ArgumentParser(prog="vnpack", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project", help="Ren'Py project folder, its game/ folder, or an Android .apk")
@@ -261,6 +269,7 @@ def main(argv=None):
         return
 
     # -- parse -------------------------------------------------------------
+    progress("scripts", state="active")
     scripts = sorted(k for k in fs.keys()
                      if k.endswith(".rpy") and not k.startswith(("tl/", "renpy/")))
     if not scripts:
@@ -286,6 +295,7 @@ def main(argv=None):
         warn.report()
         sys.exit(f"vnpack: {e}")
 
+    progress("scripts", state="done", labels=len(comp.defined_labels), files=len(scripts))
     if args.check:
         warn.report(limit=10**9 if args.all_warnings else 60)
         n_specs = len(comp.used_specs)
@@ -426,8 +436,12 @@ def main(argv=None):
         key, rel = job
         return convert_audio(fs.read(key), fs.display(key), os.path.join(out_dir, rel), warn,
                              args.audio_profile)
+    progress("audio", done=0, total=len(audio_jobs))
     with ThreadPoolExecutor(max_workers=max(2, os.cpu_count() or 2)) as ex:
-        audio_count = sum(1 for ok in ex.map(audio_job, audio_jobs) if ok)
+        for i, ok in enumerate(ex.map(audio_job, audio_jobs)):
+            audio_count += 1 if ok else 0
+            progress("audio", done=i + 1, total=len(audio_jobs))
+    progress("audio", state="done", done=len(audio_jobs), total=len(audio_jobs))
     for i, rel in enumerate(resources):
         if os.path.exists(os.path.join(out_dir, rel)):
             resources[i] = rename_by_content(rel)
@@ -473,8 +487,17 @@ def main(argv=None):
     done = 0
     t0 = time.time()
 
+    # Movies are converted in the same pass; count them for the progress.
+    movies = sum(1 for n in names if "Movie" in repr(defs[n])) if not args.no_video else 0
+    movies_done = 0
+    progress("images", done=0, total=len(names))
+    if movies:
+        progress("video", done=0, total=movies)
+
     def results():
-        if jobs == 1 or len(names) < 50:
+        # Workers inherit the state above by forking; where there is no fork
+        # (Windows) the images are converted in this process.
+        if jobs == 1 or len(names) < 50 or "fork" not in multiprocessing.get_all_start_methods():
             yield from map(_image_job, names)
             return
         ctx = multiprocessing.get_context("fork")
@@ -485,6 +508,10 @@ def main(argv=None):
         for w in warnings:
             warn(None, w)
         done += 1
+        progress("images", done=done, total=len(names))
+        if result is not None and result[0] in ("video", "cvh"):
+            movies_done += 1
+            progress("video", done=movies_done, total=max(movies, movies_done))
         if not args.quiet and (done % 250 == 0 or done == len(names)):
             rate = done / max(1e-6, time.time() - t0)
             print(f"  images {done}/{len(names)}  ({rate:.0f}/s, "
@@ -517,6 +544,10 @@ def main(argv=None):
                            flags=(2 if full else 0) | (4 if kind in ("video", "cvh") else 0),
                            depth=depth))
 
+    progress("images", state="done", done=done, total=len(names))
+    if movies or movies_done:
+        progress("video", state="done", done=movies_done, total=max(movies, movies_done))
+    progress("pack", state="active")
     layer_records = []
     for name in sorted(layer_cfg):
         items = []
@@ -576,6 +607,7 @@ def main(argv=None):
     size = write_game(os.path.join(out_dir, "game.bin"), comp, meta, images, resources,
                       layer_records, voices)
 
+    progress("pack", state="done", bytes=size + total_bytes)
     warn.report(limit=10**9 if args.all_warnings else 60)
     if not args.quiet:
         print(f"\n{title}: {len(comp.defined_labels)} labels, {len(images)} images "
