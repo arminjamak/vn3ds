@@ -1,4 +1,5 @@
 #include "app.h"
+#include "vfs.h"
 #include "minigame.h"
 #include "leaderboard.h"
 #include "net.h"
@@ -237,11 +238,13 @@ static void apply_staged_update(const char *id)
     move_tree(staged, live);
 }
 
-/* After an update (see flag_prune in net.c), deletes packed files in img/
- * and snd/ that game.bin no longer names: files are named by their contents,
- * so changed ones arrive under new names and the old ones stay behind. On a
- * 3DS card deleting a thousand files takes minutes, so it runs in a
- * low-priority thread while the game plays; the flag goes only when done. */
+/* After an update (see flag_prune in net.c), deletes packed files in img/,
+ * snd/ and pk/ that game.bin no longer names: files are named by their
+ * contents, so changed ones arrive under new names and the old ones stay
+ * behind. A game with pack files names only its packs, so the loose files of
+ * an older version go too. On a 3DS card deleting a thousand files takes
+ * minutes, so it runs in a low-priority thread while the game plays; the
+ * flag goes only when done. */
 enum { PRUNE_NAME = 64 };
 typedef struct {
     char dir[400];
@@ -261,8 +264,8 @@ static void prune_run(void *arg)
     char *doomed = NULL;
     u32 ndoomed = 0, cap = 0;
     /* list first, delete after: removing while reading a folder can skip entries */
-    static const char *subs[] = {"img", "snd"};
-    for (int k = 0; k < 2; k++) {
+    static const char *subs[] = {"img", "snd", "pk"};
+    for (int k = 0; k < 3; k++) {
         char path[460];
         snprintf(path, sizeof(path), "%s/%s", job->dir, subs[k]);
         DIR *d = opendir(path);
@@ -272,7 +275,8 @@ static void prune_run(void *arg)
         while ((e = readdir(d))) {
             const char *ext = strrchr(e->d_name, '.');
             if (!ext || (strcmp(ext, ".ctex") && strcmp(ext, ".ogg") && strcmp(ext, ".cvid") &&
-                         strcmp(ext, ".cvh")) || strlen(e->d_name) >= PRUNE_NAME - 5)
+                         strcmp(ext, ".cvh") && strcmp(ext, ".pak")) ||
+                strlen(e->d_name) >= PRUNE_NAME - 5)
                 continue;
             char rel[PRUNE_NAME];
             snprintf(rel, sizeof(rel), "%s/%s", subs[k], e->d_name);
@@ -330,13 +334,16 @@ static void prune_game(const char *dir, const Game *g)
         return;
     PruneJob *job = calloc(1, sizeof(PruneJob));
     /* every referenced path, plus the poster beside each .cvh video */
-    char *names = job ? malloc((size_t)(g->nres * 2 + 1) * PRUNE_NAME) : NULL;
+    char *names = job ? malloc((size_t)(g->nres * 2 + vfs_packs() + 1) * PRUNE_NAME) : NULL;
     if (!names) {
         free(job);
         return;
     }
     u32 n = 0;
-    for (u32 i = 0; i < g->nres; i++) {
+    /* a packed game reads only its packs: loose files of an older version go too */
+    for (int i = 0; g->packed && i < vfs_packs(); i++)
+        snprintf(names + (size_t)n++ * PRUNE_NAME, PRUNE_NAME, "%s", vfs_pack_name(i));
+    for (u32 i = 0; !g->packed && i < g->nres; i++) {
         const char *r = g->res[i];
         if (!r)
             continue;

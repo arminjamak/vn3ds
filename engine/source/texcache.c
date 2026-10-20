@@ -1,4 +1,5 @@
 #include "app.h"
+#include "vfs.h"
 #include "bg.h"
 #include "jpeg.h"
 
@@ -125,11 +126,11 @@ static bool ctex_read(s32 res, Ctex *c)
     memset(c, 0, sizeof(*c));
     char path[400];
     game_res_path(&E.game, res, path, sizeof(path));
-    FILE *f = fopen(path, "rb");
+    VFile *f = vf_open(path);
     if (!f)
         return false;
     u8 hdr[36];
-    bool ok = fread(hdr, 1, 36, f) == 36 && memcmp(hdr, "CTEX", 4) == 0;
+    bool ok = vf_read(f, hdr, 36) == 36 && memcmp(hdr, "CTEX", 4) == 0;
     if (ok) {
         c->fmt = rd_u16(hdr + 6);
         c->tw = rd_u16(hdr + 8);
@@ -140,13 +141,13 @@ static bool ctex_read(s32 res, Ctex *c)
         c->raw = rd_u32(hdr + 28);
         c->stored = rd_u32(hdr + 32);
         ok = c->fmt >= 0 && c->fmt <= 2 && c->raw == (u32)c->tw * (u32)c->th * (u32)bpp_of(c->fmt) &&
-             c->stored > 0 && c->stored <= (16u << 20) && (!(c->flags & 2) || c->fmt == 2);
+             c->stored > 0 && c->stored <= (16u << 20) && (!(c->flags & 2) || c->fmt >= 1);
     }
     if (ok) {
         c->payload = malloc(c->stored);
-        ok = c->payload && fread(c->payload, 1, c->stored, f) == c->stored;
+        ok = c->payload && vf_read(f, c->payload, c->stored) == c->stored;
     }
-    fclose(f);
+    vf_close(f);
     if (!ok) {
         free(c->payload);
         c->payload = NULL;
@@ -159,8 +160,9 @@ static bool ctex_decode(const Ctex *c, void *dst)
 {
     if (c->flags & 2) {
         int w = 0, h = 0;
-        return jpeg_decode_tiled565(c->payload, c->stored, dst, c->tw, c->th, &w, &h) == JPEG_OK &&
-               w == c->iw && h == c->ih;
+        int r = c->fmt == 1 ? jpeg_decode_tiled888(c->payload, c->stored, dst, c->tw, c->th, &w, &h)
+                            : jpeg_decode_tiled565(c->payload, c->stored, dst, c->tw, c->th, &w, &h);
+        return r == JPEG_OK && w == c->iw && h == c->ih;
     }
     if (c->flags & 1) {
         uLongf n = c->raw;
@@ -185,36 +187,42 @@ static inline u32 texel(int x, int y, int tw)
 static bool patch_ok(const Job *j)
 {
     const Ctex *a = &j->a, *b = &j->b;
-    return (a->flags & 2) && (b->flags & 2) && j->px >= 0 && j->py >= 0 && j->px + b->iw <= a->iw &&
+    return (a->flags & 2) && (b->flags & 2) && a->fmt == b->fmt && j->px >= 0 && j->py >= 0 &&
+           j->px + b->iw <= a->iw &&
            j->py + b->ih <= a->ih && !(a->tw & 7) && !(a->th & 7);
 }
 
-static bool decode_patched(const Job *j, u16 *d)
+static bool decode_patched(const Job *j, u8 *d)
 {
     const Ctex *a = &j->a, *b = &j->b;
     int tw = a->tw, iw = a->iw, ih = a->ih, px = j->px, py = j->py, pw = b->iw, ph = b->ih;
+    size_t bpp = (size_t)bpp_of(a->fmt);   /* 2 (RGB565) or 3 (RGB8) */
     if (!ctex_decode(a, d))
         return false;
     int ptw = (pw + 7) & ~7, pth = (ph + 7) & ~7, w, h;
-    u16 *pp = malloc((size_t)ptw * (size_t)pth * 2);
-    bool ok = pp && jpeg_decode_tiled565(b->payload, b->stored, pp, ptw, pth, &w, &h) == JPEG_OK &&
-              w == pw && h == ph;
+    u8 *pp = malloc((size_t)ptw * (size_t)pth * bpp);
+    int r = !pp ? JPEG_ERR_MEMORY
+          : a->fmt == 1 ? jpeg_decode_tiled888(b->payload, b->stored, pp, ptw, pth, &w, &h)
+                        : jpeg_decode_tiled565(b->payload, b->stored, (u16 *)pp, ptw, pth, &w, &h);
+    bool ok = r == JPEG_OK && w == pw && h == ph;
+#define TEXEL(buf, x, y, stride) ((buf) + (size_t)texel((x), (y), (stride)) * bpp)
     if (ok) {
         for (int y = 0; y < ph; y++)
             for (int x = 0; x < pw; x++)
-                d[texel(px + x, py + y, tw)] = pp[texel(x, y, ptw)];
+                memcpy(TEXEL(d, px + x, py + y, tw), TEXEL(pp, x, y, ptw), bpp);
         /* the padding repeats the edge texels, as when the picture is loaded alone */
         if (px + pw == iw)
             for (int y = py; y < py + ph; y++)
                 for (int x = iw; x < tw; x++)
-                    d[texel(x, y, tw)] = d[texel(iw - 1, y, tw)];
+                    memcpy(TEXEL(d, x, y, tw), TEXEL(d, iw - 1, y, tw), bpp);
         if (py + ph == ih) {
             int x1 = px + pw == iw ? tw : px + pw;
             for (int y = ih; y < a->th; y++)
                 for (int x = px; x < x1; x++)
-                    d[texel(x, y, tw)] = d[texel(x, ih - 1, tw)];
+                    memcpy(TEXEL(d, x, y, tw), TEXEL(d, x, ih - 1, tw), bpp);
         }
     }
+#undef TEXEL
     free(pp);
     return ok;
 }

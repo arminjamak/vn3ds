@@ -38,6 +38,11 @@ int jpeg_size(const uint8_t *src, size_t len, int *w, int *h);
 int jpeg_decode_tiled565(const uint8_t *src, size_t len, uint16_t *dst, int tw, int th,
                          int *w, int *h);
 
+/* The same into an RGB8 texture (3 bytes per texel: B, G, R), for pictures
+ * packed with vnpack --jpeg-rgb8. */
+int jpeg_decode_tiled888(const uint8_t *src, size_t len, uint8_t *dst, int tw, int th,
+                         int *w, int *h);
+
 /* Decodes into packed RGB888 rows (w * h * 3 bytes; the image must be exactly
  * w x h). Used by the tests. */
 int jpeg_decode_rgb(const uint8_t *src, size_t len, uint8_t *dst, int w, int h);

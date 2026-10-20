@@ -34,6 +34,7 @@
 
 #include "app.h"
 #include "video.h"
+#include "vfs.h"
 
 #include <zlib.h>
 
@@ -54,7 +55,7 @@ typedef struct {
     bool used;
     s32 res;
     int fmt;
-    FILE *f;
+    VFile *f;
     u32 nframes;
     float fps;
     bool loop;
@@ -133,8 +134,8 @@ static int keyframe_before(const Video *v, int k)
 static bool read_frame(Video *v, int k, u8 *dst, u32 cap)
 {
     const CvhFrame *fr = &v->frames[k];
-    return fr->size <= cap && fseek(v->f, (long)fr->off, SEEK_SET) == 0 &&
-           fread(dst, 1, fr->size, v->f) == fr->size;
+    return fr->size <= cap && vf_seek(v->f, (long)fr->off, SEEK_SET) == 0 &&
+           vf_read(v->f, dst, fr->size) == fr->size;
 }
 
 /* The NAL unit starting at p[0] (with its 00 00 01 prefix): its length. */
@@ -414,8 +415,8 @@ static int dec_begin(Video *v, int kf)
         LOG("video: no linear memory for a %u-byte frame", (unsigned)need);
         return -1;
     }
-    if (fseek(v->f, (long)v->params_off, SEEK_SET) != 0 ||
-        fread(D.in, 1, v->params_size, v->f) != v->params_size)
+    if (vf_seek(v->f, (long)v->params_off, SEEK_SET) != 0 ||
+        vf_read(v->f, D.in, v->params_size) != v->params_size)
         return -1;
     bool ready = false;
     (void)kf;   /* the decoder just takes the IDR frame next */
@@ -506,8 +507,14 @@ static void pipe_close(void)
 
 static bool pipe_open(Video *v)
 {
-    char path[400], quoted[900], cmd[1200];
-    game_res_path(&E.game, v->res, path, sizeof(path));
+    char res_path[400], file[400], path[700], quoted[1500], cmd[1800];
+    u64 off = 0, size = 0;
+    game_res_path(&E.game, v->res, res_path, sizeof(res_path));
+    if (!vf_location(res_path, file, sizeof(file), &off, &size))
+        return false;
+    /* the video's bytes only (it may sit inside a pack file) */
+    snprintf(path, sizeof(path), "subfile,,start,%llu,end,%llu,,:%s", (unsigned long long)off,
+             (unsigned long long)(off + size), file);
     size_t q = 0;
     quoted[q++] = '\'';
     for (const char *p = path; *p && q + 5 < sizeof(quoted); p++) {
@@ -521,7 +528,8 @@ static bool pipe_open(Video *v)
     quoted[q++] = '\'';
     quoted[q] = 0;
     snprintf(cmd, sizeof(cmd),
-             "ffmpeg -v fatal -nostdin -threads 1 -skip_initial_bytes %u -f h264 -i %s "
+             "ffmpeg -v fatal -nostdin -threads 1 -skip_initial_bytes %u -f h264 "
+             "-protocol_whitelist subfile,file -i %s "
              "-f rawvideo -pix_fmt rgb565le -fps_mode passthrough -",
              (unsigned)v->params_off, quoted);
     D.pipe = popen(cmd, "r");
@@ -599,7 +607,7 @@ static void close_video(Video *v)
         dec_release();
     }
     if (v->f)
-        fclose(v->f);
+        vf_close(v->f);
     for (int i = 0; i < 2; i++)
         if (v->tex[i])
             gfx_tex_free(v->tex[i]);
@@ -619,7 +627,7 @@ static bool pow2_ok(int t, int v) { return t >= v && t >= 8 && t <= 1024 && !(t 
 static bool open_cvh(Video *v, const char *path)
 {
     u8 h[CVH_HEADER];
-    if (fseek(v->f, 0, SEEK_SET) != 0 || fread(h, 1, CVH_HEADER, v->f) != CVH_HEADER ||
+    if (vf_seek(v->f, 0, SEEK_SET) != 0 || vf_read(v->f, h, CVH_HEADER) != CVH_HEADER ||
         rd_u16(h + 4) != 1 || rd_u16(h + 6) != 1)
         return false;
     v->fmt = FMT_CVH;
@@ -645,7 +653,7 @@ static bool open_cvh(Video *v, const char *path)
         return false;
     for (u32 i = 0; i < v->nframes; i++) {
         u8 e[12];
-        if (fread(e, 1, 12, v->f) != 12)
+        if (vf_read(v->f, e, 12) != 12)
             return false;
         v->frames[i].off = rd_u32(e);
         v->frames[i].size = rd_u32(e + 4);
@@ -687,8 +695,8 @@ static bool open_cvid(Video *v, const u8 *h)
     v->accum = calloc(1, v->raw);
     v->delta = malloc(v->raw + v->ntiles / 8 + 8);
     if (!v->offs || !v->sizes || !v->accum || !v->delta || v->nframes == 0 ||
-        fread(v->offs, 4, v->nframes, v->f) != v->nframes ||
-        fread(v->sizes, 4, v->nframes, v->f) != v->nframes)
+        vf_read(v->f, v->offs, 4 * (size_t)v->nframes) != 4 * (size_t)v->nframes ||
+        vf_read(v->f, v->sizes, 4 * (size_t)v->nframes) != 4 * (size_t)v->nframes)
         return false;
     for (int i = 0; i < 2; i++) {
         v->tex[i] = gfx_tex_create(tw, th, 2, iw, ih);
@@ -704,11 +712,11 @@ static bool open_video(Video *v, s32 res)
     game_res_path(&E.game, res, path, sizeof(path));
     memset(v, 0, sizeof(*v));
     v->shown = -1;
-    v->f = fopen(path, "rb");
+    v->f = vf_open(path);
     if (!v->f)
         return false;
     u8 h[40];
-    bool ok = fread(h, 1, 40, v->f) == 40;
+    bool ok = vf_read(v->f, h, 40) == 40;
     if (ok && memcmp(h, "CVH1", 4) == 0)
         ok = open_cvh(v, path);
     else if (ok && memcmp(h, "CVID", 4) == 0)
@@ -736,7 +744,7 @@ static bool decode(Video *v, u32 k)
         if (!v->zbuf)
             return false;
     }
-    if (fseek(v->f, (long)v->offs[k], SEEK_SET) != 0 || fread(v->zbuf, 1, n, v->f) != n)
+    if (vf_seek(v->f, (long)v->offs[k], SEEK_SET) != 0 || vf_read(v->f, v->zbuf, n) != n)
         return false;
     if (v->version == 1) {   /* whole-frame XOR delta */
         uLongf out = (uLongf)v->raw;

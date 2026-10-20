@@ -1,4 +1,5 @@
 #include "game.h"
+#include "vfs.h"
 
 #include <stdarg.h>
 
@@ -305,6 +306,9 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
         for (u32 i = 0; i < nc && i < g->nchars; i++)
             g->vox_pitch[i] = rd_f32(e + 12 + 4 * i);
     }
+    /* PACK: the game's files inside pack files (optional; else loose files) */
+    if (find_section(d, g->size, "PACK", &s))
+        g->packed = vfs_mount(dir, s.p, s.size) && vfs_packs() > 0;
     return true;
 
 corrupt:
@@ -316,6 +320,8 @@ fail:
 
 void game_free(Game *g)
 {
+    if (g->packed)
+        vfs_unmount();
     if (g->images)
         for (u32 i = 0; i < g->nimages; i++) {
             free(g->images[i].words);

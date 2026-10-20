@@ -3,6 +3,7 @@
  * layout is exercised too. */
 
 #include "../source/gfx.h"
+#include "../source/vfs.h"
 #include "../source/jpeg.h"
 #include "font_data.h"
 #include "host.h"
@@ -65,30 +66,33 @@ static int morton(int x, int y)
 
 GfxTex *gfx_tex_load(const char *path, u32 *bytes)
 {
-    FILE *f = fopen(path, "rb");
+    VFile *f = vf_open(path);
     if (!f)
         return NULL;
     u8 hdr[36];
-    if (fread(hdr, 1, 36, f) != 36 || memcmp(hdr, "CTEX", 4) != 0) {
-        fclose(f);
+    if (vf_read(f, hdr, 36) != 36 || memcmp(hdr, "CTEX", 4) != 0) {
+        vf_close(f);
         return NULL;
     }
     int fmt = rd_u16(hdr + 6), tw = rd_u16(hdr + 8), th = rd_u16(hdr + 10);
     int iw = rd_u16(hdr + 12), ih = rd_u16(hdr + 14);
     u32 flags = rd_u32(hdr + 24), raw = rd_u32(hdr + 28), stored = rd_u32(hdr + 32);
     u8 *data = malloc(stored);
-    if (fread(data, 1, stored, f) != stored) {
+    if (vf_read(f, data, stored) != stored) {
         free(data);
-        fclose(f);
+        vf_close(f);
         return NULL;
     }
-    fclose(f);
+    vf_close(f);
     u8 *pix = data;
-    if (flags & 2) { /* baseline JPEG -> tiled RGB565, as on the 3DS */
+    if (flags & 2) { /* baseline JPEG -> tiled RGB565 (or RGB8), as on the 3DS */
         int w = 0, h = 0;
-        pix = fmt == 2 && raw == (u32)tw * (u32)th * 2 ? malloc(raw) : NULL;
-        if (!pix || jpeg_decode_tiled565(data, stored, (uint16_t *)pix, tw, th, &w, &h) != JPEG_OK ||
-            w != iw || h != ih) {
+        pix = (fmt == 2 && raw == (u32)tw * (u32)th * 2) || (fmt == 1 && raw == (u32)tw * (u32)th * 3)
+                  ? malloc(raw) : NULL;
+        int r = !pix ? JPEG_ERR_MEMORY
+              : fmt == 1 ? jpeg_decode_tiled888(data, stored, pix, tw, th, &w, &h)
+                         : jpeg_decode_tiled565(data, stored, (uint16_t *)pix, tw, th, &w, &h);
+        if (r != JPEG_OK || w != iw || h != ih) {
             free(pix);
             free(data);
             return NULL;

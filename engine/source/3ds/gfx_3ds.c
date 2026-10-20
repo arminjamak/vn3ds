@@ -6,6 +6,7 @@
  * as in the libctru stereoscopic example. */
 
 #include <3ds.h>
+#include "../vfs.h"
 #include <citro2d.h>
 #include <citro3d.h>
 #include <zlib.h>
@@ -103,12 +104,12 @@ void gfx_exit(void)
 
 GfxTex *gfx_tex_load(const char *path, u32 *bytes)
 {
-    FILE *f = fopen(path, "rb");
+    VFile *f = vf_open(path);
     if (!f)
         return NULL;
     u8 hdr[36];
-    if (fread(hdr, 1, 36, f) != 36 || memcmp(hdr, "CTEX", 4) != 0) {
-        fclose(f);
+    if (vf_read(f, hdr, 36) != 36 || memcmp(hdr, "CTEX", 4) != 0) {
+        vf_close(f);
         return NULL;
     }
     int fmt = rd_u16(hdr + 6), tw = rd_u16(hdr + 8), th = rd_u16(hdr + 10);
@@ -119,30 +120,31 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
     GfxTex *t = calloc(1, sizeof(GfxTex));
     if (!t || !C3D_TexInit(&t->tex, (u16)tw, (u16)th, gfmt)) {
         free(t);
-        fclose(f);
+        vf_close(f);
         return NULL;
     }
     bool ok = t->tex.size == raw;
     if (ok && (flags & 2)) {
         /* baseline JPEG, decoded straight into the tiled RGB565 texture */
-        u8 *jpg = fmt == 2 ? malloc(stored) : NULL;
-        ok = jpg && fread(jpg, 1, stored, f) == stored;
+        u8 *jpg = fmt == 2 || fmt == 1 ? malloc(stored) : NULL;
+        ok = jpg && vf_read(f, jpg, stored) == stored;
         int w = 0, h = 0;
-        ok = ok && jpeg_decode_tiled565(jpg, stored, t->tex.data, tw, th, &w, &h) == JPEG_OK &&
+        ok = ok && (fmt == 1 ? jpeg_decode_tiled888(jpg, stored, t->tex.data, tw, th, &w, &h)
+                             : jpeg_decode_tiled565(jpg, stored, t->tex.data, tw, th, &w, &h)) == JPEG_OK &&
              w == iw && h == ih;
         free(jpg);
     } else if (ok && (flags & 1)) {
         u8 *packed = malloc(stored);
-        ok = packed && fread(packed, 1, stored, f) == stored;
+        ok = packed && vf_read(f, packed, stored) == stored;
         if (ok) {
             uLongf n = raw;
             ok = uncompress(t->tex.data, &n, packed, stored) == Z_OK && n == raw;
         }
         free(packed);
     } else if (ok) {
-        ok = fread(t->tex.data, 1, raw, f) == raw;
+        ok = vf_read(f, t->tex.data, raw) == raw;
     }
-    fclose(f);
+    vf_close(f);
     if (!ok) {
         C3D_TexDelete(&t->tex);
         free(t);

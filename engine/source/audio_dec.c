@@ -1,6 +1,7 @@
 /* Ogg Opus (opusfile) and Ogg Vorbis (Tremor) decoding; see audio_dec.h. */
 
 #include "audio_dec.h"
+#include "vfs.h"
 
 #include <limits.h>
 
@@ -37,22 +38,58 @@ const char *adec_codec_name(int codec)
     return codec == ADEC_OPUS ? "opus" : codec == ADEC_VORBIS ? "vorbis" : "unknown";
 }
 
+/* ---- files on the card (loose or in a pack: vfs.h) ---------------------- */
+
+#ifdef VN_HAVE_OPUS
+static int vf_op_read(void *src, unsigned char *ptr, int n)
+{
+    return n > 0 ? (int)vf_read(src, ptr, (size_t)n) : 0;
+}
+static int vf_op_seek(void *src, opus_int64 off, int whence) { return vf_seek(src, off, whence); }
+static opus_int64 vf_op_tell(void *src) { return vf_tell(src); }
+static int vf_op_close(void *src)
+{
+    vf_close(src);
+    return 0;
+}
+#endif
+#ifdef VN_HAVE_TREMOR
+static size_t vf_ov_read(void *ptr, size_t size, size_t nmemb, void *src)
+{
+    return size ? vf_read(src, ptr, size * nmemb) / size : 0;
+}
+static int vf_ov_seek(void *src, ogg_int64_t off, int whence) { return vf_seek(src, off, whence); }
+static int vf_ov_close(void *src)
+{
+    vf_close(src);
+    return 0;
+}
+static long vf_ov_tell(void *src) { return (long)vf_tell(src); }
+#endif
+
 bool adec_open(ADec *d, const char *path)
 {
     memset(d, 0, sizeof(*d));
-    FILE *f = fopen(path, "rb");
+    VFile *f = vf_open(path);
     if (!f)
         return false;
     u8 head[512];
-    size_t n = fread(head, 1, sizeof(head), f);
+    size_t n = vf_read(f, head, sizeof(head));
     int codec = adec_sniff(head, n);
+    if (vf_seek(f, 0, SEEK_SET) != 0) {
+        vf_close(f);
+        return false;
+    }
 #ifdef VN_HAVE_OPUS
     if (codec == ADEC_OPUS) {
-        fclose(f);
         int err = 0;
-        OggOpusFile *of = op_open_file(path, &err);
-        if (!of)
+        static const OpusFileCallbacks cb = {vf_op_read, vf_op_seek, vf_op_tell, vf_op_close};
+        OggOpusFile *of = op_open_callbacks(f, &cb, NULL, 0, &err);
+        if (!of) {
+            vf_close(f);
             return false;
+        }
+        /* from here op_free() closes the file */
         int ch = op_channel_count(of, -1);
         d->codec = ADEC_OPUS;
         d->h = of;
@@ -69,12 +106,13 @@ bool adec_open(ADec *d, const char *path)
 #ifdef VN_HAVE_TREMOR
     if (codec == ADEC_VORBIS) {
         OggVorbis_File *vf = malloc(sizeof(*vf));
-        if (!vf || fseek(f, 0, SEEK_SET) != 0 || ov_open(f, vf, NULL, 0) < 0) {
+        ov_callbacks cb = {vf_ov_read, vf_ov_seek, vf_ov_close, vf_ov_tell};
+        if (!vf || ov_open_callbacks(f, vf, NULL, 0, cb) < 0) {
             free(vf);
-            fclose(f);
+            vf_close(f);
             return false;
         }
-        /* from here ov_clear() closes the FILE */
+        /* from here ov_clear() closes the file */
         vorbis_info *vi = ov_info(vf, -1);
         d->codec = ADEC_VORBIS;
         d->h = vf;
@@ -88,7 +126,7 @@ bool adec_open(ADec *d, const char *path)
     }
 #endif
     (void)codec;
-    fclose(f);
+    vf_close(f);
     return false;
 }
 
@@ -101,42 +139,7 @@ typedef struct {
 
 u8 *adec_read_file(const char *path, size_t max, size_t *len)
 {
-    *len = 0;
-    FILE *f = fopen(path, "rb");
-    if (!f)
-        return NULL;
-    u8 *buf = NULL;
-    size_t n = 0, cap = 0;
-    for (;;) {
-        if (n == cap) {
-            cap = cap ? cap * 2 : 256 * 1024;
-            if (cap > max + 1)
-                cap = max + 1;
-            if (n == cap) {   /* too big */
-                free(buf);
-                fclose(f);
-                return NULL;
-            }
-            u8 *g = realloc(buf, cap);
-            if (!g) {
-                free(buf);
-                fclose(f);
-                return NULL;
-            }
-            buf = g;
-        }
-        size_t got = fread(buf + n, 1, cap - n < 65536 ? cap - n : 65536, f);
-        if (got == 0)
-            break;
-        n += got;
-    }
-    fclose(f);
-    if (n == 0 || n > max) {
-        free(buf);
-        return NULL;
-    }
-    *len = n;
-    return buf;
+    return vf_read_all(path, max, len);
 }
 
 #ifdef VN_HAVE_TREMOR
@@ -231,7 +234,7 @@ void adec_close(ADec *d)
 #endif
 #ifdef VN_HAVE_TREMOR
     if (d->codec == ADEC_VORBIS && d->h) {
-        ov_clear(d->h); /* also closes the FILE */
+        ov_clear(d->h); /* also closes the file */
         free(d->h);
     }
 #endif

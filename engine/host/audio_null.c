@@ -4,6 +4,7 @@
  * decoder the 3DS uses (Opus here; Vorbis needs Tremor, 3DS only), and
  * --decode-audio renders a file through the 3DS's streaming path. */
 #include "../source/audio.h"
+#include "../source/vfs.h"
 #include "../source/audio_dec.h"
 #include "../source/music.h"
 #include "host.h"
@@ -85,13 +86,13 @@ void audio_play(int ch, const char *path, bool loop, float fadein, bool queue)
     const char *name = strrchr(path, '/');
     printf("    [audio] %s ch%d %s%s fadein=%.1f\n", queue ? "queue" : "play", ch,
            name ? name + 1 : path, loop ? " (loop)" : "", fadein);
-    FILE *f = fopen(path, "rb");
+    VFile *f = vf_open(path);
     if (!f) {
         printf("    [audio] MISSING %s\n", path);
     } else {
         u8 head[512];
-        size_t n = fread(head, 1, sizeof(head), f);
-        fclose(f);
+        size_t n = vf_read(f, head, sizeof(head));
+        vf_close(f);
         int codec = adec_sniff(head, n);
         ADec d;
         if (codec == ADEC_NONE)
@@ -187,11 +188,8 @@ void audio_vox_load(const char **paths, int n)
 {
     vox_loaded = 0;
     for (int i = 0; i < n; i++) {
-        FILE *f = fopen(paths[i], "rb");
-        if (f) {
+        if (vf_exists(paths[i]))
             vox_loaded++;
-            fclose(f);
-        }
         if (host_audio_log)
             fprintf(host_audio_log, "%.4f bank %d %s\n", host_now, i, paths[i]);
     }

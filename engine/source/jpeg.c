@@ -1031,4 +1031,46 @@ int jpeg_decode_rgb(const uint8_t *src, size_t len, uint8_t *dst, int w, int h)
     return r;
 }
 
+int jpeg_decode_tiled888(const uint8_t *src, size_t len, uint8_t *dst, int tw, int th,
+                         int *w, int *h)
+{
+    *w = *h = 0;
+    if (tw < 8 || th < 8 || tw % 8 || th % 8 || tw > MAX_DIM || th > MAX_DIM)
+        return JPEG_ERR_SIZE;
+    D *d = calloc(1, sizeof(D));
+    if (!d)
+        return JPEG_ERR_MEMORY;
+    d->maxw = tw;
+    d->maxh = th;
+    init_tables();
+    int r = parse(d, src, len, 0);
+    uint8_t *rgb = r == JPEG_OK ? malloc((size_t)d->w * (size_t)d->h * 3) : NULL;
+    if (r == JPEG_OK && !rgb)
+        r = JPEG_ERR_MEMORY;
+    if (r == JPEG_OK) {
+        int iw = d->w, ih = d->h;
+        out_rgb(d, rgb);
+        /* 8x8 tiles row-major, Morton order inside; bytes B, G, R; the
+         * padding repeats the last column and row */
+        for (int y = 0; y < th; y++) {
+            const uint8_t *row = rgb + (size_t)(y < ih ? y : ih - 1) * (size_t)iw * 3;
+            for (int x = 0; x < tw; x++) {
+                const uint8_t *p = row + (size_t)(x < iw ? x : iw - 1) * 3;
+                uint32_t t = (uint32_t)(((y >> 3) * (tw >> 3) + (x >> 3)) * 64) |
+                             (uint32_t)((x & 1) | ((y & 1) << 1) | ((x & 2) << 1) | ((y & 2) << 2) |
+                                        ((x & 4) << 2) | ((y & 4) << 3));
+                uint8_t *o = dst + (size_t)t * 3;
+                o[0] = p[2];
+                o[1] = p[1];
+                o[2] = p[0];
+            }
+        }
+        *w = iw;
+        *h = ih;
+    }
+    free(rgb);
+    release(d);
+    return r;
+}
+
 void jpeg_init(void) { init_tables(); }

@@ -129,6 +129,7 @@ typedef struct {
      * FORMAT.md); the script starts entry i as vn3ds_minigame("@i"). */
     const u8 *ported;
     u32 ported_size;
+    bool packed;   /* PACK: files are read from pack files (vfs.h) */
 } Game;
 
 bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errlen);
