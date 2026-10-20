@@ -85,6 +85,13 @@ static char path[300];
 static u16 path_len;
 static u64 file_size, file_done;
 static u32 proto, file_crc;
+/* Protocol 4: each file comes as raw bytes or a raw-deflate stream that is
+ * unpacked as it arrives, and its CRC is checked before it is kept. */
+static u8 file_method;          /* 0 raw, 1 deflate */
+static u64 wire_left;           /* bytes of this file still to come */
+static uLong out_crc;
+static z_stream zs;
+static bool zs_ready, zs_ended;
 static void target_path(const char *rel, char *out, size_t len);
 static void live_path(const char *rel, char *out, size_t len);
 static FILE *out;
@@ -107,8 +114,11 @@ static void mf_free(void)
     mf_n = mf_bytes = mf_cap = mf_failed = 0;
 }
 
+static void inflate_stop(void);
+
 static void close_conn(void)
 {
+    inflate_stop();
     mf_free();
     if (out) {
         fclose(out);
@@ -399,7 +409,7 @@ static void end_file(void)
     } else {
         code = write_failed ? 2 : 1;
     }
-    if (proto == 3) {
+    if (proto >= 3) {
         if (code)
             mf_failed++;
     } else {
@@ -414,7 +424,7 @@ static void end_file(void)
  * rest of the update. */
 static void flag_prune(void)
 {
-    if (proto != 3 || mf_failed || !mf_n)
+    if (proto < 3 || mf_failed || !mf_n)
         return;
     char last[64] = "", rel[128], full[400];
     for (u32 i = 0; i < mf_n; i++) {
@@ -438,7 +448,7 @@ static void finish_transfer(void)
 {
     flag_prune();
     send(conn_fd, "DONE", 4, 0);
-    if (proto == 3)
+    if (proto >= 3)
         send(conn_fd, (const char *)&mf_failed, 4, 0);
     set_status("Done: %s", NET.last_game[0] ? NET.last_game : "vn3ds updated");
     NET.receiving = false;
@@ -516,6 +526,79 @@ static bool have_file(void)
     return file_matches(live);
 }
 
+/* Every file has arrived, been refused or failed (protocol 3+ counts
+ * refusals among the failures). */
+static bool all_files_in(void)
+{
+    return proto >= 3 ? NET.files_done + mf_failed >= NET.files_total
+                      : NET.files_done + NET.refused >= NET.files_total;
+}
+
+static void inflate_stop(void)
+{
+    if (zs_ready)
+        inflateEnd(&zs);
+    zs_ready = false;
+}
+
+static bool inflate_start(void)
+{
+    inflate_stop();
+    memset(&zs, 0, sizeof(zs));
+    zs_ended = false;
+    zs_ready = inflateInit2(&zs, -15) == Z_OK;
+    return zs_ready;
+}
+
+static void keep(const u8 *p, size_t n)
+{
+    if (file_done + n > file_size) {   /* more than the manifest said: damaged */
+        write_failed = true;
+        n = (size_t)(file_size - file_done);
+    }
+    out_crc = crc32(out_crc, p, (uInt)n);
+    write_data(p, n);
+    file_done += n;
+    NET.bytes_done += n;
+}
+
+/* Protocol 4 file data: raw, or deflate unpacked as it arrives. */
+static bool data_v4(const u8 *p, size_t n)
+{
+    if (file_method == 0) {
+        keep(p, n);
+        return true;
+    }
+    static u8 inflated[32 * 1024];
+    zs.next_in = (Bytef *)p;
+    zs.avail_in = (uInt)n;
+    while (zs.avail_in > 0 && !zs_ended) {
+        zs.next_out = inflated;
+        zs.avail_out = sizeof(inflated);
+        int r = inflate(&zs, Z_NO_FLUSH);
+        keep(inflated, sizeof(inflated) - zs.avail_out);
+        if (r == Z_STREAM_END)
+            zs_ended = true;
+        else if (r != Z_OK && r != Z_BUF_ERROR)
+            return false;   /* not deflate: the stream can't be trusted any more */
+        else if (r == Z_BUF_ERROR && zs.avail_out != 0)
+            break;
+    }
+    /* output still waiting inside zlib once all input is in */
+    while (!zs_ended) {
+        zs.next_out = inflated;
+        zs.avail_out = sizeof(inflated);
+        int r = inflate(&zs, Z_NO_FLUSH);
+        size_t got = sizeof(inflated) - zs.avail_out;
+        keep(inflated, got);
+        if (r == Z_STREAM_END)
+            zs_ended = true;
+        if (got == 0 || (r != Z_OK && r != Z_STREAM_END))
+            break;
+    }
+    return true;
+}
+
 static void feed(const u8 *p, size_t n)
 {
     while (n > 0) {
@@ -533,14 +616,14 @@ static void feed(const u8 *p, size_t n)
             got = 0;
             if (state == ST_HEADER) {
                 proto = rd_u32(hdr + 4);
-                if (memcmp(hdr, "VN3D", 4) != 0 || proto < 1 || proto > 3) {
+                if (memcmp(hdr, "VN3D", 4) != 0 || proto < 1 || proto > 4) {
                     set_status("Unknown sender (update vn3ds-port?)", NULL);
                     close_conn();
                     return;
                 }
                 NET.files_total = rd_u32(hdr + 8);
                 memcpy(&NET.bytes_total, hdr + 12, 8);
-                if (proto == 3) {
+                if (proto >= 3) {
                     mf_free();
                     mf_cap = 64 * 1024;
                     if (NET.files_total > MF_MAX || !(mf_paths = malloc(mf_cap)) ||
@@ -569,7 +652,7 @@ static void feed(const u8 *p, size_t n)
                 }
                 state = ST_PATH;
                 need = path_len;
-            } else if (proto == 3) {
+            } else if (proto >= 3) {
                 /* one manifest entry */
                 if (mf_bytes + path_len + 1 > mf_cap) {
                     char *grown = realloc(mf_paths, mf_cap * 2 + path_len + 1);
@@ -626,7 +709,7 @@ static void feed(const u8 *p, size_t n)
                     return;
                 }
                 state = ST_INDEX;
-                need = 4;
+                need = proto >= 4 ? 13 : 4;
                 break;
             } else {
                 memcpy(&file_size, hdr, 8);
@@ -641,7 +724,7 @@ static void feed(const u8 *p, size_t n)
                         NET.bytes_skipped += file_size;
                         state = ST_PATHLEN;
                         need = 2;
-                        if (NET.files_done + NET.refused >= NET.files_total)
+                        if (all_files_in())
                             finish_transfer();
                         break;
                     }
@@ -671,20 +754,40 @@ static void feed(const u8 *p, size_t n)
             break;
         }
         case ST_DATA: {
-            u64 left = file_size - file_done;
-            size_t take = (u64)n < left ? n : (size_t)left;
-            write_data(p, take);
-            file_done += take;
-            NET.bytes_done += take;
-            p += take;
-            n -= take;
-            if (file_done == file_size) {
-                end_file();
-                state = proto == 3 ? ST_INDEX : ST_PATHLEN;
-                need = proto == 3 ? 4 : 2;
-                if (NET.files_done + NET.refused >= NET.files_total)
-                    finish_transfer();
+            if (proto >= 4) {
+                size_t take = (u64)n < wire_left ? n : (size_t)wire_left;
+                if (!data_v4(p, take)) {
+                    close_conn();
+                    return;
+                }
+                wire_left -= take;
+                p += take;
+                n -= take;
+                if (wire_left > 0)
+                    break;
+                bool whole = file_method == 0 || zs_ended;
+                inflate_stop();
+                if (!whole || file_done != file_size || out_crc != file_crc) {
+                    LOG("net: %s arrived damaged", path);
+                    if (out)
+                        drop_file();
+                }
+            } else {
+                u64 left = file_size - file_done;
+                size_t take = (u64)n < left ? n : (size_t)left;
+                write_data(p, take);
+                file_done += take;
+                NET.bytes_done += take;
+                p += take;
+                n -= take;
+                if (file_done != file_size)
+                    break;
             }
+            end_file();
+            state = proto >= 3 ? ST_INDEX : ST_PATHLEN;
+            need = proto >= 4 ? 13 : proto >= 3 ? 4 : 2;
+            if (all_files_in())
+                finish_transfer();
             break;
         }
         case ST_INDEX: {   /* version 3: which manifest entry comes next */
@@ -704,13 +807,23 @@ static void feed(const u8 *p, size_t n)
             snprintf(path, sizeof(path), "%s", mf_paths + mf_off[idx]);
             path_len = (u16)strlen(path);
             file_size = mf_size[idx];
+            file_crc = mf_crc[idx];
             begin_file();
             state = ST_DATA;
-            if (file_size == 0) {
+            if (proto >= 4) {
+                file_method = hdr[4];
+                memcpy(&wire_left, hdr + 5, 8);
+                out_crc = crc32(0L, Z_NULL, 0);
+                if (file_method > 1 || (file_method == 1 && !inflate_start())) {
+                    close_conn();
+                    return;
+                }
+            }
+            if (proto >= 4 ? wire_left == 0 && file_size == 0 : file_size == 0) {
                 end_file();
                 state = ST_INDEX;
-                need = 4;
-                if (NET.files_done + NET.refused >= NET.files_total)
+                need = proto >= 4 ? 13 : 4;
+                if (all_files_in())
                     finish_transfer();
             }
             break;
