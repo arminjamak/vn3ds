@@ -135,7 +135,7 @@ def main():
         proj = os.path.join(tmp, "proj")
         make_project(proj)
         common = ["--jpeg", "75", "--jpeg-encoder", "ffmpeg", "--jpeg-qscale", "2",
-                  "--rgb565", "--no-audio", "--id", "cgp", "-q"]
+                  "--rgb565", "--no-audio", "--id", "cgp", "-q", "--no-packs"]
         env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, "tools"))
         for tag, extra in (("whole", []), ("patched", ["--cg-patches"])):
             subprocess.run([sys.executable, "-m", "vnpack", proj, "-o", os.path.join(tmp, tag)] +

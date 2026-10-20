@@ -8,13 +8,49 @@ table; `0xFFFFFFFF` (written `NONE` below) means "no string".
 ```
 sdmc:/3ds/vn3ds/games/<game-id>/
     game.bin          script bytecode + tables (this document)
-    img/NNNN.ctex     textures, pre-tiled for the PICA200
-    img/NNNNN.cvh     videos (Ren'Py Movie() images), H.264 for the New 3DS's decoder
-    img/NNNNN.ctex    ... and next to each .cvh its first frame (the "poster")
-    img/NNNNN.cvid    videos in the older tiled format (--video-codec cvid)
-    snd/NNNN.ogg      Ogg Vorbis audio
+    pk/H.pak          pack files holding everything below (see "Pack files")
+    img/H.ctex        textures, pre-tiled for the PICA200
+    img/H.cvh         videos (Ren'Py Movie() images), H.264 for the New 3DS's decoder
+    img/H.ctex        ... and next to each .cvh its first frame (the "poster")
+    img/H.cvid        videos in the older tiled format (--video-codec cvid)
+    snd/H.ogg         Ogg Opus or Ogg Vorbis audio
     port-report.txt   what vn3ds-port skipped or approximated
+    files.crc         written by the Wi-Fi receiver: size and CRC-32 of every file sent
 ```
+`H` is 16 hex digits of the SHA-1 of the file's contents, so a rebuild keeps
+the name of everything that didn't change, and an update (over Wi-Fi or to
+an SD card) only copies what did. The paths in `RES` are these names.
+
+### Pack files
+
+By default (`vnpack --no-packs` turns it off) the files under `img/` and
+`snd/` are not stored loose but inside a few pack files in `pk/`, and the
+`PACK` section of game.bin says where each one is. A 3DS needs a few hundred
+milliseconds to open a file in a folder of a thousand (its SD card's FAT
+folders are searched entry by entry), while a seek inside a file that is
+already open is free; the engine opens every pack once when the game loads
+(`engine/source/vfs.c`) and reads all pictures, sounds and videos from them,
+from any thread. Paths that the `PACK` table doesn't name are still read as
+loose files, so games packed before pack files existed load unchanged.
+
+A pack file is a 16-byte header, then the files back to back:
+```
+char magic[4] = "VNPK"
+u32  version  = 1
+u32  count               files in this pack
+u32  reserved
+...file data (offsets and sizes are in game.bin's PACK section)
+```
+Its name `pk/H.pak` is the content hash of the whole pack. vnpack
+(`tools/vnpack/packs.py`) groups files by class (sounds, pictures, videos
+with their posters), orders each class by first use in the script, and cuts
+packs where the content decides: a file ends its pack with a chance
+proportional to its size (decided by its own hash), once the pack holds a
+quarter of the target size (`--pack-mb`, default 8 MB), and a pack never
+grows past twice the target. Changing, adding or removing one file therefore
+changes its own pack and seldom a neighbour (on Eternum's Wi-Fi edition, 37
+packs: 1.08 packs on average, at most 2), and the receiver skips every pack
+it already has by name.
 
 ## game.bin
 
@@ -161,7 +197,7 @@ layers: layer 0 is that earlier picture (its `res` is also the IMGS entry's
 `res`, box 0, 0, w, h), layer 1 (`anim` 7) an opaque JPEG `.ctex` of the
 changed rectangle, with `a`, `b` its top-left corner in texels of layer 0
 (multiples of 16, so its edges fall on the JPEG block grid). Both textures
-must be JPEG `.ctex` files. The engine does not draw these as layers: when it
+must be JPEG `.ctex` files of the same format. The engine does not draw these as layers: when it
 loads the image it decodes the earlier picture and decodes the patch into
 it, and from then on the image is an ordinary one-texture image (same depth,
 transforms, transitions and stereo shift as any other). Engines that predate
@@ -217,6 +253,19 @@ bars (0 = unknown; the grid is then `bpm` alone). A change of music waits
 for the end of the current track's loop or its next phrase boundary (at
 most 8 s), then splices in the new track on the downbeat; tracks without a
 grid crossfade on the beat. Several RES entries may share a file.
+
+#### `PACK` pack files (optional)
+```
+u32 npacks
+{ u16 len; char path[len] } [npacks]     e.g. "pk/0123456789abcdef.pak"
+u32 count
+{ u16 pack; u16 len; u32 offset; u32 size; char path[len] } [count]
+```
+Strings are inline (not in `STR `), UTF-8, not NUL-terminated. Each entry
+maps a path relative to the game folder (a `RES` path, or a video's poster
+beside it) to `size` bytes at `offset` in pack `pack`. See "Pack files".
+After an update the engine deletes files in `img/`, `snd/` and `pk/` that
+game.bin no longer names; a packed game names only its packs.
 
 #### `TALK` speaking attribute
 ```
@@ -308,10 +357,12 @@ image repeat its last column and row, so bilinear filtering at the edges
 doesn't pull in anything else.
 
 **JPEG payload** (`flags & 2`, written by `vnpack --jpeg Q` for opaque
-images): `format` is 2 (RGB565), `raw_size` is `tex_w * tex_h * 2`, and the
+images): `format` is 2 (RGB565), `raw_size` is `tex_w * tex_h * 2`, or with
+`--jpeg-rgb8` `format` 1 (RGB8, decoded without RGB565's banding) and
+`raw_size` `tex_w * tex_h * 3`; the
 payload is a baseline JPEG of exactly `img_w` x `img_h` pixels (not padded,
 not tiled). The engine decodes it with its own decoder
-(`engine/source/jpeg.c`) straight into the tiled RGB565 texture, filling the
+(`engine/source/jpeg.c`) straight into the tiled texture, filling the
 padding as above. The decoder takes baseline and extended-sequential Huffman
 JPEGs with 8-bit samples: grayscale or YCbCr, 4:4:4, 4:2:2, 4:2:0 or 4:4:0,
 interleaved or not, with or without restart markers. Progressive,

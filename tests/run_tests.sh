@@ -52,6 +52,10 @@ engine/build-host/vn3ds-host "$OUT/build/snapshot" --root "$OUT/root4" --pace --
 python3 tests/check_smoothness.py "$OUT/p4.txt" "$OUT/t4.txt" "$OUT/music.wav" > "$OUT/smooth.txt" || fail=1
 grep -v "^        " "$OUT/smooth.txt"
 
+echo "pack files (packed vs loose, update stability)"
+python3 tests/test_packs.py "$OUT/build/snapshot" > "$OUT/packs.txt" 2>&1 || { grep -v "  ok:" "$OUT/packs.txt"; fail=1; }
+tail -1 "$OUT/packs.txt"
+
 echo "3dslink (netloader) sender"
 python3 tests/test_3dslink.py > "$OUT/3dslink.txt" 2>&1 || { grep -v "  ok:" "$OUT/3dslink.txt"; fail=1; }
 tail -1 "$OUT/3dslink.txt"
