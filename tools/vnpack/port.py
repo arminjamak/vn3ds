@@ -233,6 +233,9 @@ def report(summary, path):
         ok = sum(1 for g in grids if g[2])
         lines.append(f"  Music: {ok} of {len(grids)} tracks got a measured tempo grid (music "
                      f"changes land on the loop's end or a phrase); the rest crossfade.")
+    if summary.get("video_3d"):
+        lines.append("  Movies are in stereoscopic 3D (a right-eye view made from estimated depth; "
+                     "New 3DS).")
     text = "\n".join(lines)
     with open(path, "w") as f:
         f.write(text + "\n")
@@ -290,12 +293,32 @@ QUALITY = {
 }
 
 
+# Stereoscopic movies (vnpack --video-3d, on whenever the depth model and
+# onnxruntime are there): both eyes' views side by side at 1.5x the 2D
+# bitrate, which keeps the left view as good as the 2D movie and the right
+# one 1.5-2 dB below it (tools/vnpack/stereo.py).
+VIDEO_3D_KBPS = {"wifi": 150, "sd": 675}
+
+
+def video_3d_wanted(opts):
+    """Whether this conversion makes 3D movies: --video-3d / --no-video-3d,
+    else whenever it can."""
+    on = getattr(opts, "video_3d", None)
+    if on is False or opts.no_video or (opts.video_codec or "h264") != "h264":
+        return False
+    if on:
+        return True
+    from . import stereo
+    return stereo.available() is not None
+
+
 # Per-file sizes the presets come out at, measured on Eternum's Wi-Fi
 # edition (12,702 textures in 104 MiB) and Snapshot's pictures (sd's JPEG at
 # quantiser 2 is 1.7x the Wi-Fi one); audio and video by their length.
 EST_PICTURE = {"wifi": 8.4e3, "sd": 14.5e3}
 EST_AUDIO_BPS = {"wifi": 20e3 / 8, "sd": 96e3 / 8}     # transcoded audio
 EST_VIDEO_BPS = {"wifi": 100e3 / 8, "sd": 450e3 / 8}
+EST_VIDEO_3D_BPS = {q: k * 1e3 / 8 for q, k in VIDEO_3D_KBPS.items()}
 MOVIE_EXTS = (".webm", ".mp4", ".ogv", ".mkv", ".avi", ".mpg", ".mpeg", ".mov")
 
 
@@ -352,7 +375,18 @@ def estimate(primary, overlays):
             ogg_bytes + other_secs * EST_AUDIO_BPS["sd"]
         out[q] = int(pictures * EST_PICTURE[q] + audio_q + m_secs * EST_VIDEO_BPS[q] +
                      len(movies) * EST_PICTURE[q])
+        out[q + "_3d"] = int(m_secs * (EST_VIDEO_3D_BPS[q] - EST_VIDEO_BPS[q]))
+    out["movie_seconds"] = m_secs
     return out
+
+
+def quality_args_src():
+    """The packager's source, to see which options it knows ("" when frozen:
+    then it is the matching one and knows them all)."""
+    try:
+        return open(os.path.join(os.path.dirname(__file__), "__main__.py"), encoding="utf-8").read()
+    except OSError:
+        return "--video-3d"
 
 
 def quality_args(mode):
@@ -380,6 +414,8 @@ def vnpack_args(opts, quality, primary, overlays, scripts):
         if getattr(opts, flag):
             vargs.append("--" + flag.replace("_", "-"))
     vargs += quality_args(quality)
+    if video_3d_wanted(opts) and "--video-3d" in "".join(quality_args_src()):
+        vargs += ["--video-3d", "--video-3d-kbps", str(VIDEO_3D_KBPS.get(quality, 150))]
     for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps),
                       ("--video-fps", getattr(opts, "video_fps", None)),
                       ("--jpeg-encoder", getattr(opts, "jpeg_encoder", None)),
@@ -426,11 +462,19 @@ def convert(opts, quality, ui):
         ui.step("decompile", "done" if scripts else "skip",
                 "with unrpyc" if scripts else "")
         est = estimate(primary, overlays) if getattr(opts, "estimate", True) else None
+        v3d = video_3d_wanted(opts)
         if est:
             other = "sd" if quality == "wifi" else "wifi"
+            if v3d:
+                for q in (quality, other):
+                    est[q] += est[q + "_3d"]
             ui.log(f"projected size: about {est[quality] / 1e6:.0f} MB ({quality}); the "
                    f"{other} preset would be about {est[other] / 1e6:.0f} MB "
                    f"(--quality {other})")
+            if v3d and est["movie_seconds"]:
+                ui.log(f"3D movies ({est['movie_seconds'] / 60:.0f} min): about "
+                       f"{est[quality + '_3d'] / 1e6:.0f} MB more than 2D ones "
+                       f"(--no-video-3d for 2D)")
         seen = set()
 
         def progress(step, state=None, done=None, total=None, **info):
@@ -514,6 +558,21 @@ def ask_for_game():
         return []
 
 
+def prepare_video_3d():
+    """--video-3d: fetch the depth model the first time, and say what else
+    is missing."""
+    from . import stereo
+    if not stereo.find_model():
+        try:
+            stereo.download_model(say=lambda m: print("   " + m, flush=True))
+        except OSError as e:
+            print(f"   {e}; movies stay 2D")
+            return
+    if not stereo.runtime_python():
+        print("   3D movies need onnxruntime: python3 -m pip install onnxruntime "
+              "(or into a .venv in the repository); movies stay 2D")
+
+
 def main(argv=None):
     from . import flow
     ap = argparse.ArgumentParser(prog="vn3ds-port", description=__doc__,
@@ -548,6 +607,9 @@ def main(argv=None):
                     help="H.264 bitrate (default: 900 for the SD card, 100 for Wi-Fi)")
     ap.add_argument("--video-fps", type=int,
                     help="highest movie frame rate (default: 30 for the SD card, 20 for Wi-Fi)")
+    ap.add_argument("--video-3d", action=argparse.BooleanOptionalAction, default=None,
+                    help="stereoscopic movies from estimated depth (default: on when the "
+                         "depth model is installed; --video-3d downloads it once, 99 MB)")
     ap.add_argument("--jpeg-encoder", choices=("pillow", "ffmpeg"),
                     help="JPEG encoder (default: ffmpeg for Wi-Fi, pillow otherwise)")
     ap.add_argument("--jpeg-qscale", type=float, metavar="QS",
@@ -586,6 +648,9 @@ def main(argv=None):
     opts.jpeg_qscale = args.jpeg_qscale
     opts.cg_patches = args.cg_patches
     opts.jpeg_posters = args.jpeg_posters
+    opts.video_3d = args.video_3d
+    if args.video_3d and inputs:
+        prepare_video_3d()
     ui = flow.ConsoleUI()
     try:
         r = flow.run(opts, ui)

@@ -36,3 +36,6 @@ engine/source/leaderboard_secret.h
 tools/cli-release/vendor/
 tools/cli-release/dist/
 tools/cli-release/work/
+
+# depth model for stereo video (vnpack --video-3d downloads it)
+tools/vnpack/models/

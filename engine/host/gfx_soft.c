@@ -21,6 +21,7 @@ struct GfxTex {
     /* dynamic textures keep their native tiled buffer too */
     u8 *native;
     int tw, th, fmt;
+    int wx, wy, ww, wh; /* gfx_tex_window (ww == 0: the whole image) */
 };
 
 static Surf top_s[2], bot_s, cap_s[2], snap_s;
@@ -194,6 +195,16 @@ GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih)
 }
 
 void *gfx_tex_data(GfxTex *t) { return t->native; }
+
+void gfx_tex_window(GfxTex *t, int x, int y, int w, int h)
+{
+    if (!t)
+        return;
+    t->wx = x;
+    t->wy = y;
+    t->ww = w;
+    t->wh = h;
+}
 
 void gfx_tex_commit(GfxTex *t)
 {
@@ -448,7 +459,11 @@ void gfx_image(GfxTex *t, float x, float y, float w, float h, float angle, float
             if (h < 0)
                 v = 1 - v;
             float s[4];
-            sample(t->px, t->w, t->h, 4, u * (float)t->w, v * (float)t->h, s);
+            if (t->ww > 0)
+                sample(t->px, t->w, t->h, 4, (float)t->wx + u * (float)t->ww,
+                       (float)t->wy + v * (float)t->wh, s);
+            else
+                sample(t->px, t->w, t->h, 4, u * (float)t->w, v * (float)t->h, s);
             blend(cur->px + (py * cur->w + px) * 4, s[0], s[1], s[2], s[3] / 255.0f * alpha);
         }
     }

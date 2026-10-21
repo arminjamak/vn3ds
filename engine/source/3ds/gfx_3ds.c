@@ -163,6 +163,19 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
     return t;
 }
 
+void gfx_tex_window(GfxTex *t, int x, int y, int w, int h)
+{
+    if (!t)
+        return;
+    float tw = (float)t->tex.width, th = (float)t->tex.height;
+    t->sub.width = (u16)w;
+    t->sub.height = (u16)h;
+    t->sub.left = (float)x / tw;
+    t->sub.right = (float)(x + w) / tw;
+    t->sub.top = 1.0f - (float)y / th;
+    t->sub.bottom = 1.0f - (float)(y + h) / th;
+}
+
 GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
 {
     GPU_TEXCOLOR gfmt = fmt == 0 ? GPU_RGBA8 : fmt == 1 ? GPU_RGB8 : GPU_RGB565;

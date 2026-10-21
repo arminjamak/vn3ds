@@ -21,6 +21,11 @@
  * .cvid zlib'd changed 8x8 tiles, already in the GPU's tiled layout (older,
  *       low frame rate, works everywhere).
  *
+ * Stereo .cvh (flags & 2): every frame holds the left eye's view and the
+ * right eye's side by side, each w/2 wide (vnpack's depth-based right view).
+ * video_tex_stereo() gives each eye its half while the clip moves; the
+ * poster (the left view) and everything without hardware decoding stay flat.
+ *
  * A playing clip is double buffered: the frame being written is never the
  * one the GPU may still be drawing. Videos are drawn like any other image
  * (render.c), so depth and parallax apply to them. Build with
@@ -75,6 +80,8 @@ typedef struct {
     CvhFrame *frames;
     u32 params_off, params_size, max_frame;
     GfxTex *poster;
+    bool stereo;              /* side by side: left view | right view */
+    float stereo_mid;         /* median disparity, as a fraction of a view's width */
     u32 seq;                  /* open order: the newest clip gets the decoder */
     int decoded;              /* last frame fed to the decoder; -1: start at a keyframe */
     bool failed;              /* the decoder gave up on it: keeps its last picture */
@@ -641,6 +648,10 @@ static bool open_cvh(Video *v, const char *path)
     v->params_off = rd_u32(h + 36);
     v->params_size = rd_u32(h + 40);
     v->max_frame = rd_u32(h + 48);
+    v->stereo = (rd_u32(h + 32) & 2) && !(v->w & 31);
+    v->stereo_mid = v->stereo ? rd_f32(h + 56) / (float)(v->w / 2) : 0;
+    if (!(v->stereo_mid > -0.1f && v->stereo_mid < 0.1f))
+        v->stereo_mid = 0;
     if (v->w < 16 || v->h < 16 || (v->w & 15) || (v->h & 15) || !pow2_ok(v->tw, v->w) ||
         !pow2_ok(v->th, v->h) || !(v->fps > 0.5f && v->fps <= 120.0f) || v->nframes == 0 ||
         v->nframes > 1000000 || v->params_size < 8 || v->params_size > 4096 ||
@@ -901,11 +912,32 @@ static void update_owner(Video *v, float dt)
 
 /* ---- API ----------------------------------------------------------------- */
 
+/* What to draw for a clip; a stereo one's left view when it's flat. */
 static GfxTex *picture(Video *v)
 {
-    if (v->shown >= 0)
+    if (v->shown >= 0) {
+        if (v->stereo)
+            gfx_tex_window(v->tex[v->cur], 0, 0, v->w / 2, v->h);
         return v->tex[v->cur];
+    }
     return v->fmt == FMT_CVH ? v->poster : NULL;
+}
+
+GfxTex *video_tex_stereo(s32 res, int eye, float *mid)
+{
+    for (int i = 0; i < MAX_VIDEOS; i++) {
+        Video *v = &V[i];
+        if (!v->used || v->res != res)
+            continue;
+        if (!v->stereo || v->shown < 0)
+            return NULL;
+        v->last_used = E.frame;
+        GfxTex *t = v->tex[v->cur];
+        gfx_tex_window(t, eye == EYE_RIGHT ? v->w / 2 : 0, 0, v->w / 2, v->h);
+        *mid = v->stereo_mid;
+        return t;
+    }
+    return NULL;
 }
 
 GfxTex *video_tex(s32 res)

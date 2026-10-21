@@ -19,6 +19,10 @@ void gfx_tex_free(GfxTex *t);
 GfxTex *gfx_tex_create(int tw, int th, int fmt, int iw, int ih);
 void *gfx_tex_data(GfxTex *t);
 void gfx_tex_commit(GfxTex *t);
+/* Draw only the window (x, y, w, h) of the image (in its pixels, top-left
+ * origin) from now on, e.g. one eye's half of a side-by-side stereo video
+ * frame. Draws use the window as it is when they are made. */
+void gfx_tex_window(GfxTex *t, int x, int y, int w, int h);
 /* Like gfx_tex_create without clearing the pixels (the caller writes all
  * of them). Background loading (texcache.c): the main thread allocates and
  * commits, the background thread decodes into gfx_tex_data() in between. */
