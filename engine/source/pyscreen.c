@@ -241,7 +241,7 @@ static bool call(const char *fn, int argc);
 static void report(const char *what)
 {
     char *msg = py_formatexc();
-    fprintf(stderr, "[pyscreen] %s: %s\n", what, msg ? msg : "?");
+    LOG("pyscreen: %s: %.300s", what, msg ? msg : "?");
     if (msg)
         py_free(msg);
     py_clearexc(NULL);
@@ -267,7 +267,9 @@ static bool ensure(void)
     pys_unload();
     P.crc = E.game.crc;
     u64 t0 = platform_us();
+    LOG("pyscreen: starting Python for the game's screens (%u KB)", (unsigned)(E.game.pysc_size >> 10));
     py_initialize();
+    LOG("pyscreen: interpreter up");
     P.on = true;
     py_GlobalRef m = py_newmodule("_vn3ds");
     py_bindfunc(m, "has", f_has);
@@ -294,6 +296,7 @@ static bool ensure(void)
     src[E.game.pysc_size] = 0;
     bool ok = py_exec(src, "vn3ds_rt", EXEC_MODE, P.mod);
     free(src);
+    LOG("pyscreen: runtime %s", ok ? "loaded" : "failed");
     if (!ok) {
         report("loading the game's screens");
         py_finalize();
@@ -302,14 +305,23 @@ static bool ensure(void)
         return false;
     }
     /* the game's own code, a statement at a time (see _load_chunks) */
-    py_ItemRef chunks = py_getdict(P.mod, py_name("_CHUNKS"));
-    int nchunks = chunks && py_islist(chunks) ? py_list_len(chunks) : 0, failed = 0;
+    /* (a register holds the list: a pointer into the module's dict would go
+     * stale as soon as a chunk adds a name and the dict grows) */
+    py_ItemRef found = py_getdict(P.mod, py_name("_CHUNKS"));
+    py_Ref chunks = NULL;
+    if (found && py_islist(found)) {
+        py_setreg(7, found);
+        chunks = py_getreg(7);
+    }
+    int nchunks = chunks ? py_list_len(chunks) : 0, failed = 0;
     for (int i = 0; i < nchunks; i++) {
         py_Ref it = py_list_getitem(chunks, i);
         if (seq_len(it) < 2)
             continue;
         const char *where = py_tostr(seq_at(it, 0));
         const char *code = py_tostr(seq_at(it, 1));
+        if (i % 200 == 0)
+            LOG("pyscreen: statement %d of %d (%s)", i, nchunks, where);
         if (!py_exec(code, where, EXEC_MODE, P.mod)) {
             char *msg = py_formatexc();
             const char *last = msg ? strrchr(msg, '\n') : NULL;
@@ -323,19 +335,20 @@ static bool ensure(void)
     if (chunks)
         py_list_clear(chunks);
     call("_finish_load", 0);
-    fprintf(stderr, "[pyscreen] %d statements, %d left out\n", nchunks, failed);
+    LOG("pyscreen: %d statements, %d left out", nchunks, failed);
     P.hud_entry = mg_port_find("pyscreen", "mode", "overlay");
-    fprintf(stderr, "[pyscreen] loaded in %.0f ms\n", (platform_us() - t0) / 1000.0);
+    LOG("pyscreen: loaded in %.0f ms", (platform_us() - t0) / 1000.0);
     return true;
 }
 
 /* Calls vn3ds_rt.<fn>(args in r0..) and leaves its result in py_retval(). */
 static bool call(const char *fn, int argc)
 {
-    py_ItemRef f = py_getdict(P.mod, py_name(fn));
-    if (!f)
+    py_ItemRef found = py_getdict(P.mod, py_name(fn));
+    if (!found)
         return false;
-    if (!py_call(f, argc, argc ? py_r0() : NULL)) {
+    py_setreg(6, found);   /* (not a pointer into the dict: see ensure()) */
+    if (!py_call(py_getreg(6), argc, argc ? py_r0() : NULL)) {
         report(fn);
         return false;
     }

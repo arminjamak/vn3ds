@@ -238,31 +238,50 @@ static void opening_step(const char *step, float frac)
 /* Moves everything under `src` into `dst` (same card), replacing files. */
 static void move_tree(const char *src, const char *dst)
 {
+    /* The names first, then the moves: renaming entries out of a folder
+     * while reading it makes the 3DS's SD card listing skip some, and the
+     * skipped files would stay behind in updates/ (their game can't read
+     * them there, and the next transfer counts them as already sent). */
     DIR *d = opendir(src);
     if (!d)
         return;
     mkdir(dst, 0755);
+    char (*names)[256] = NULL;
+    size_t n = 0, cap = 0;
     struct dirent *e;
-    char from[512], to[512];
     while ((e = readdir(d))) {
         if (e->d_name[0] == '.')
             continue;
-        snprintf(from, sizeof(from), "%s/%s", src, e->d_name);
-        snprintf(to, sizeof(to), "%s/%s", dst, e->d_name);
+        if (n == cap) {
+            size_t nc = cap ? cap * 2 : 64;
+            char (*nn)[256] = realloc(names, nc * sizeof(*names));
+            if (!nn)
+                break;
+            names = nn;
+            cap = nc;
+        }
+        snprintf(names[n++], sizeof(names[0]), "%s", e->d_name);
+    }
+    closedir(d);
+    char from[512], to[512];
+    for (size_t i = 0; i < n; i++) {
+        snprintf(from, sizeof(from), "%s/%s", src, names[i]);
+        snprintf(to, sizeof(to), "%s/%s", dst, names[i]);
         struct stat st;
         if (stat(from, &st) != 0)
             continue;
         if (S_ISDIR(st.st_mode)) {
             move_tree(from, to);
-        } else if (strstr(e->d_name, ".part")) {
+        } else if (strstr(names[i], ".part")) {
             remove(from);   /* a transfer that never finished: nothing will complete it */
         } else {
             remove(to);
-            rename(from, to);
+            if (rename(from, to) != 0)
+                LOG("update: cannot move %s", from);
             opening_step("Applying the update", -1);
         }
     }
-    closedir(d);
+    free(names);
     rmdir(src);
 }
 

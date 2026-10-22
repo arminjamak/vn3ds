@@ -502,6 +502,27 @@ static void make_dirs(const char *full)
     }
 }
 
+/* Receive timing, logged every 4 MB: how long it took, and how much of
+ * that went to the card (writing, and opening/reserving/closing files);
+ * the rest is the network, or the receiver waiting for its turn. */
+static u64 rt_start_us, rt_write_us, rt_file_us, rt_bytes;
+
+static void rx_timing(size_t n)
+{
+    if (!rt_start_us)
+        rt_start_us = platform_us();
+    rt_bytes += n;
+    if (rt_bytes >= (4u << 20)) {
+        u64 now = platform_us();
+        double secs = (now - rt_start_us) / 1e6;
+        LOG("net: %.1f MB in %.1f s (%.2f MB/s): writing %.1f s, opening/closing files %.1f s",
+            rt_bytes / 1048576.0, secs, secs > 0 ? rt_bytes / 1048576.0 / secs : 0,
+            rt_write_us / 1e6, rt_file_us / 1e6);
+        rt_start_us = now;
+        rt_write_us = rt_file_us = rt_bytes = 0;
+    }
+}
+
 static void begin_file(void)
 {
     path[path_len] = 0;
@@ -516,6 +537,7 @@ static void begin_file(void)
     note_game(path);
     target_path(path, final_path, sizeof(final_path));
     snprintf(tmp_path, sizeof(tmp_path), "%s.part", final_path);
+    u64 t0 = platform_us();
     make_dirs(final_path);
     out = fopen(tmp_path, "wb");
     if (out) {
@@ -526,6 +548,7 @@ static void begin_file(void)
         if (file_size > 0 && ftruncate(fileno(out), (off_t)file_size) != 0)
             LOG("net: could not reserve %llu bytes for %s", (unsigned long long)file_size, path);
     }
+    rt_file_us += platform_us() - t0;
     wlen = 0;
     write_failed = !out;
     snprintf(NET.current, sizeof(NET.current), "%s", path);
@@ -566,7 +589,10 @@ static void drop_file(void)
 
 static bool flush_buf(void)
 {
-    if (out && wlen > 0 && fwrite(wbuf, 1, wlen, out) != wlen) {
+    u64 t0 = platform_us();
+    bool bad = out && wlen > 0 && fwrite(wbuf, 1, wlen, out) != wlen;
+    rt_write_us += platform_us() - t0;
+    if (bad) {
         drop_file();
         wlen = 0;
         return false;
@@ -577,6 +603,7 @@ static bool flush_buf(void)
 
 static void write_data(const u8 *p, size_t n)
 {
+    rx_timing(n);
     if (!out)
         return;
     if (!wbuf && !(wbuf = malloc(WBUF_SIZE))) {
@@ -624,10 +651,12 @@ static void end_file(void)
     if (out)
         flush_buf();
     if (out) {
+        u64 t0 = platform_us();
         bool ok = fclose(out) == 0;
         out = NULL;
         remove(final_path);
         ok = ok && rename(tmp_path, final_path) == 0;
+        rt_file_us += platform_us() - t0;
         code = ok ? 0 : 2;
         if (ok) {
             NET.files_done++;
@@ -992,6 +1021,13 @@ static bool have_file(void)
         remove(target);   /* stale: it would overwrite the live file on the next load */
     }
     int says = crcl_says(path);
+    if (says == 1 && !strstr(path, "/img/") && !strstr(path, "/snd/")) {
+        /* the list says so, but a pack (or game.bin) may have gone missing
+         * since (a transfer cut short, an update never applied): there are
+         * few of them, so make sure it is really there */
+        struct stat st;
+        return stat(live, &st) == 0 && (u64)st.st_size == file_size;
+    }
     if (says >= 0)
         return says == 1;
     if (content_named(path))   /* the name is the content: being there is enough */
