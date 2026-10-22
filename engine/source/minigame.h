@@ -159,6 +159,16 @@ void mg_hud_open(void);            /* the button was pressed */
 /* Starts PORT entry `index` from the overlay (not the script). */
 bool mg_begin_port(int index);
 
+/* The first PORT entry of `mechanic` whose `key` is `value`, or -1. */
+int mg_port_find(const char *mechanic, const char *key, const char *value);
+
+/* The game's own screens run by its own Python (pyscreen.c). */
+void pys_unload(void);
+void pys_story_update(float dt);      /* the story is on: the shown overlays */
+void pys_story_draw(int eye);         /* over the scene, under the text box */
+const char *pys_hud_label(void);      /* the overlays' touch-screen button, or NULL */
+void pys_hud_open(void);
+
 /* The entry's parameters: the first value of `key`, or NULL / `def`. */
 const char *mg_param(const char *key);
 float mg_paramf(const char *key, float def);

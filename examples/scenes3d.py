@@ -9,6 +9,7 @@ and foreground. A flattened copy goes in images/ for Ren'Py on a PC.
 
 import math
 import os
+import subprocess
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -94,6 +95,14 @@ def sky_stars(scene, key, depth, count, size=6, box=(0, 0, W, 420), seed=3, fain
     return img
 
 
+def hole(draw):
+    """An L mask for Scene.loop: `draw` paints the opening (255) on a
+    ImageDraw of the whole picture."""
+    m = Image.new("L", (W, H), 0)
+    draw(ImageDraw.Draw(m))
+    return m
+
+
 def blank():
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     return img, ImageDraw.Draw(img)
@@ -104,6 +113,23 @@ class Scene:
 
     def __init__(self, back, depth=1.0, anim=None):
         self.layers = [["back", back.convert("RGBA"), depth, anim]]
+        self.video = None
+
+    def loop(self, name, depth, cut=(), hole=None, box=(0, 0, W, H)):
+        """A looping world from the soundtrack video (loops/<name>.mp4, made
+        by make_loops.py: stereo, 16:9 or the opening's shape) as the
+        deepest plane, at `depth`. Without `cut` it is the whole backdrop, in
+        place of the back plane; otherwise it is seen through `hole` (an L
+        mask, 255 = open) cut out of the planes named in `cut`, and fills
+        `box` (x0, y0, x1, y1), which should reach a little past the hole's
+        edge, since the planes shift apart in 3D."""
+        if not cut:
+            del self.layers[0]
+        for layer in self.layers:
+            if layer[0] in cut:
+                a = np.asarray(layer[1].getchannel("A"), np.int32) * (255 - np.asarray(hole, np.int32)) // 255
+                layer[1].putalpha(Image.fromarray(a.astype(np.uint8)))
+        self.video = (0, name, depth, box)
 
     def new(self, key, depth, anim=None):
         img, d = blank()
@@ -113,15 +139,38 @@ class Scene:
     def add(self, key, img, depth, anim=None):
         self.layers.append([key, img.convert("RGBA"), depth, anim])
 
-    def flat(self):
-        out = self.layers[0][1].copy()
-        for _, img, _, _ in self.layers[1:]:
+    def poster(self, game_dir):
+        """The loop's first frame (left eye) where it goes, or None."""
+        _, name, _, (x0, y0, x1, y1) = self.video
+        path = os.path.join(game_dir, "loops", name + ".mp4")
+        if not os.path.exists(path):
+            return None
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-frames:v", "1", "-vf", "crop=iw/2:ih:0:0",
+                            "-f", "image2pipe", "-c:v", "png", "-"], capture_output=True)
+        if r.returncode != 0:
+            return None
+        from io import BytesIO
+        out = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+        out.paste(Image.open(BytesIO(r.stdout)).convert("RGBA").resize((x1 - x0, y1 - y0), Image.LANCZOS),
+                  (x0, y0))
+        return out
+
+    def flat(self, game_dir=None):
+        planes = [img for _, img, _, _ in self.layers]
+        if self.video:
+            first = self.poster(game_dir) if game_dir else None
+            planes.insert(self.video[0], first if first is not None else Image.new("RGBA", (W, H), (0, 0, 0, 255)))
+        out = planes[0].copy()
+        for img in planes[1:]:
             out = Image.alpha_composite(out, img)
         return out.convert("RGB")
 
     def save(self, name, game_dir):
-        """Write the flat image and the planes; return the vn3ds.json entry."""
-        self.flat().save(os.path.join(game_dir, "images", name + ".png"))
+        """Write the flat image and the planes; return the vn3ds.json entry.
+        A name with a folder ("gui/main_menu") puts the flat image there."""
+        flat = name + ".png" if "/" in name else os.path.join("images", name + ".png")
+        self.flat(game_dir).save(os.path.join(game_dir, flat))
+        name = os.path.basename(name)
         folder = os.path.join(game_dir, "layers", name)
         os.makedirs(folder, exist_ok=True)
         for fn in os.listdir(folder):
@@ -134,6 +183,10 @@ class Scene:
             if anim:
                 item["anim"] = anim
             entry.append(item)
+        if self.video:
+            at, loop, depth, (x0, y0, x1, y1) = self.video
+            entry.insert(at, {"file": f"loops/{loop}.mp4", "depth": depth,
+                              "box": [x0, y0, x1 - x0, y1 - y0], "stereo": True})
         return entry
 
 
@@ -407,6 +460,7 @@ def command():
 def purgatorium():
     back = gradient(W, H, (70, 60, 110), (140, 120, 160))
     s = Scene(back, 1.2)
+    s.loop("purgatorium", 1.2)
     lamps, d = s.new("lanterns", 0.7, SWAY(0, 6, 6))
     for x, y in [(200, 150), (640, 90), (1080, 170)]:
         d.ellipse([x - 20, y - 20, x + 20, y + 20], fill=(255, 230, 160, 255))
@@ -434,6 +488,7 @@ def council():
     for x in range(100, W, 180):
         d.rectangle([x, 0, x + 40, H], fill=(40, 10, 20))
     s = Scene(back, 1.2)
+    s.loop("council", 1.2)
     s.add("orbglow", light((W // 2, 260), 280, (100, 140, 230), 150), 0.75, PULSE(0.55, 5))
     orb, d = s.new("planet", 0.7, BREATHE(0.02, 6))
     d.ellipse([W // 2 - 110, 150, W // 2 + 110, 370], fill=(60, 110, 190, 255))
@@ -456,7 +511,9 @@ def watch():
     win, d = s.new("round window", 0.85)
     d.ellipse([470, 120, 810, 460], fill=(25, 20, 30, 255))
     d.ellipse([490, 140, 790, 440], fill=(15, 18, 40, 255))
-    sky_stars(s, "stars", 0.86, 16, 5, (536, 186, 744, 394), seed=9)
+    # through it, the space between the floors of the world
+    s.loop("watch", 1.3, ("back", "round window"), hole(lambda d: d.ellipse([490, 140, 790, 440], fill=255)),
+           (460, 110, 820, 470))
     room, d = s.new("aron's window", 0.9)
     d.rectangle([600, 300, 680, 370], fill=(255, 210, 130, 255))
     d.line([640, 300, 640, 370], fill=(80, 60, 40, 255), width=3)
@@ -578,12 +635,7 @@ def clinic():
 def earth():
     back = gradient(W, H, (5, 5, 20), (30, 20, 60))
     s = Scene(back, 1.5)
-    sky_stars(s, "stars", 1.48, 170, 7, (0, 0, W, H), seed=17, faint=120)
-    s.add("atmosphere", light((640, 900), 620, (90, 140, 230), 200), 0.95, PULSE(0.75, 7))
-    planet, d = s.new("earth", 0.9, BREATHE(0.006, 9))
-    d.ellipse([140, 420, 1140, 1420], fill=(40, 90, 170, 255))
-    d.ellipse([360, 470, 640, 640], fill=(70, 140, 80, 255))
-    d.ellipse([760, 520, 980, 700], fill=(70, 140, 80, 255))
+    s.loop("earth", 1.5)   # the Earth itself, held in its gold
     cage, d = s.new("cage", 0.3, PULSE(0.25, 4))
     for k in range(9):
         d.line([140 + k * 125, 420, 640, 40], fill=(180, 160, 255, 255), width=1)
@@ -646,6 +698,7 @@ def office():
 def goldlight():
     back = gradient(W, H, (40, 25, 5), (120, 80, 20))
     s = Scene(back, 1.2)
+    s.loop("goldlight", 1.2)
     beams, d = s.new("beams", 0.7, PULSE(0.55, 3.5))
     for k in range(-8, 9):
         x = W // 2 + k * 90
@@ -665,6 +718,7 @@ def goldlight():
 def worlds():
     back = gradient(W, H, (10, 10, 25), (30, 25, 55))
     s = Scene(back, 1.6)
+    s.loop("worlds", 1.6)
     rng = np.random.default_rng(41)
     for depth in range(4, 0, -1):
         lay, d = s.new(f"lattice{depth}", -0.3 + depth * 0.4, SWAY(4 * depth, 2, 10 + depth * 3))
@@ -679,6 +733,27 @@ def worlds():
                 d.rectangle([x + 3, y + 3, x + size - 3, y + size - 3], outline=c, width=2)
                 if depth >= 3:
                     d.ellipse([x + size // 2 - 4, y + size // 2 - 4, x + size // 2 + 4, y + size // 2 + 4], fill=c)
+    # the farthest lattice only: the worlds behind it are the picture now
+    s.layers = [layer for layer in s.layers if layer[0] not in ("lattice1", "lattice2", "lattice3")]
+    return s
+
+
+def title():
+    """The title screen (gui/main_menu): a window frame splitting into
+    copies, each copy a plane nearer the player, over the dusk hills and a
+    slow abstract world from the soundtrack video. The engine writes the
+    game's title over it."""
+    s = Scene(gradient(W, H, (20, 15, 45), (120, 60, 110)), 1.4)
+    s.loop("title", 1.4)
+    for i, (col, off) in enumerate([((40, 25, 70), 0), ((70, 35, 90), 160)]):
+        hill, d = s.new(f"hill{i}", 0.7 - 0.35 * i)
+        pts = [(x, 520 + off // 2 + 50 * math.sin(x / 140 + i)) for x in range(0, W + 40, 40)]
+        d.polygon(pts + [(W, H), (0, H)], fill=col + (255,))
+    s.add("glow", light((640, 260), 260, (255, 200, 140), 90), 0.95, PULSE(0.6, 6))
+    for k in range(5):
+        frame, d = s.new(f"frame{k}", 0.9 - 0.2 * k, SWAY(1.5 * k, 1.0 * k, 9 + k))
+        o = k * 14
+        d.rectangle([520 + o, 140 - o, 760 + o, 380 - o], outline=(255, 220, 150, 255), width=3)
     return s
 
 
@@ -750,8 +825,9 @@ SCENES = {
 }
 
 
-def build_all(game_dir):
-    """Draw every scene; return the vn3ds.json "layers" mapping."""
+def build_all(game_dir, only=None):
+    """Draw every scene (or the ones named in `only`); return the vn3ds.json
+    "layers" mapping."""
     img_dir = os.path.join(game_dir, "images")
     for fn in os.listdir(img_dir):   # drop flat images from older versions
         base = os.path.splitext(fn)[0]
@@ -759,6 +835,8 @@ def build_all(game_dir):
             os.remove(os.path.join(img_dir, fn))
     layers = {}
     for k, (name, fn) in enumerate(SCENES.items()):
+        if only is not None and name not in only:
+            continue
         scene = fn()
         moving = sum(1 for layer in scene.layers if layer[3])
         if moving < 2 and not name.startswith("cg static"):
@@ -1245,6 +1323,7 @@ def barracks():
 def spawning():
     back = gradient(W, H, (50, 40, 90), (100, 80, 140))
     s = Scene(back, 1.2)
+    s.loop("spawning", 1.2)
     pools, d = s.new("pools", 0.5)
     for k, x in enumerate((220, 640, 1060)):
         d.ellipse([x - 170, 470, x + 170, 580], fill=(140, 200, 255, 255))
@@ -1304,6 +1383,15 @@ def ashveil_study():
     for x in range(0, W, 90):
         d.line([x, 0, x, H], fill=(55, 15, 35), width=30)
     s = Scene(back, 1.0)
+    # a tall window onto what he feeds on
+    arch = hole(lambda d: (d.ellipse([450, 40, 710, 300], fill=255), d.rectangle([450, 170, 710, 420], fill=255)))
+    s.loop("vampire", 1.4, ("back",), arch, (425, 15, 735, 445))
+    frame, d = s.new("window frame", 0.97)
+    d.arc([440, 30, 720, 310], 180, 360, fill=(30, 6, 14, 255), width=14)
+    for x in (440, 706):
+        d.rectangle([x, 170, x + 14, 420], fill=(30, 6, 14, 255))
+    d.rectangle([574, 40, 586, 420], fill=(30, 6, 14, 255))
+    d.rectangle([450, 230, 710, 240], fill=(30, 6, 14, 255))
     fire, d = s.new("fireplace", 0.6)
     d.rectangle([800, 300, 1150, 600], fill=(50, 20, 25, 255))
     d.rectangle([840, 380, 1110, 600], fill=(15, 5, 8, 255))
@@ -1330,6 +1418,7 @@ def foundry():
     for x in range(0, W, 32):
         d.line([x, 0, x, H], fill=(20, 60, 65), width=1)
     s = Scene(back, 1.2)
+    s.loop("foundry", 1.2)   # the machine's streams, behind the patterns it renders
     for k, x in enumerate((240, 520, 800, 1080)):
         fig, d = s.new(f"pattern{k}", 0.7 - k * 0.15, BREATHE(0.01, 3 + k * 0.5))
         col = (110, 255, 220, 255)
@@ -2304,6 +2393,9 @@ def command_reverse():
     for x in (380, 900):
         d.rectangle([x - 25, 0, x + 25, 470], fill=(245, 240, 225))
     s = Scene(glow(back, (W // 2, 280), 360, (60, 50, 20), 0.5), 1.2)
+    # the great doors stand open on the worlds the operators watch
+    s.loop("angel ops", 1.5, ("back",), hole(lambda d: d.rounded_rectangle([546, 96, 734, 470], 84, fill=255)),
+           (520, 70, 760, 490))
     floor, d = s.new("floor", 0.65)
     d.rectangle([0, 470, W, H], fill=(235, 220, 180, 255))
     for depth, y, n, size in [(0.6, 470, 9, 0.6), (0.45, 530, 7, 0.8), (0.3, 600, 5, 1.0)]:
@@ -2553,6 +2645,13 @@ def shadowbase():
     d.ellipse([440, 80, 840, 480], fill=(190, 200, 215, 255))
     for a, b in (((520, 140), (640, 300)), ((640, 300), (600, 470)), ((640, 300), (790, 230)), ((640, 300), (470, 330))):
         d.line([a, b], fill=(110, 120, 140, 255), width=3)
+
+    def glass(d):   # the mirror is a window onto the mirror realm, cracks and all
+        d.ellipse([440, 80, 840, 480], fill=255)
+        for a, b in (((520, 140), (640, 300)), ((640, 300), (600, 470)), ((640, 300), (790, 230)),
+                     ((640, 300), (470, 330))):
+            d.line([a, b], fill=0, width=3)
+    s.loop("shadow", 1.6, ("back", "telescope mirror"), hole(glass), (410, 50, 870, 510))
     beams, d = blank()
     for x0, x1 in ((150, 400), (1130, 880)):
         d.polygon([(x0 - 20, H), (x0 + 20, H), (x1 + 40, 0), (x1 - 40, 0)], fill=(230, 235, 255, 60))
@@ -2612,3 +2711,26 @@ SCENES.update({
     "bg stairwell": stairwell, "bg ward yard": ward_yard,
     "bg shadowbase": shadowbase, "bg mirrorplanet": mirrorplanet,
 })
+
+
+# The title screen last, so the scenes above keep their numbering (it seeds
+# their dust).
+SCENES["gui/main_menu"] = title
+
+if __name__ == "__main__":
+    # Redraw some scenes in place and update their vn3ds.json entries:
+    #   python3 examples/scenes3d.py "bg watch" "bg earth"
+    # (make_demo_assets.py draws them all.)
+    import json
+    import sys
+    game = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo", "game")
+    names = sys.argv[1:]
+    unknown = [n for n in names if n not in SCENES]
+    if not names or unknown:
+        sys.exit(f"name scenes to redraw{': unknown ' + ', '.join(unknown) if unknown else ''}")
+    path = os.path.join(game, "vn3ds.json")
+    with open(path) as f:
+        cfg = json.load(f)
+    cfg["layers"].update(build_all(game, only=set(names)))
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=1)

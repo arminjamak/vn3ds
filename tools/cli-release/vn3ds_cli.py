@@ -1,9 +1,11 @@
 """Entry point of the standalone vn3ds-port build (PyInstaller).
 
 The same command as tools/vn3ds-port, with Python, the converter, unrpyc,
-vn3ds.3dsx and ffmpeg/ffprobe inside. It also answers two internal flags:
+vn3ds.3dsx and ffmpeg/ffprobe inside. It also answers these internal flags:
   --vn3ds-unrpyc ARGS   run the bundled unrpyc (the converter calls this,
                         as there is no separate Python to run it with)
+  --vn3ds-bridge CMD    the Mac app's commands (vnpack/appbridge.py)
+  --vn3ds-stereo ARGS   3D movies' depth filter (vnpack/stereo.py)
   --version             print the build's version
 """
 
@@ -21,6 +23,13 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--vn3ds-unrpyc":
         from vnpack import port
         port.run_unrpyc(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "--vn3ds-stereo":   # 3D movies' depth filter
+        from vnpack import stereo
+        sys.exit(stereo.main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "--vn3ds-bridge":   # the Mac app's commands
+        from vnpack import appbridge
+        appbridge.main(sys.argv[2:])
         return
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         try:

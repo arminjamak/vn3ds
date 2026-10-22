@@ -56,6 +56,30 @@ echo "pack files (packed vs loose, update stability)"
 python3 tests/test_packs.py "$OUT/build/snapshot" > "$OUT/packs.txt" 2>&1 || { grep -v "  ok:" "$OUT/packs.txt"; fail=1; }
 tail -1 "$OUT/packs.txt"
 
+echo "free roam, talk menus, the game's own functions, jump expression"
+python3 tests/test_freeroam.py > "$OUT/freeroam.txt" 2>&1 || { grep -v "  ok:" "$OUT/freeroam.txt"; fail=1; }
+tail -1 "$OUT/freeroam.txt"
+
+echo "standalone app (vn3ds-port --app: romfs, SMDH, single-game mode)"
+python3 tests/test_app3dsx.py "$OUT/build/snapshot" > "$OUT/app.txt" 2>&1 || { grep -v "  ok:" "$OUT/app.txt"; fail=1; }
+tail -1 "$OUT/app.txt"
+
+echo "finding the 3DS again (new IP, restart hint, not on the Wi-Fi)"
+python3 tests/test_relocate.py engine/build-host/vn3ds-host "$OUT/build/syntax-test" > "$OUT/relocate.txt" 2>&1 || { grep -v "  ok:" "$OUT/relocate.txt"; fail=1; }
+tail -1 "$OUT/relocate.txt"
+
+echo "saves: Ren'Py <-> vn3ds conversion, two-way sync over Wi-Fi, installed games"
+python3 tests/test_savesync.py engine/build-host/vn3ds-host > "$OUT/savesync.txt" 2>&1 || { grep -v "  ok:" "$OUT/savesync.txt"; fail=1; }
+tail -1 "$OUT/savesync.txt"
+
+echo "a dead connection never blocks the receiver (takeover, 20 s idle close)"
+python3 tests/test_rx_stuck.py engine/build-host/vn3ds-host "$OUT/build/syntax-test" > "$OUT/rxstuck.txt" 2>&1 || { grep -v "  ok:" "$OUT/rxstuck.txt"; fail=1; }
+tail -1 "$OUT/rxstuck.txt"
+
+# Games from a browser (tests/test_link.py: page -> relay -> 3DS) is on hold:
+# vn3ds no longer links up with the relay (app_receive_open), so the test
+# would only time out. Run it by hand once the link is switched back on.
+
 echo "3dslink (netloader) sender"
 python3 tests/test_3dslink.py > "$OUT/3dslink.txt" 2>&1 || { grep -v "  ok:" "$OUT/3dslink.txt"; fail=1; }
 tail -1 "$OUT/3dslink.txt"
@@ -63,6 +87,17 @@ tail -1 "$OUT/3dslink.txt"
 echo "JPEG textures"
 python3 tests/test_jpeg.py > "$OUT/jpeg.txt" 2>&1 || { grep -v "  ok:" "$OUT/jpeg.txt"; fail=1; }
 tail -1 "$OUT/jpeg.txt"
+
+echo "stereoscopic movies (--video-3d)"
+python3 tests/test_stereo_video.py > "$OUT/stereo.txt" 2>&1 || { grep -v "  ok:" "$OUT/stereo.txt"; fail=1; }
+tail -1 "$OUT/stereo.txt"
+echo "movies through another encoder (a web page's: prefetch, same .cvh)"
+python3 tests/test_movie_hook.py > "$OUT/moviehook.txt" 2>&1 || { grep -v "  ok:" "$OUT/moviehook.txt"; fail=1; }
+tail -1 "$OUT/moviehook.txt"
+
+echo "an .rpa compressed inside a .zip download, read in place"
+python3 tests/test_zip_archive.py > "$OUT/ziparc.txt" 2>&1 || { grep -v "  ok:" "$OUT/ziparc.txt"; fail=1; }
+tail -1 "$OUT/ziparc.txt"
 
 echo "CG patches (--cg-patches)"
 python3 tests/test_cg_patches.py > "$OUT/cgp.txt" 2>&1 || { grep -v "  ok:" "$OUT/cgp.txt"; fail=1; }
@@ -93,5 +128,22 @@ check "$OUT/tp2.txt" "The vault stayed shut."
 check "$OUT/tp2.txt" "You plucked 2 strings: lh."
 check "$OUT/tp2.txt" "Points: -1."
 check "$OUT/tp2.txt" "The tape ended."
+
+echo "screen language -> Python, the interpreter's dialect, the screen runtime (CPython)"
+python3 tests/test_screenlang.py > "$OUT/screenlang.txt" 2>&1 || { grep -v "  ok:" "$OUT/screenlang.txt"; fail=1; }
+tail -1 "$OUT/screenlang.txt"
+
+echo "the game's own screens and Python (a minigame class, timers, keys, an overlay with a menu)"
+tools/vnpack.sh tests/pyscreens -o "$OUT/build" -q --no-audio
+engine/build-host/vn3ds-host "$OUT/build/pyscreens" --root "$OUT/root_py" \
+    --mg-input "1.5:a,1.7:a,2.2:b" --hud-at 3 > "$OUT/tpy.txt" 2>&1
+check "$OUT/tpy.txt" "The minigame returned 10, score 20."
+check "$OUT/tpy.txt" '[hud] screen button shown: "Phone"'
+check "$OUT/tpy.txt" "Flag is True."
+check "$OUT/tpy.txt" "You won."
+if grep -q "This line must not be reached" "$OUT/tpy.txt"; then echo "  a screen's Jump fell through"; fail=1; fi
+if grep -q "left out\|\[pyscreen\].*Error" "$OUT/tpy.txt" && ! grep -q "0 left out" "$OUT/tpy.txt"; then
+    echo "  the screens' Python didn't all load"; grep "\[pyscreen\]" "$OUT/tpy.txt"; fail=1
+fi
 
 [ $fail = 0 ] && echo "all tests passed" || { echo "FAILED"; exit 1; }

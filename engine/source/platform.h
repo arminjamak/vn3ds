@@ -28,6 +28,14 @@ typedef struct {
 
 /* Root folder that holds games/, saves/ and settings.cfg. */
 const char *platform_root(void);
+/* The SD card's root ("sdmc:" on the 3DS), for paths outside the root
+ * (link.c: vn3ds and standalone apps finding each other). */
+const char *platform_sdmc(void);
+/* This program's own .3dsx (argv[0]), "" when not known. */
+const char *platform_self_path(void);
+/* Starts another .3dsx with argv[0..argc) (argv[0] its path) once this one
+ * exits; false when this setup can't (see link.h). */
+bool platform_launch(int argc, const char **argv);
 bool platform_mkdir(const char *path);
 /* Calls cb for each sub-folder name of `path`. */
 void platform_list_dirs(const char *path, void (*cb)(const char *name, void *ud), void *ud);

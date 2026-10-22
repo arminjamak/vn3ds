@@ -7,6 +7,7 @@
  *             separated), u64 size, [v2: u32 crc32], data
  *   server, after each file: u8 status (0 ok, 1 refused, 2 write error)
  *   server, at the end:      "DONE"
+ * ("VN3L" instead of "VN3D" asks for the logs, "VN3S" syncs saves: savesync.c.)
  * Version 2 lets updates skip what the card already has: after a file's
  * size and CRC the server answers 3 ("have it": no data follows, and that 3
  * is the file's status) or 4 ("send it": data follows, then the status).
@@ -31,11 +32,14 @@
  * packet on its own runs at a few KB/s. */
 
 #include "app.h"
+#include "fetch.h"
 #include "net.h"
+#include "relay.h"
 
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <zlib.h>
@@ -61,6 +65,7 @@ static pthread_t rx_thread;
 static volatile bool rx_active, rx_quit;
 static bool rx_started;
 static void rx_join(void);
+static bool start_rx(int fd);
 
 NetStatus NET;
 
@@ -79,6 +84,8 @@ static u32 *mf_off, *mf_crc, mf_n, mf_bytes, mf_cap, mf_failed;
 static u64 *mf_size;
 
 static int listen_fd = -1, conn_fd = -1;
+static volatile u64 rx_last_ms;   /* when the connection last carried data */
+static int pending_fd = -1;       /* a reconnect waiting for the old one to close */
 static int state;
 static u8 hdr[20];
 static size_t got, need;
@@ -119,8 +126,11 @@ static void mf_free(void)
 
 static void inflate_stop(void);
 
+static void ws_reset(bool on);
+
 static void close_conn(void)
 {
+    ws_reset(false);
     inflate_stop();
     mf_free();
     if (out) {
@@ -138,6 +148,11 @@ static void close_conn(void)
  * called from the main thread. */
 static int soc_users;
 static bool rx_soc;   /* net_start() holds a reference */
+/* A port that can't be taken (a previous run's socket still held: the 3DS
+ * frees it only on a restart) is tried again every 2 s, not given up on. */
+static bool want_listen;
+static u64 listen_retry_at;
+static int listen_fails;
 
 bool net_soc_acquire(void)
 {
@@ -221,7 +236,8 @@ bool net_start(int port)
 {
     if (listen_fd >= 0)
         return true;   /* already listening (in the background) */
-    memset(&NET, 0, sizeof(NET));
+    if (!FETCH.busy)   /* (a web download is reporting in NET) */
+        memset(&NET, 0, sizeof(NET));
     NET.port = port;
     if (!rx_soc) {
         if (!net_soc_acquire()) {
@@ -241,10 +257,8 @@ bool net_start(int port)
         set_status("cannot open a socket", NULL);
         return false;
     }
-#ifndef __3DS__
-    int yes = 1;
+    int yes = 1;   /* (best effort on the 3DS: an old run's socket may hold the port) */
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-#endif
     widen_window(listen_fd);   /* before listen(), so the handshake advertises it */
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
@@ -252,19 +266,32 @@ bool net_start(int port)
     sa.sin_port = htons((u16)port);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(listen_fd, (struct sockaddr *)&sa, sizeof(sa)) < 0 || listen(listen_fd, 1) < 0) {
-        set_status("cannot listen on the port", NULL);
         close(listen_fd);
         listen_fd = -1;
+        want_listen = true;
+        listen_retry_at = platform_ms() + 2000;
+        if (++listen_fails < 4)
+            set_status("The port is busy: trying again...", NULL);
+        else
+            set_status("Can't open the port. Restart the 3DS (power off and on), then open vn3ds", NULL);
         return false;
     }
+    want_listen = false;
+    listen_fails = 0;
     fcntl(listen_fd, F_SETFL, fcntl(listen_fd, F_GETFL, 0) | O_NONBLOCK);
     NET.listening = true;
     set_status("Waiting for your computer...", NULL);
+    static bool told;
+    if (!told) {   /* a computer that syncs saves comes as soon as vn3ds is open */
+        told = true;
+        sync_event(SYNC_OPENED);
+    }
     return true;
 }
 
 void net_stop(void)
 {
+    relay_stop();   /* its connect thread uses the socket service released below */
     if (rx_started) {
         rx_quit = true;
         if (conn_fd >= 0)
@@ -273,26 +300,190 @@ void net_stop(void)
         rx_active = false;
     }
     close_conn();
+    if (pending_fd >= 0)
+        close(pending_fd);
+    pending_fd = -1;
     if (listen_fd >= 0)
         close(listen_fd);
     listen_fd = -1;
     NET.listening = false;
+    want_listen = false;
+    listen_fails = 0;
     if (rx_soc)
         net_soc_release();
     rx_soc = false;
 }
 
-static void reply(u8 code)
+/* ---- the relay's WebSocket (relay.c) ----
+ * A connection that came from net_adopt(fd, true) carries the same byte
+ * stream inside WebSocket frames: binary frames from the relay are the
+ * sender's bytes, and what we answer goes back as binary frames (masked
+ * with a zero key, as a client must, which leaves the bytes as they are).
+ * Text frames are for the link itself: "ping" every 15 s keeps an idle
+ * link open (the relay answers "pong"), and "ack <n>" tells the sender how
+ * many bytes have been taken in, so it never runs more than a few MB
+ * ahead of the card (the relay would otherwise hold the difference). */
+#define WS_PING_MS 15000
+#define WS_ACK_EVERY (256 * 1024)
+static bool ws_mode;
+static u64 ws_fed, ws_acked, ws_ping_at;
+static u8 ws_hdr[14], ws_op, ws_data_op, ws_ctl[126];
+static int ws_hgot, ws_hneed, ws_ctl_len;
+static u64 ws_left;
+static bool ws_in_payload;
+
+static void ws_reset(bool on)
 {
-    if (conn_fd >= 0)
-        send(conn_fd, (const char *)&code, 1, 0);
+    ws_mode = on;
+    ws_fed = ws_acked = 0;
+    ws_ping_at = platform_ms();
+    ws_hgot = 0;
+    ws_hneed = 2;
+    ws_left = 0;
+    ws_in_payload = false;
+    ws_ctl_len = 0;
 }
 
-/* Only games/<id>/<file> (no "..", no absolute paths) and the engine itself. */
+static void send_all(const void *p, size_t n)
+{
+    const char *c = p;
+    while (n > 0 && conn_fd >= 0) {
+        ssize_t r = send(conn_fd, c, n, 0);
+        if (r <= 0)
+            return;
+        c += r;
+        n -= (size_t)r;
+    }
+}
+
+static void ws_frame(u8 op, const void *p, size_t n)
+{
+    u8 h[14];
+    int hl = 2;
+    h[0] = 0x80 | op;
+    if (n < 126)
+        h[1] = 0x80 | (u8)n;
+    else if (n < 65536) {
+        h[1] = 0x80 | 126;
+        h[2] = (u8)(n >> 8);
+        h[3] = (u8)n;
+        hl = 4;
+    } else {
+        h[1] = 0x80 | 127;
+        for (int i = 0; i < 8; i++)
+            h[2 + i] = (u8)((u64)n >> (56 - 8 * i));
+        hl = 10;
+    }
+    memset(h + hl, 0, 4);   /* the mask key: zero */
+    hl += 4;
+    if (n <= 256) {   /* one send for the small ones (status bytes, acks) */
+        u8 b[14 + 256];
+        memcpy(b, h, (size_t)hl);
+        memcpy(b + hl, p, n);
+        send_all(b, (size_t)hl + n);
+    } else {
+        send_all(h, (size_t)hl);
+        send_all(p, n);
+    }
+}
+
+/* Everything the receiver says to the sender goes through here. */
+static void conn_send(const void *p, size_t n)
+{
+    if (conn_fd < 0)
+        return;
+    if (ws_mode)
+        ws_frame(2, p, n);
+    else
+        send(conn_fd, (const char *)p, n, 0);
+}
+
+static void ws_text(const char *t) { ws_frame(1, t, strlen(t)); }
+
+static void feed(const u8 *p, size_t n);
+
+/* Unwraps frames from the relay and feeds the payload on. */
+static void ws_input(const u8 *p, size_t n)
+{
+    while (n > 0 && conn_fd >= 0) {
+        if (!ws_in_payload) {
+            ws_hdr[ws_hgot++] = *p++;
+            n--;
+            if (ws_hgot == 2) {
+                u8 len7 = ws_hdr[1] & 0x7F;
+                if (ws_hdr[1] & 0x80) {   /* a server never masks */
+                    LOG("net: masked frame from the relay");
+                    close_conn();
+                    return;
+                }
+                ws_hneed = 2 + (len7 == 126 ? 2 : len7 == 127 ? 8 : 0);
+            }
+            if (ws_hgot < ws_hneed)
+                continue;
+            u8 len7 = ws_hdr[1] & 0x7F;
+            ws_left = len7;
+            if (len7 == 126)
+                ws_left = (u64)ws_hdr[2] << 8 | ws_hdr[3];
+            else if (len7 == 127)
+                for (int i = 0; i < 8; i++)
+                    ws_left = ws_left << 8 | ws_hdr[2 + i];
+            ws_op = ws_hdr[0] & 0x0F;
+            if (ws_op == 1 || ws_op == 2)
+                ws_data_op = ws_op;
+            else if (ws_op == 0)
+                ws_op = ws_data_op;   /* a continuation */
+            ws_hgot = 0;
+            ws_hneed = 2;
+            ws_ctl_len = 0;
+            ws_in_payload = true;
+        }
+        size_t take = ws_left < n ? (size_t)ws_left : n;
+        if (ws_op == 2) {
+            feed(p, take);
+            ws_fed += take;
+        } else {   /* text and control frames are short: collect them */
+            for (size_t i = 0; i < take; i++)
+                if (ws_ctl_len < (int)sizeof(ws_ctl) - 1)
+                    ws_ctl[ws_ctl_len++] = p[i];
+        }
+        p += take;
+        n -= take;
+        ws_left -= take;
+        if (ws_left > 0 || conn_fd < 0)
+            continue;
+        ws_in_payload = false;
+        if (ws_op == 8) {   /* close */
+            LOG("net: the relay closed the link");
+            if (NET.receiving)
+                set_status("Connection lost during %s", NET.current);
+            NET.receiving = false;
+            close_conn();
+            return;
+        }
+        if (ws_op == 9)   /* ping: answer pong */
+            ws_frame(10, ws_ctl, (size_t)ws_ctl_len);
+        /* text ("pong", news from the relay) and pong frames need nothing */
+    }
+    if (ws_mode && conn_fd >= 0 && ws_fed - ws_acked >= WS_ACK_EVERY) {
+        char a[40];
+        snprintf(a, sizeof(a), "ack %llu", (unsigned long long)ws_fed);
+        ws_text(a);
+        ws_acked = ws_fed;
+    }
+}
+
+static void reply(u8 code)
+{
+    conn_send(&code, 1);
+}
+
+/* Only games/<id>/<file> (no "..", no absolute paths) and the engine itself.
+ * Through the relay (anyone with the code, or on the same public address,
+ * can send) games only: vn3ds updates itself from releases (update.c). */
 static bool path_allowed(const char *p)
 {
     if (!strcmp(p, "vn3ds.3dsx"))
-        return true;
+        return !ws_mode;
     if (strncmp(p, "games/", 6) != 0 || strstr(p, "..") || strchr(p, '\\') || strchr(p, ':'))
         return false;
     return strlen(p) > 7;
@@ -327,8 +518,14 @@ static void begin_file(void)
     snprintf(tmp_path, sizeof(tmp_path), "%s.part", final_path);
     make_dirs(final_path);
     out = fopen(tmp_path, "wb");
-    if (out)
+    if (out) {
         setvbuf(out, NULL, _IONBF, 0);   /* our own buffer does the batching */
+        /* the whole size at once: the SD card then doesn't grow the file and
+         * look for free clusters on every write (as 3dsDL does). A card
+         * without room fails here; the writes then report it as before. */
+        if (file_size > 0 && ftruncate(fileno(out), (off_t)file_size) != 0)
+            LOG("net: could not reserve %llu bytes for %s", (unsigned long long)file_size, path);
+    }
     wlen = 0;
     write_failed = !out;
     snprintf(NET.current, sizeof(NET.current), "%s", path);
@@ -337,10 +534,19 @@ static void begin_file(void)
 
 /* A large receive window: with the console's default one the sender can
  * only have a few KB in flight, and the 3DS's delayed ACKs then limit a
- * transfer to ~20 KB/s. (ftpd does the same.) */
+ * transfer to ~20 KB/s. (ftpd does the same.)
+ * On the 3DS it has to stay below 64 KB: its TCP has no window scaling and
+ * keeps only the low 16 bits of the size, so 256, 128 or 64 KB all became
+ * an advertised window of 0 (measured from the Mac: 0 bytes, no scaling),
+ * and every transfer crawled along on window probes at 10-30 KB/s. 3dsDL's
+ * downloads use 48 KB for the same reason. */
 static void widen_window(int fd)
 {
+#ifdef __3DS__
+    static const int sizes[] = {0xF000, 0xC000, 0x8000};
+#else
     static const int sizes[] = {0x40000, 0x20000, 0x10000, 0x8000};
+#endif
     for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         int v = sizes[i];
         if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v)) == 0) {
@@ -478,9 +684,9 @@ static void finish_transfer(void)
     list_forget();
     flag_prune();
     crcl_write_all();
-    send(conn_fd, "DONE", 4, 0);
+    conn_send("DONE", 4);
     if (proto >= 3)
-        send(conn_fd, (const char *)&mf_failed, 4, 0);
+        conn_send(&mf_failed, 4);
     set_status("Done: %s", NET.last_game[0] ? NET.last_game : "vn3ds updated");
     NET.receiving = false;
     NET.completed++;
@@ -875,13 +1081,13 @@ static void send_logs(void)
         char full[400];
         snprintf(full, sizeof(full), "%s/%s", E.root, names[i]);
         int n = snprintf((char *)chunk, sizeof(chunk), "==== %s ====\n", names[i]);
-        send(conn_fd, (const char *)chunk, n, 0);
+        conn_send(chunk, (size_t)n);
         FILE *f = fopen(full, "rb");
         if (!f)
             continue;
         size_t r;
         while ((r = fread(chunk, 1, sizeof(chunk), f)) > 0)
-            send(conn_fd, (const char *)chunk, r, 0);
+            conn_send(chunk, r);
         fclose(f);
     }
 }
@@ -916,12 +1122,23 @@ static void feed(const u8 *p, size_t n)
                     close_conn();
                     return;
                 }
+                if (memcmp(hdr, "VN3S", 4) == 0) {   /* a computer syncs saves (savesync.c) */
+                    sync_session(conn_fd, hdr);
+                    close_conn();
+                    return;
+                }
                 proto = rd_u32(hdr + 4);
                 if (memcmp(hdr, "VN3D", 4) != 0 || proto < 1 || proto > 4) {
                     set_status("Unknown sender (update vn3ds-port?)", NULL);
                     close_conn();
                     return;
                 }
+                /* a transfer (not a log request or a save sync): the screen counts afresh */
+                NET.files_done = NET.refused = NET.skipped = 0;
+                NET.staged = false;
+                NET.bytes_done = NET.bytes_skipped = 0;
+                NET.last_game[0] = NET.game[0] = 0;
+                set_status("Connected", NULL);
                 NET.files_total = rd_u32(hdr + 8);
                 memcpy(&NET.bytes_total, hdr + 12, 8);
                 if (proto >= 3) {
@@ -1009,7 +1226,7 @@ static void feed(const u8 *p, size_t n)
                         set_status("Comparing with the card: %s", m);
                     }
                 }
-                send(conn_fd, (const char *)bits, nb, 0);
+                conn_send(bits, nb);
                 free(bits);
                 set_status("Receiving...", NULL);
                 if (needed == 0) {
@@ -1140,14 +1357,53 @@ static void feed(const u8 *p, size_t n)
     }
 }
 
+/* A connection that has carried nothing for this long is dead (the Wi-Fi
+ * dropped it without a goodbye): it is closed and vn3ds listens again. */
+#define RX_IDLE_MS 20000
+/* A new connection takes over from one that has been quiet this long: the
+ * sender reconnecting after a drop, while this side hasn't noticed yet. */
+#define RX_TAKEOVER_MS 3000
+
 static void rx_main(void *arg)
 {
     (void)arg;
     static u8 buf[64 * 1024];
+    rx_last_ms = platform_ms();
     while (conn_fd >= 0 && !rx_quit) {
-        ssize_t r = recv(conn_fd, (char *)buf, sizeof(buf), 0);
+        /* never wait inside the network service: a blocking recv() on a dead
+         * connection used to wait forever, and with it every reconnect (the
+         * 3DS has one socket service: a blocking wait holds up everyone's
+         * calls, see 3dsDL's notes). Look, and nap a millisecond instead. */
+        struct pollfd pf = {conn_fd, POLLIN, 0};
+        int ready = poll(&pf, 1, 0);
+        if (ready == 0) {
+            if (ws_mode && platform_ms() - ws_ping_at > WS_PING_MS) {
+                ws_ping_at = platform_ms();
+                ws_text("ping");   /* the relay answers "pong", which counts as traffic */
+            }
+            if (platform_ms() - rx_last_ms > RX_IDLE_MS) {
+                set_status(NET.receiving ? "Connection lost during %s: waiting for your computer"
+                                         : "Connection lost: waiting for your computer", NET.current);
+                LOG("net: nothing arrived for %d s: closing the connection", RX_IDLE_MS / 1000);
+                NET.receiving = false;
+                close_conn();
+                break;
+            }
+#ifdef __3DS__
+            svcSleepThread(1000000LL);
+#else
+            usleep(1000);
+#endif
+            continue;
+        }
+        ssize_t r = ready < 0 ? -1 : recv(conn_fd, (char *)buf, sizeof(buf), 0);
         if (r > 0) {
-            feed(buf, (size_t)r);
+            rx_last_ms = platform_ms();
+            if (ws_mode)
+                ws_input(buf, (size_t)r);
+            else
+                feed(buf, (size_t)r);
+            rx_last_ms = platform_ms();   /* (feeding can take a while: comparing with the card) */
             continue;
         }
         if (r < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -1161,6 +1417,10 @@ static void rx_main(void *arg)
         /* 0: the sender finished (or went away); <0: the connection broke */
         if (NET.receiving)
             set_status("Connection lost during %s", NET.current);
+        NET.receiving = false;
+        close_conn();
+    }
+    if (conn_fd >= 0) {   /* told to stop (a reconnect takes over, or net_stop) */
         NET.receiving = false;
         close_conn();
     }
@@ -1188,27 +1448,76 @@ static void rx_join(void)
     rx_started = false;
 }
 
+#ifdef __3DS__
+/* The receiver's priority follows what's on screen: in a game it stays below
+ * the main thread, so receiving while someone plays never costs a frame; on
+ * the library and the receive screen it goes above, so the socket is read as
+ * soon as data arrives (below the main thread there, while the home screen
+ * draws every frame, it got so little time that transfers crawled at 10-30
+ * KB/s: the sender's window filled and it waited). */
+static void rx_follow_screen(void)
+{
+    static s32 set = -1;
+    if (!rx_active || !rx_started) {
+        set = -1;
+        return;
+    }
+    s32 main_prio = 0x30;
+    svcGetThreadPriority(&main_prio, CUR_THREAD_HANDLE);
+    bool playing = E.screen == SCR_GAME || E.screen == SCR_MINIGAME;
+    s32 want = playing ? (main_prio < 0x3F ? main_prio + 1 : main_prio)
+                       : (main_prio > 0x18 ? main_prio - 1 : main_prio);
+    if (want != set && R_SUCCEEDED(svcSetThreadPriority(threadGetHandle(rx_thread), want)))
+        set = want;
+}
+#endif
+
 void net_poll(void)
 {
-    if (listen_fd < 0 || rx_active)
-        return;   /* the receiver thread owns the connection */
+#ifdef __3DS__
+    rx_follow_screen();
+#endif
+    if (listen_fd < 0 && want_listen && !FETCH.busy && platform_ms() >= listen_retry_at)
+        net_start(NET.port);   /* the port was busy: try again (net_start counts the tries) */
+    if (listen_fd >= 0 && rx_active && pending_fd < 0 && !FETCH.busy &&
+        platform_ms() - rx_last_ms > RX_TAKEOVER_MS) {
+        /* the transfer has gone quiet: if the computer has reconnected, the
+         * old connection is dead; let the new one take over at once */
+        struct sockaddr_in ca;
+        socklen_t cl = sizeof(ca);
+        int fd = accept(listen_fd, (struct sockaddr *)&ca, &cl);
+        if (fd >= 0) {
+            LOG("net: the computer reconnected: dropping the quiet connection");
+            pending_fd = fd;
+            rx_quit = true;
+            if (conn_fd >= 0)
+                shutdown(conn_fd, SHUT_RDWR);
+        }
+    }
+    if (listen_fd < 0 || rx_active || FETCH.busy)
+        return;   /* the receiver thread owns the connection (or a web download runs) */
     rx_join();
-    struct sockaddr_in ca;
-    socklen_t cl = sizeof(ca);
-    int fd = accept(listen_fd, (struct sockaddr *)&ca, &cl);
+    int fd = pending_fd;
+    pending_fd = -1;
+    if (fd < 0) {
+        struct sockaddr_in ca;
+        socklen_t cl = sizeof(ca);
+        fd = accept(listen_fd, (struct sockaddr *)&ca, &cl);
+    }
     if (fd < 0)
         return;
+    start_rx(fd);
+}
+
+/* Hands a connected socket to the receiver thread. */
+static bool start_rx(int fd)
+{
     conn_fd = fd;
     widen_window(conn_fd);
     fcntl(conn_fd, F_SETFL, fcntl(conn_fd, F_GETFL, 0) & ~O_NONBLOCK);
     state = ST_HEADER;
     got = 0;
     need = 20;
-    NET.files_done = NET.refused = NET.skipped = 0;
-    NET.staged = false;
-    NET.bytes_done = NET.bytes_skipped = 0;
-    NET.last_game[0] = NET.game[0] = 0;
-    set_status("Connected", NULL);
     rx_quit = false;
     rx_active = true;
 #ifdef __3DS__
@@ -1225,5 +1534,20 @@ void net_poll(void)
         rx_active = false;
         set_status("cannot start the receiver", NULL);
         close_conn();
+        return false;
     }
+    return true;
 }
+
+bool net_adopt(int fd, bool websocket)
+{
+    if (listen_fd < 0 || rx_active || pending_fd >= 0 || FETCH.busy)
+        return false;
+    rx_join();
+    ws_reset(websocket);   /* before the thread starts reading */
+    return start_rx(fd);
+}
+
+bool net_rx_busy(void) { return rx_active; }
+
+void net_tune_socket(int fd) { widen_window(fd); }

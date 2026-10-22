@@ -1,12 +1,24 @@
 #include "app.h"
 #include "bg.h"
+#include "net.h"
 
 /* Save files hold the VM (resume point, call stack, variables), the scene
  * that was on screen and the music. Sprites are written as raw structs, so
- * the save version must change whenever Sprite changes layout. */
+ * the save version must change whenever Sprite changes layout.
+ *
+ * After the story step comes an extension block, "VNX1" u32 flags u32 n and
+ * n x {u16 len, image name, u16 len, tag, s32 zorder}: what is on screen by
+ * name, so a computer can read a save without knowing Sprite's layout (the
+ * Mac's save sync turns vn3ds saves into Ren'Py ones, tools/vnpack/savesync.py).
+ * Saves converted from Ren'Py set flags: SAVEX_STAGE (no sprites: the stage
+ * is built from the names), SAVEX_DEFAULTS (a variable of type VAL_DEFAULT
+ * keeps the value the game's init code gives it) and SAVEX_NO_STEP. */
 
 #define SAVE_MAGIC "VNSV"
 #define SAVE_VERSION 2
+#define SAVEX_MAGIC "VNX1"
+enum { SAVEX_STAGE = 1, SAVEX_DEFAULTS = 2, SAVEX_NO_STEP = 4 };
+#define VAL_DEFAULT 0xFF
 
 static void slot_path(int slot, char *out, size_t len)
 {
@@ -99,6 +111,20 @@ bool save_write_ex(int slot, bool background)
     u8 loop = E.music_loop, win = E.window_mode;
     ok &= wr(f, &E.music_res, 4) && wr(f, &loop, 1) && wr(f, &win, 1);
     ok &= wr(f, &st->has_camera, 1) && wr(f, &st->camera, sizeof(Sprite));
+    ok &= wr(f, &E.story_step, 4);
+    u32 flags = 0;
+    n = (u32)st->n;
+    ok &= wr(f, SAVEX_MAGIC, 4) && wr(f, &flags, 4) && wr(f, &n, 4);
+    for (int i = 0; i < st->n && ok; i++) {
+        const Sprite *sp = &st->s[i];
+        const char *name = sp->image >= 0 && (u32)sp->image < E.game.nimages
+                               ? E.game.images[sp->image].name : "";
+        u16 len = (u16)strlen(name ? name : "");
+        ok &= wr(f, &len, 2) && wr(f, name ? name : "", len);
+        len = (u16)strlen(sp->tag);
+        ok &= wr(f, &len, 2) && wr(f, sp->tag, len) && wr(f, &sp->zorder, 4);
+    }
+    sync_note_saved(slot);
     if (!ok) {
         free(buf.p);
         return false;
@@ -137,9 +163,15 @@ static bool read_header(FILE *f, SlotInfo *info)
  * game's CRC isn't checked here; loading still checks it). */
 bool save_peek(const char *game_id, int slot, SlotInfo *info)
 {
+    return save_peek_at(E.root, game_id, slot, info);
+}
+
+/* save_peek for saves under another root (a standalone app's, link.h). */
+bool save_peek_at(const char *root, const char *game_id, int slot, SlotInfo *info)
+{
     bg_flush_files();
     char path[400];
-    snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.sav", E.root, game_id, slot);
+    snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.sav", root, game_id, slot);
     memset(info, 0, sizeof(*info));
     FILE *f = fopen(path, "rb");
     if (!f)
@@ -172,6 +204,25 @@ void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE])
     }
 }
 
+/* The extension block's stage, by name (see the top of this file). */
+typedef struct {
+    char name[96], tag[32];
+    s32 zorder;
+} SpecEntry;
+
+static bool read_str(FILE *f, char *out, size_t cap)
+{
+    u16 len = 0;
+    if (!rdf(f, &len, 2))
+        return false;
+    char tmp[256];
+    if (len >= sizeof(tmp) || !rdf(f, tmp, len))
+        return false;
+    tmp[len] = 0;
+    snprintf(out, cap, "%s", tmp);
+    return true;
+}
+
 bool save_read(int slot)
 {
     bg_flush_files();
@@ -191,9 +242,12 @@ bool save_read(int slot)
         fclose(f);
         return false;
     }
-    vm_new_game(vm);
+    /* the variables are read aside first: a converted save may leave some at
+     * the game's defaults, which only running its init code gives */
+    Value *vals = calloc(nvars ? nvars : 1, sizeof(Value));
+    bool defaults = false;
     for (u32 i = 0; i < nvars && ok; i++) {
-        Value *v = &vm->vars[i];
+        Value *v = &vals[i];
         u8 type = 0;
         ok &= rdf(f, &type, 1);
         if (type == VAL_NUM || type == VAL_BOOL) {
@@ -209,12 +263,17 @@ bool save_read(int slot)
                 v->type = VAL_STR;
                 v->str = s;
             }
+        } else if (type == VAL_DEFAULT) {
+            v->type = VAL_DEFAULT;
+            defaults = true;
         }
     }
-    ok = ok && rdf(f, &vm->last_char, 4) && rdf(f, vm->last_text, sizeof(vm->last_text));
-    vm->last_text[sizeof(vm->last_text) - 1] = 0;
+    s32 last_char = 0;
+    static char last_text[VM_TEXT];
+    ok = ok && rdf(f, &last_char, 4) && rdf(f, last_text, sizeof(last_text));
+    last_text[sizeof(last_text) - 1] = 0;
     u32 n = 0;
-    Stage st;
+    static Stage st;
     memset(&st, 0, sizeof(st));
     ok = ok && rdf(f, &n, 4) && n <= MAX_SPRITES && rdf(f, &st.next_order, 4) &&
          rdf(f, st.s, sizeof(Sprite) * n);
@@ -222,18 +281,73 @@ bool save_read(int slot)
     s32 music = -1;
     u8 loop = 0, win = 0;
     ok = ok && rdf(f, &music, 4) && rdf(f, &loop, 1) && rdf(f, &win, 1);
+    u32 step = 0, xflags = 0, nspec = 0;
+    bool has_step = false;
+    static SpecEntry specs[MAX_SPRITES];
     if (ok && rdf(f, &st.has_camera, 1) && !rdf(f, &st.camera, sizeof(Sprite)))
         st.has_camera = 0;   /* (older saves end before the camera) */
+    else if (ok && (has_step = rdf(f, &step, 4))) {   /* (and older ones before the story step) */
+        char magic[4];
+        if (rdf(f, magic, 4) && !memcmp(magic, SAVEX_MAGIC, 4) && rdf(f, &xflags, 4) &&
+            rdf(f, &nspec, 4)) {
+            if (nspec > MAX_SPRITES)
+                nspec = MAX_SPRITES;
+            for (u32 i = 0; i < nspec; i++)
+                if (!read_str(f, specs[i].name, sizeof(specs[i].name)) ||
+                    !read_str(f, specs[i].tag, sizeof(specs[i].tag)) || !rdf(f, &specs[i].zorder, 4)) {
+                    nspec = i;
+                    break;
+                }
+        } else {
+            xflags = 0;
+        }
+    }
     fclose(f);
-    if (!ok || pc >= E.game.code_size)
+    ok = ok && pc < E.game.code_size && (music < 0 || (u32)music < E.game.nres);
+    for (u32 i = 0; i < ncalls && ok; i++)
+        ok = calls[i] < E.game.code_size;
+    for (int i = 0; i < st.n && ok; i++)
+        ok = st.s[i].image >= 0 && (u32)st.s[i].image < E.game.nimages;
+    if (ok) {
+        if (defaults && (xflags & SAVEX_DEFAULTS)) {
+            if (!vm_new_game_at(vm, pc))   /* the init code sets the defaults */
+                vm_new_game(vm);
+            for (u32 i = 0; i < nvars; i++)
+                if (vals[i].type != VAL_DEFAULT) {
+                    value_free(&vm->vars[i]);
+                    vm->vars[i] = vals[i];
+                    vals[i].str = NULL;
+                }
+        } else {
+            vm_new_game(vm);
+            for (u32 i = 0; i < nvars; i++)
+                if (vals[i].type != VAL_DEFAULT) {
+                    vm->vars[i] = vals[i];
+                    vals[i].str = NULL;
+                }
+        }
+    }
+    for (u32 i = 0; i < nvars; i++)
+        free(vals[i].str);
+    free(vals);
+    if (!ok)
         return false;
-    for (int i = 0; i < st.n; i++)
-        if (st.s[i].image < 0 || (u32)st.s[i].image >= E.game.nimages)
-            return false;
+    vm->last_char = last_char;
+    memcpy(vm->last_text, last_text, sizeof(vm->last_text));
 
+    if (xflags & SAVEX_STAGE) {
+        /* a converted save names what is on screen: show it the way the
+         * script would ("scene" for the first, "show" for the rest) */
+        stage_clear(&st);
+        for (u32 i = 0; i < nspec; i++)
+            if (specs[i].name[0])
+                stage_show(&st, &E.game, specs[i].name, specs[i].tag[0] ? specs[i].tag : NULL,
+                           specs[i].zorder, NULL, NULL, 0, false, i == 0);
+    }
     memcpy(vm->calls, calls, 4 * ncalls);
     vm->ncalls = (int)ncalls;
     vm->pc = pc;
+    E.story_step = has_step && !(xflags & SAVEX_NO_STEP) ? step : story_latest_step();
     E.stage = st;
     E.committed = st;
     E.tr.active = false;

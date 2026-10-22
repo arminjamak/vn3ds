@@ -85,6 +85,8 @@ f32   depth_sprite         default depth of sprites
 f32   depth_ui             depth of the textbox / UI (negative = in front of screen)
 f32   max_shift            per-eye pixel shift for depth 1.0 at full slider
 i32   title_image          index into IMGS for the title background, -1 if none
+i32   title_music          RES index of the title screen's music (config.main_menu_music),
+                           looped; -1 if none (absent in older game.bin: none)
 ```
 
 ### `VARS`
@@ -106,7 +108,9 @@ u32 count
   i32  res             RES index of the texture, -1 for a solid colour
   u32  color           RGBA for solids
   f32  w, h            logical size in 3DS px
-  u32  flags           1 = solid, 2 = full screen, 4 = video (res is a .cvh or .cvid)
+  u32  flags           1 = solid, 2 = full screen, 4 = video (res is a .cvh or .cvid),
+                       8 = stereo pair (the .ctex holds the left and right eye's views
+                       side by side; w, h are one view's size; vnpack --scenes-3d)
   f32  depth           NaN = use defaults
 } [count]
 ```
@@ -180,7 +184,9 @@ u32 count
     f32 x, y, w, h         box inside the image, in its logical px (IMGS w, h)
     u32 anim               0 none, 1 sway, 2 pulse, 3 breathe, 4 fall, 5 rise,
                            6 stars (a = count, b = largest size; picture unused),
-                           7 patch (see below)
+                           7 patch (see below),
+                           8 video (res is a looping .cvh or .cvid clip,
+                           drawn in the box; see "Video layers")
     f32 a, b               sway: x/y amplitude in logical px;
                            pulse: minimum alpha; breathe: scale growth;
                            fall/rise: travel distance per loop in logical px
@@ -190,6 +196,22 @@ u32 count
 ```
 The renderer also scales each layer's camera drift by
 `1 / (1 + 0.55 * max(depth, -0.8))`, so distant planes move less.
+
+**Video layers** (`anim` 8): a vn3ds.json layer whose `file` is a movie
+(`{"file": "loops/x.mp4", "depth": 1.2, "box": [x, y, w, h], "stereo": true,
+"kbps": 300}`; `box` in the picture's px, default all of it). vnpack codes it
+like a movie (.cvh with its poster beside it; .cvid with `--video-codec
+cvid`; with `--no-video`, its first frame as an ordinary layer, anim 0) at
+`kbps` (default 200 for the whole picture, less for a smaller box by area, at least 50), looping. `stereo`: the movie is a left | right pair
+side by side, rendered (not synthesised), and becomes a stereo .cvh with a
+median disparity of 0. The engine draws the clip's current frame in the box
+like any layer (depth, parallax, camera); a stereo clip gives each eye its
+own view on top of the layer's shift (its relief adds to the layer's
+depth), and plays flat below the slider's `STEREO_MIN`. One clip decodes at
+a time, as for movies; elsewhere (Old 3DS, the desktop build) the layer
+shows its poster. A `layers` entry named `gui/main_menu` is the title
+screen's picture (the image `__title`) as planes, in place of
+`gui/main_menu.png`.
 
 **Patched pictures** (`vnpack --cg-patches`): a CG variant that differs from
 a picture stored shortly before it only in one region is written as two
@@ -208,7 +230,8 @@ this draw the patch as a second layer over the first.
 u32 count
 { str name; u32 addr; } [count]     code address of each Ren'Py label
 ```
-Used by the desktop test build's `--label` and by autoplay.
+Used by the desktop test build's `--label`, by autoplay and by JMP_NAME /
+CALL_NAME (`jump expression` with a computed label).
 
 #### `CAM ` camera drift
 ```
@@ -243,6 +266,22 @@ Custom minigame screens of a ported game, rebuilt from vnpack's adapters
 (`tools/vnpack/ported.py` lists each mechanic's keys). The script starts entry
 `i` with OP_MINIGAME on the string `"@i"`; the game sets the story's variables
 itself and its score is discarded. These never appear in the Minigames menu.
+
+#### `PYSC` the game's own screens and Python (optional)
+```
+utf-8 Python source (no terminator; the section's size is its length)
+```
+The screen runtime (`tools/vnpack/vn3ds_rt.py`) followed by the game's
+program (`tools/vnpack/pyscreens.py`): its image and audio tables, then
+`_load_chunks([(where, source), ...])`, every top-level statement of the
+game's init python, defines, defaults, styles and translated screens as one
+chunk. The engine (`engine/source/pyscreen.c`) runs the whole source in
+pocketpy as module `vn3ds_rt`, then each chunk with its own `py_exec` (a
+chunk that fails is reported and skipped), then `_finish_load()`. PORT
+entries of mechanic `pyscreen` start it: `screen` + `args` (call screen) or
+`mode=overlay` (the touch-screen button for shown screens). The story keeps
+shown screens in the dict variable `_vn3ds_screens` (screen -> its
+arguments' source) and a screen's Jump in `_vn3ds_jump`.
 
 #### `MUSM` music tempo grids (optional)
 ```
@@ -300,6 +339,8 @@ The VM has a value stack (none / bool / number / string), a call stack and
 | 0x06 | RET | | pop return address; END if empty |
 | 0x07 | POP | | |
 | 0x08 | DUP | | |
+| 0x09 | JMP_NAME | | pop a label name, jump there (`jump expression`; unknown: go on) |
+| 0x0A | CALL_NAME | | the same as a call (`call expression`, `renpy.call(x)`) |
 | 0x10 | PUSH_NUM | f64 | |
 | 0x11 | PUSH_STR | str | |
 | 0x12 | PUSH_NONE | | |
@@ -332,7 +373,16 @@ The VM has a value stack (none / bool / number / string), a call stack and
 Channels: 0 music, 1 sound, 2 voice.
 
 Builtins (`CALLF`): 0 randint(a,b), 1 random(), 2 len(x), 3 str(x), 4 int(x),
-5 float(x), 6 abs(x), 7 min(a,b...), 8 max(a,b...), 9 round(x), 10 bool(x).
+5 float(x), 6 abs(x), 7 min(a,b...), 8 max(a,b...), 9 round(x), 10 bool(x),
+11 s[i], 12 s[a:b], 13-17 upper/lower/title/strip/capitalize,
+18 has(c, k), 19 add(c, k), 20 discard(c, k), 21 get(c, k, default), 22 set(c, k, v),
+23 len(c) on a story set or dict `c`, 24 getattr(store, name), 25 setattr(store, name, v).
+
+A story set or dict (`default seen = set()`, `default last = {}`) is an
+ordinary string variable: one entry per key, `key 0x1F value 0x1E`, the
+value's first byte its type (`n` number, `s` text, `b` bool, `-` None; a
+set's entries are `b1`). The empty collection is `""`. Builtins 19, 20 and
+22 return the new string, which the script stores back.
 
 ## .ctex texture
 
@@ -392,13 +442,14 @@ u16  tex_w, tex_h    power of two textures that hold a frame
 f32  logical_w, logical_h
 f32  fps
 u32  nframes
-u32  flags           1 = loop
+u32  flags           1 = loop, 2 = stereo side by side (see below)
 u32  params_offset   SPS then PPS, each with a 00 00 01 prefix
 u32  params_size
 u8   profile_idc, level_idc, max_ref_frames, reserved
 u32  max_frame_size  largest frame, in bytes
 u32  keyframes       number of IDR frames
-u32  reserved[2]     (64 bytes so far)
+f32  stereo_mid      stereo clips: the median disparity in coded px (else 0)
+u32  reserved        (64 bytes so far)
 { u32 offset, size   the frame's NAL units, each with a 00 00 01 prefix
   u16 nal_count
   u16 flags          1 = IDR
@@ -409,6 +460,27 @@ From `params_offset` to the end the file is a plain H.264 stream
 (`ffmpeg -f h264` reads it). Frame 0 is an IDR frame. `img/NNNNN.ctex`
 next to it holds the first frame as decoded (RGB565; half size when
 `--video-kbps` is 400 or less), drawn wherever there's no hardware decoding.
+
+**Stereo clips** (`flags & 2`, written by `vnpack --video-3d`): each coded
+frame is the left eye's view and the right eye's view side by side, each
+`w / 2` wide (864x240 for a 16:9 clip: 810 macroblocks, inside level 3.0
+like every .cvh, and the same decoding work as a 432x480 frame); `tex_w`
+is 1024. The left view is the movie itself, the right view is synthesised
+from estimated depth (`tools/vnpack/stereo.py`). Disparity (the right view's
+offset, positive = behind the screen) runs from about -2 to +6 coded px at
+full 3D; `stereo_mid` is its median over the clip. The right half is coded
+with a slightly higher quantiser (libx264 ROI), and the bitrate is 1.5 times
+the 2D one. The poster `.ctex` is the left view's first frame.
+
+The engine shows each eye its half while the clip plays, instead of the
+image's depth shift. The views were made for full 3D; at other strengths `k`
+(3D slider x the depth setting, 0..2) it moves the views by
+`(1 - k) * stereo_mid / 2` each, towards each other, so the clip's median
+plane goes to `k * stereo_mid` while its relief stays as encoded (a
+stereo pair can't be re-rendered at another depth). Below `k = 0.3` the clip
+plays flat: the left view, drawn at the image's depth like a 2D clip. Posters
+(an Old 3DS, before the first frame, any decoder failure) are flat too.
+Engines from before stereo clips show both views squeezed into one picture.
 
 On a New 3DS the engine feeds each NAL unit to `mvdstdProcessVideoFrame`,
 renders with `mvdstdRenderVideoFrame` into RGB565 in linear RAM, and the
@@ -451,3 +523,25 @@ plays videos flat at the depth of the image, with the usual camera parallax.
 `sdmc:/3ds/vn3ds/saves/<game-id>/slotNN.sav`, written by the engine; see
 `engine/source/save.c`. They carry a CRC of `game.bin` and are refused if the
 game was repacked.
+
+After the story step every save ends with an extension block, "VNX1" u32
+flags u32 n, then n x {u16 len, image name, u16 len, tag, s32 zorder}: what
+is on screen by name, so a computer can read a save without Sprite's layout.
+Saves converted from Ren'Py (`tools/vnpack/vn3dssave.py`) have no sprites and
+set flags: 1 the stage is built from the names, 2 a variable of type 0xFF
+keeps the value the game's init code gives it, 4 the story step is unknown.
+
+The Wi-Fi receiver also answers a save sync ("VN3S", `engine/source/savesync.c`,
+`tools/vnpack/savesync.py`): it lists slots 0-30 of every game with their
+size and time, then reads, writes (keeping the old file as `slotNN.sav.bak`)
+or deletes the slots the computer asks for. Afterwards it keeps the
+computer's address in `sdmc:/3ds/vn3ds/sync.cfg` and nudges it over UDP
+("VN3N", port 5556) when vn3ds opens, after a save, when a game is closed and
+on exit.
+
+Next to them: `slot00.thm`, the resume save's snapshot of the top screen
+("THM1", u16 width, u16 height, RGB565 pixels, as in `cover.thm`), and the
+story timeline's points (`engine/source/story.c`): saves in slots 100-139
+with 160x96 snapshots (`slot1NN.thm`), listed in `story.idx` ("STI1", u32
+count, then per point u16 slot, u16 0, u32 script address, u32 story step,
+u32 time, char preview[96]), in story order.

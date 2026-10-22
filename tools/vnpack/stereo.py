@@ -92,6 +92,14 @@ def runtime_python(model=None):
         return sys.executable
     if "py" in _runtime:
         return _runtime["py"]
+    if getattr(sys, "frozen", False):
+        # the standalone build runs the filter itself (filter_command)
+        try:
+            import onnxruntime  # noqa: F401
+            _runtime["py"] = sys.executable
+        except ImportError:
+            _runtime["py"] = None
+        return _runtime["py"]
     import subprocess
     here = os.path.abspath(__file__)
     root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
@@ -114,6 +122,14 @@ def runtime_python(model=None):
                 break
     _runtime["py"] = found
     return found
+
+
+def filter_command(py):
+    """How to start this file's filter with `py` (from runtime_python): a
+    frozen build has no sources, so it runs itself with --vn3ds-stereo."""
+    if getattr(sys, "frozen", False) and py == sys.executable:
+        return [py, "--vn3ds-stereo"]
+    return [py, os.path.abspath(__file__)]
 
 
 def available():
@@ -316,6 +332,44 @@ def grow_near(n, px=1):
 # ---------------------------------------------------------------------------
 # a whole clip
 
+def stereo_stills(pictures, stereo, w, h):
+    """Side-by-side stereo pairs for still pictures (w x h RGB arrays), all
+    through one run of the filter (the model loads once). stereo is
+    (python, model) from available(). Returns the pairs (h x 2w), in order."""
+    import subprocess
+    import tempfile
+    import threading
+    py, model = stereo
+    with tempfile.TemporaryDirectory() as tmp:
+        cmd = filter_command(py) + ["filter", "--model", model, "--size", f"{w}x{h}",
+                                    "--stats", os.path.join(tmp, "stats.json"), "--stills"]
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+
+        def feed():
+            try:
+                for pic in pictures:
+                    p.stdin.write(np.ascontiguousarray(pic, np.uint8).tobytes())
+            except OSError:
+                pass
+            finally:
+                p.stdin.close()
+        t = threading.Thread(target=feed, daemon=True)
+        t.start()
+        out = []
+        n = 2 * w * h * 3
+        for _ in pictures:
+            b = _read_exact(p.stdout, n)
+            if len(b) < n:
+                break
+            out.append(np.frombuffer(b, np.uint8).reshape(h, 2 * w, 3))
+        t.join()
+        err = p.stderr.read().decode(errors="replace").strip()
+        if p.wait() != 0 or len(out) != len(pictures):
+            raise OSError("3D: " + (err[-300:] or "the depth filter failed"))
+    return out
+
+
 def _small(rgb):
     g = grey(rgb)
     h, w = g.shape
@@ -329,8 +383,9 @@ class Stereo:
     the depth between keyframes is blended from both ends), flush() the
     rest. stats() gives the disparity range used."""
 
-    def __init__(self, depth, far_px=FAR_PX, near_px=NEAR_PX, key_max=KEY_MAX):
+    def __init__(self, depth, far_px=FAR_PX, near_px=NEAR_PX, key_max=KEY_MAX, stills=False):
         self.depth = depth
+        self.stills = stills       # every frame a picture of its own (scenes, not a clip)
         self.far, self.near = far_px, near_px
         self.key_max = key_max
         self.pending = []          # frames since the last keyframe (excluded)
@@ -379,6 +434,11 @@ class Stereo:
         return np.concatenate([rgb, right], axis=1)
 
     def push(self, rgb):
+        if self.stills:   # its own depth, nothing carried over from the picture before
+            self.ncuts += 1
+            n = self._key(rgb, True)
+            self.last = (rgb, n)
+            return [self._views(rgb, n)]
         out = []
         cut = False
         if self.last is not None:
@@ -442,8 +502,9 @@ def _read_exact(f, n):
     return bytes(buf)
 
 
-def run_filter(model, w, h, stats_path, far_px=FAR_PX, near_px=NEAR_PX):
-    st = Stereo(TestDepth(w, h) if model == TEST_MODEL else Depth(model, w, h), far_px, near_px)
+def run_filter(model, w, h, stats_path, far_px=FAR_PX, near_px=NEAR_PX, stills=False):
+    st = Stereo(TestDepth(w, h) if model == TEST_MODEL else Depth(model, w, h), far_px, near_px,
+                stills=stills)
     inp, out = sys.stdin.buffer, sys.stdout.buffer
     n = w * h * 3
     while True:
@@ -469,6 +530,8 @@ def main(argv):
     p.add_argument("--stats", required=True, help="where to write the disparity stats (JSON)")
     p.add_argument("--far", type=float, default=FAR_PX)
     p.add_argument("--near", type=float, default=NEAR_PX)
+    p.add_argument("--stills", action="store_true",
+                   help="each frame is a picture of its own (no smoothing across frames)")
     sub.add_parser("check", help="exit 0 when onnxruntime and numpy import")
     a = ap.parse_args(argv)
     if a.cmd == "check":
@@ -476,7 +539,7 @@ def main(argv):
         from PIL import Image  # noqa: F401
         return 0
     w, h = (int(v) for v in a.size.lower().split("x"))
-    run_filter(a.model, w, h, a.stats, a.far, a.near)
+    run_filter(a.model, w, h, a.stats, a.far, a.near, a.stills)
     sys.stdout.flush()
     sys.stderr.flush()
     # Leave without running onnxruntime's exit handlers: its telemetry

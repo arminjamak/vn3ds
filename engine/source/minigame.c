@@ -8,6 +8,7 @@
 
 extern const MiniGame MG_QUIZ, MG_DRAW, MG_INVADERS, MG_TOWER, MG_SNAKE, MG_MISO, MG_LANTERN;
 extern const MiniGame MG_LOCKPICK, MG_SWING, MG_INSTRUMENT, MG_CAPTIONS, MG_OUTCOME, MG_LOGLIST;
+extern const MiniGame MG_PYSCREEN;
 
 /* Menu order. */
 static const MiniGame *const GAMES[] = {
@@ -17,6 +18,7 @@ static const MiniGame *const GAMES[] = {
 /* Mechanics for ported games (see minigame.h): never in the menu. */
 static const MiniGame *const PORTED[] = {
     &MG_LOCKPICK, &MG_SWING, &MG_INSTRUMENT, &MG_CAPTIONS, &MG_OUTCOME, &MG_LOGLIST,
+    &MG_PYSCREEN,
 };
 
 MgRun MG;
@@ -89,6 +91,18 @@ static int entry_params(int index, const char *key, const char **out, int max)
         }
     }
     return k;
+}
+
+int mg_port_find(const char *mechanic, const char *key, const char *value)
+{
+    const char *mech;
+    u32 n;
+    for (int i = 0; port_entry(i, &mech, &n); i++) {
+        const char *v = NULL;
+        if (mech && !strcmp(mech, mechanic) && entry_params(i, key, &v, 1) && !strcmp(v, value))
+            return i;
+    }
+    return -1;
 }
 
 int mg_param_all(const char *key, const char **out, int max)

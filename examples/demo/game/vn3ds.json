@@ -364,11 +364,18 @@
   ],
   "bg purgatorium": [
    {
-    "file": "layers/bg purgatorium/0-back.png",
-    "depth": 1.2
+    "file": "loops/purgatorium.mp4",
+    "depth": 1.2,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg purgatorium/1-lanterns.png",
+    "file": "layers/bg purgatorium/0-lanterns.png",
     "depth": 0.7,
     "anim": {
      "type": "sway",
@@ -378,7 +385,7 @@
     }
    },
    {
-    "file": "layers/bg purgatorium/2-glow0.png",
+    "file": "layers/bg purgatorium/1-glow0.png",
     "depth": 0.72,
     "anim": {
      "type": "pulse",
@@ -387,7 +394,7 @@
     }
    },
    {
-    "file": "layers/bg purgatorium/3-glow1.png",
+    "file": "layers/bg purgatorium/2-glow1.png",
     "depth": 0.72,
     "anim": {
      "type": "pulse",
@@ -396,7 +403,7 @@
     }
    },
    {
-    "file": "layers/bg purgatorium/4-glow2.png",
+    "file": "layers/bg purgatorium/3-glow2.png",
     "depth": 0.72,
     "anim": {
      "type": "pulse",
@@ -405,7 +412,7 @@
     }
    },
    {
-    "file": "layers/bg purgatorium/5-mist.png",
+    "file": "layers/bg purgatorium/4-mist.png",
     "depth": 0.5,
     "anim": {
      "type": "sway",
@@ -415,11 +422,11 @@
     }
    },
    {
-    "file": "layers/bg purgatorium/6-table.png",
+    "file": "layers/bg purgatorium/5-table.png",
     "depth": 0.2
    },
    {
-    "file": "layers/bg purgatorium/7-front mist.png",
+    "file": "layers/bg purgatorium/6-front mist.png",
     "depth": -0.25,
     "anim": {
      "type": "sway",
@@ -431,11 +438,18 @@
   ],
   "bg council": [
    {
-    "file": "layers/bg council/0-back.png",
-    "depth": 1.2
+    "file": "loops/council.mp4",
+    "depth": 1.2,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg council/1-orbglow.png",
+    "file": "layers/bg council/0-orbglow.png",
     "depth": 0.75,
     "anim": {
      "type": "pulse",
@@ -444,7 +458,7 @@
     }
    },
    {
-    "file": "layers/bg council/2-planet.png",
+    "file": "layers/bg council/1-planet.png",
     "depth": 0.7,
     "anim": {
      "type": "breathe",
@@ -453,7 +467,7 @@
     }
    },
    {
-    "file": "layers/bg council/3-tethers.png",
+    "file": "layers/bg council/2-tethers.png",
     "depth": 0.35,
     "anim": {
      "type": "pulse",
@@ -462,11 +476,22 @@
     }
    },
    {
-    "file": "layers/bg council/4-thrones.png",
+    "file": "layers/bg council/3-thrones.png",
     "depth": -0.1
    }
   ],
   "bg watch": [
+   {
+    "file": "loops/watch.mp4",
+    "depth": 1.3,
+    "box": [
+     460,
+     110,
+     360,
+     360
+    ],
+    "stereo": true
+   },
    {
     "file": "layers/bg watch/0-back.png",
     "depth": 1.0
@@ -476,20 +501,11 @@
     "depth": 0.85
    },
    {
-    "file": "layers/bg watch/2-stars.png",
-    "depth": 0.86,
-    "anim": {
-     "type": "stars",
-     "a": 16,
-     "b": 5
-    }
-   },
-   {
-    "file": "layers/bg watch/3-aron's window.png",
+    "file": "layers/bg watch/2-aron's window.png",
     "depth": 0.9
    },
    {
-    "file": "layers/bg watch/4-his light.png",
+    "file": "layers/bg watch/3-his light.png",
     "depth": 0.88,
     "anim": {
      "type": "pulse",
@@ -498,19 +514,19 @@
     }
    },
    {
-    "file": "layers/bg watch/5-beams.png",
+    "file": "layers/bg watch/4-beams.png",
     "depth": 0.5
    },
    {
-    "file": "layers/bg watch/6-floor.png",
+    "file": "layers/bg watch/5-floor.png",
     "depth": 0.25
    },
    {
-    "file": "layers/bg watch/7-boxes.png",
+    "file": "layers/bg watch/6-boxes.png",
     "depth": -0.1
    },
    {
-    "file": "layers/bg watch/8-embers.png",
+    "file": "layers/bg watch/7-embers.png",
     "depth": -0.3,
     "anim": {
      "type": "rise",
@@ -767,47 +783,32 @@
   ],
   "bg earth": [
    {
-    "file": "layers/bg earth/0-back.png",
-    "depth": 1.5
+    "file": "loops/earth.mp4",
+    "depth": 1.5,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg earth/1-stars faint.png",
-    "depth": 1.5
-   },
-   {
-    "file": "layers/bg earth/2-stars.png",
-    "depth": 1.48,
-    "anim": {
-     "type": "stars",
-     "a": 170,
-     "b": 7
-    }
-   },
-   {
-    "file": "layers/bg earth/3-atmosphere.png",
-    "depth": 0.95,
-    "anim": {
-     "type": "pulse",
-     "a": 0.75,
-     "period": 7
-    }
-   },
-   {
-    "file": "layers/bg earth/4-earth.png",
-    "depth": 0.9,
-    "anim": {
-     "type": "breathe",
-     "a": 0.006,
-     "period": 9
-    }
-   },
-   {
-    "file": "layers/bg earth/5-cage.png",
+    "file": "layers/bg earth/0-cage.png",
     "depth": 0.3,
     "anim": {
      "type": "pulse",
      "a": 0.25,
      "period": 4
+    }
+   },
+   {
+    "file": "layers/bg earth/1-dust.png",
+    "depth": -0.3,
+    "anim": {
+     "type": "rise",
+     "a": 720,
+     "period": 34
     }
    }
   ],
@@ -932,11 +933,18 @@
   ],
   "bg goldlight": [
    {
-    "file": "layers/bg goldlight/0-back.png",
-    "depth": 1.2
+    "file": "loops/goldlight.mp4",
+    "depth": 1.2,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg goldlight/1-beams.png",
+    "file": "layers/bg goldlight/0-beams.png",
     "depth": 0.7,
     "anim": {
      "type": "pulse",
@@ -945,7 +953,7 @@
     }
    },
    {
-    "file": "layers/bg goldlight/2-source.png",
+    "file": "layers/bg goldlight/1-source.png",
     "depth": 0.75,
     "anim": {
      "type": "pulse",
@@ -954,7 +962,7 @@
     }
    },
    {
-    "file": "layers/bg goldlight/3-forms.png",
+    "file": "layers/bg goldlight/2-forms.png",
     "depth": 0.0,
     "anim": {
      "type": "breathe",
@@ -963,7 +971,7 @@
     }
    },
    {
-    "file": "layers/bg goldlight/4-motes far.png",
+    "file": "layers/bg goldlight/3-motes far.png",
     "depth": 0.4,
     "anim": {
      "type": "rise",
@@ -972,7 +980,7 @@
     }
    },
    {
-    "file": "layers/bg goldlight/5-motes near.png",
+    "file": "layers/bg goldlight/4-motes near.png",
     "depth": -0.35,
     "anim": {
      "type": "rise",
@@ -983,11 +991,18 @@
   ],
   "bg worlds": [
    {
-    "file": "layers/bg worlds/0-back.png",
-    "depth": 1.6
+    "file": "loops/worlds.mp4",
+    "depth": 1.6,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg worlds/1-lattice4.png",
+    "file": "layers/bg worlds/0-lattice4.png",
     "depth": 1.3,
     "anim": {
      "type": "sway",
@@ -997,33 +1012,12 @@
     }
    },
    {
-    "file": "layers/bg worlds/2-lattice3.png",
-    "depth": 0.9000000000000001,
+    "file": "layers/bg worlds/1-dust.png",
+    "depth": -0.3,
     "anim": {
-     "type": "sway",
-     "x": 12,
-     "y": 2,
-     "period": 19
-    }
-   },
-   {
-    "file": "layers/bg worlds/3-lattice2.png",
-    "depth": 0.5,
-    "anim": {
-     "type": "sway",
-     "x": 8,
-     "y": 2,
-     "period": 16
-    }
-   },
-   {
-    "file": "layers/bg worlds/4-lattice1.png",
-    "depth": 0.10000000000000003,
-    "anim": {
-     "type": "sway",
-     "x": 4,
-     "y": 2,
-     "period": 13
+     "type": "rise",
+     "a": 720,
+     "period": 34
     }
    }
   ],
@@ -2399,15 +2393,22 @@
   ],
   "bg spawning": [
    {
-    "file": "layers/bg spawning/0-back.png",
-    "depth": 1.2
+    "file": "loops/spawning.mp4",
+    "depth": 1.2,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg spawning/1-pools.png",
+    "file": "layers/bg spawning/0-pools.png",
     "depth": 0.5
    },
    {
-    "file": "layers/bg spawning/2-poolglow0.png",
+    "file": "layers/bg spawning/1-poolglow0.png",
     "depth": 0.52,
     "anim": {
      "type": "pulse",
@@ -2416,7 +2417,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/3-forming0.png",
+    "file": "layers/bg spawning/2-forming0.png",
     "depth": 0.3,
     "anim": {
      "type": "rise",
@@ -2425,7 +2426,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/4-poolglow1.png",
+    "file": "layers/bg spawning/3-poolglow1.png",
     "depth": 0.52,
     "anim": {
      "type": "pulse",
@@ -2434,7 +2435,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/5-forming1.png",
+    "file": "layers/bg spawning/4-forming1.png",
     "depth": 0.25,
     "anim": {
      "type": "rise",
@@ -2443,7 +2444,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/6-poolglow2.png",
+    "file": "layers/bg spawning/5-poolglow2.png",
     "depth": 0.52,
     "anim": {
      "type": "pulse",
@@ -2452,7 +2453,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/7-forming2.png",
+    "file": "layers/bg spawning/6-forming2.png",
     "depth": 0.19999999999999998,
     "anim": {
      "type": "rise",
@@ -2461,7 +2462,7 @@
     }
    },
    {
-    "file": "layers/bg spawning/8-wisps.png",
+    "file": "layers/bg spawning/7-wisps.png",
     "depth": -0.25,
     "anim": {
      "type": "rise",
@@ -2550,15 +2551,30 @@
   ],
   "bg ashveil": [
    {
+    "file": "loops/vampire.mp4",
+    "depth": 1.4,
+    "box": [
+     425,
+     15,
+     310,
+     430
+    ],
+    "stereo": true
+   },
+   {
     "file": "layers/bg ashveil/0-back.png",
     "depth": 1.0
    },
    {
-    "file": "layers/bg ashveil/1-fireplace.png",
+    "file": "layers/bg ashveil/1-window frame.png",
+    "depth": 0.97
+   },
+   {
+    "file": "layers/bg ashveil/2-fireplace.png",
     "depth": 0.6
    },
    {
-    "file": "layers/bg ashveil/2-flames.png",
+    "file": "layers/bg ashveil/3-flames.png",
     "depth": 0.58,
     "anim": {
      "type": "breathe",
@@ -2567,7 +2583,7 @@
     }
    },
    {
-    "file": "layers/bg ashveil/3-fireglow.png",
+    "file": "layers/bg ashveil/4-fireglow.png",
     "depth": 0.55,
     "anim": {
      "type": "pulse",
@@ -2576,7 +2592,7 @@
     }
    },
    {
-    "file": "layers/bg ashveil/4-globe.png",
+    "file": "layers/bg ashveil/5-globe.png",
     "depth": 0.2,
     "anim": {
      "type": "sway",
@@ -2586,21 +2602,28 @@
     }
    },
    {
-    "file": "layers/bg ashveil/5-chair.png",
+    "file": "layers/bg ashveil/6-chair.png",
     "depth": -0.15
    },
    {
-    "file": "layers/bg ashveil/6-wine.png",
+    "file": "layers/bg ashveil/7-wine.png",
     "depth": -0.25
    }
   ],
   "bg foundry": [
    {
-    "file": "layers/bg foundry/0-back.png",
-    "depth": 1.2
+    "file": "loops/foundry.mp4",
+    "depth": 1.2,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
    },
    {
-    "file": "layers/bg foundry/1-pattern0.png",
+    "file": "layers/bg foundry/0-pattern0.png",
     "depth": 0.7,
     "anim": {
      "type": "breathe",
@@ -2609,7 +2632,7 @@
     }
    },
    {
-    "file": "layers/bg foundry/2-pattern1.png",
+    "file": "layers/bg foundry/1-pattern1.png",
     "depth": 0.5499999999999999,
     "anim": {
      "type": "breathe",
@@ -2618,7 +2641,7 @@
     }
    },
    {
-    "file": "layers/bg foundry/3-pattern2.png",
+    "file": "layers/bg foundry/2-pattern2.png",
     "depth": 0.39999999999999997,
     "anim": {
      "type": "breathe",
@@ -2627,7 +2650,7 @@
     }
    },
    {
-    "file": "layers/bg foundry/4-pattern3.png",
+    "file": "layers/bg foundry/3-pattern3.png",
     "depth": 0.25,
     "anim": {
      "type": "breathe",
@@ -2636,7 +2659,7 @@
     }
    },
    {
-    "file": "layers/bg foundry/5-scan.png",
+    "file": "layers/bg foundry/4-scan.png",
     "depth": 0.5,
     "anim": {
      "type": "pulse",
@@ -2645,7 +2668,7 @@
     }
    },
    {
-    "file": "layers/bg foundry/6-data.png",
+    "file": "layers/bg foundry/5-data.png",
     "depth": -0.2,
     "anim": {
      "type": "rise",
@@ -4783,6 +4806,17 @@
   ],
   "bg command reverse": [
    {
+    "file": "loops/angel ops.mp4",
+    "depth": 1.5,
+    "box": [
+     520,
+     70,
+     240,
+     420
+    ],
+    "stereo": true
+   },
+   {
     "file": "layers/bg command reverse/0-back.png",
     "depth": 1.2
    },
@@ -5078,6 +5112,17 @@
   ],
   "bg shadowbase": [
    {
+    "file": "loops/shadow.mp4",
+    "depth": 1.6,
+    "box": [
+     410,
+     50,
+     460,
+     460
+    ],
+    "stereo": true
+   },
+   {
     "file": "layers/bg shadowbase/0-back.png",
     "depth": 1.3
    },
@@ -5198,6 +5243,86 @@
      "type": "pulse",
      "a": 0.5,
      "period": 1.5
+    }
+   }
+  ],
+  "gui/main_menu": [
+   {
+    "file": "loops/title.mp4",
+    "depth": 1.4,
+    "box": [
+     0,
+     0,
+     1280,
+     720
+    ],
+    "stereo": true
+   },
+   {
+    "file": "layers/main_menu/0-hill0.png",
+    "depth": 0.7
+   },
+   {
+    "file": "layers/main_menu/1-hill1.png",
+    "depth": 0.35
+   },
+   {
+    "file": "layers/main_menu/2-glow.png",
+    "depth": 0.95,
+    "anim": {
+     "type": "pulse",
+     "a": 0.6,
+     "period": 6
+    }
+   },
+   {
+    "file": "layers/main_menu/3-frame0.png",
+    "depth": 0.9,
+    "anim": {
+     "type": "sway",
+     "x": 0.0,
+     "y": 0.0,
+     "period": 9
+    }
+   },
+   {
+    "file": "layers/main_menu/4-frame1.png",
+    "depth": 0.7,
+    "anim": {
+     "type": "sway",
+     "x": 1.5,
+     "y": 1.0,
+     "period": 10
+    }
+   },
+   {
+    "file": "layers/main_menu/5-frame2.png",
+    "depth": 0.5,
+    "anim": {
+     "type": "sway",
+     "x": 3.0,
+     "y": 2.0,
+     "period": 11
+    }
+   },
+   {
+    "file": "layers/main_menu/6-frame3.png",
+    "depth": 0.29999999999999993,
+    "anim": {
+     "type": "sway",
+     "x": 4.5,
+     "y": 3.0,
+     "period": 12
+    }
+   },
+   {
+    "file": "layers/main_menu/7-frame4.png",
+    "depth": 0.09999999999999998,
+    "anim": {
+     "type": "sway",
+     "x": 6.0,
+     "y": 4.0,
+     "period": 13
     }
    }
   ]
@@ -5535,6 +5660,12 @@
    "beats_per_bar": 4,
    "phrase_bars": 2,
    "bars": 16
+  },
+  "audio/title.ogg": {
+   "bpm": 140.0,
+   "beats_per_bar": 4,
+   "phrase_bars": 4,
+   "bars": 48
   },
   "audio/together_night.ogg": {
    "bpm": 66.0,

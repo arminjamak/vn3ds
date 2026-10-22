@@ -21,9 +21,15 @@ vn3ds-port already produced, which is then just delivered):
 Compiled-only games (.rpyc, no .rpy) are decompiled automatically with the
 bundled unrpyc. The result is a folder for sdmc:/3ds/vn3ds/games/, plus a
 compatibility report.
+
+With --app the game becomes an app of its own instead: one .3dsx (vn3ds with
+the game inside) that the Homebrew Launcher lists with the game's icon,
+title and author, and that starts straight into the game. Copy it to
+sdmc:/3ds/<id>/<id>.3dsx (or give --sd to copy it there).
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -34,7 +40,7 @@ import zipfile
 from collections import Counter
 
 from . import __main__ as vnpack
-from .assets import AssetFS
+from .assets import RPA_REF, AssetFS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FROZEN = bool(getattr(sys, "frozen", False))
@@ -45,7 +51,7 @@ else:
     REPO = os.path.dirname(os.path.dirname(HERE))
     UNRPYC = os.path.join(REPO, "tools", "third_party", "unrpyc", "unrpyc.py")
 ENGINE_3DSX = os.environ.get("VN3DS_ENGINE") or os.path.join(REPO, "engine", "vn3ds.3dsx")
-GAME_EXTS = (".rpy", ".rpyc", ".rpa")
+GAME_EXTS = (".rpy", ".rpyc", ".rpa", RPA_REF)
 
 
 class PortError(SystemExit):
@@ -107,6 +113,14 @@ def unpack_zip(path, work, progress=None):
     with zipfile.ZipFile(path) as z:
         wanted = [i for i in z.infolist() if not i.is_dir() and (
             i.filename.lower().endswith(GAME_EXTS + (".apk", ".zip")) or "/game/" in "/" + i.filename)]
+        # .rpa archives are read in place (assets.InflatedMember): a pointer
+        # file stands in for each, so a multi-GB archive needs no disk space.
+        for i in [i for i in wanted if i.filename.lower().endswith(".rpa")]:
+            wanted.remove(i)
+            ref = os.path.join(dest, i.filename + RPA_REF[4:])
+            os.makedirs(os.path.dirname(ref), exist_ok=True)
+            with open(ref, "w", encoding="utf-8") as f:
+                json.dump({"zip": os.path.abspath(path), "member": i.filename}, f)
         total = sum(i.file_size for i in wanted)
         free = shutil.disk_usage(work).free
         if total > free * 0.9:
@@ -233,6 +247,13 @@ def report(summary, path):
         ok = sum(1 for g in grids if g[2])
         lines.append(f"  Music: {ok} of {len(grids)} tracks got a measured tempo grid (music "
                      f"changes land on the loop's end or a phrase); the rest crossfade.")
+    ps = summary.get("pyscreens")
+    if ps:
+        lines.append(f"  The game's own screens run on its own Python: {ps['screens']} screens, "
+                     f"{ps['statements']} statements ({ps['kib']} KiB); the story shows or calls "
+                     f"{', '.join(ps['used'][:8])}{' ...' if len(ps['used']) > 8 else ''}. "
+                     f"On the 3DS they are drawn over the story; the touch screen's button "
+                     f"opens the ones with buttons.")
     if summary.get("video_3d"):
         lines.append("  Movies are in stereoscopic 3D (a right-eye view made from estimated depth; "
                      "New 3DS).")
@@ -286,6 +307,16 @@ QUALITY = {
              ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "5.5"), ("--cg-patches", None),
              ("--jpeg-posters", None),
              ("--video-codec", "h264"), ("--video-kbps", "100"), ("--video-fps", "20")],
+    # the default for Wi-Fi and the SD card alike (the same files either way):
+    # the smallest without a visible or audible loss on the 3DS. Measured at
+    # its 400x240: JPEG qscale 3 in full colour, SSIM 0.986 (21% under sd);
+    # 240 kbps H.264 at 30 fps, VMAF (phone model) 96.3 on a grainy, detailed
+    # worst case and 98.6+ on the 3D loops (half of sd); Opus 64 kbps stereo
+    # music, 48 effects, 32 mono voices (see assets.balanced_rate)
+    "balanced": [("--audio-profile", "balanced"), ("--jpeg", "88"), ("--jpeg-rgb8", None),
+                 ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "3"), ("--cg-patches", None),
+                 ("--jpeg-posters", None),
+                 ("--video-codec", "h264"), ("--video-kbps", "240"), ("--video-fps", "30")],
     "sd": [("--audio-profile", "sd"), ("--jpeg", "92"), ("--jpeg-rgb8", None),
            ("--jpeg-encoder", "ffmpeg"), ("--jpeg-qscale", "2"), ("--cg-patches", None),
            ("--jpeg-posters", None),
@@ -293,31 +324,36 @@ QUALITY = {
 }
 
 
-# Stereoscopic movies (vnpack --video-3d, on whenever the depth model and
-# onnxruntime are there): both eyes' views side by side at 1.5x the 2D
-# bitrate, which keeps the left view as good as the 2D movie and the right
-# one 1.5-2 dB below it (tools/vnpack/stereo.py).
-VIDEO_3D_KBPS = {"wifi": 150, "sd": 675}
+# 3D (--3d, off unless asked for): movies and every whole-screen scene in
+# stereoscopic 3D from estimated depth (tools/vnpack/stereo.py, a 99 MB
+# model fetched the first time). Movies carry both eyes' views side by side
+# at 1.5x the 2D bitrate, which keeps the left view as good as the 2D movie
+# and the right one 1.5-2 dB below it; scenes are side-by-side pictures.
+VIDEO_3D_KBPS = {"wifi": 150, "balanced": 360, "sd": 675}
 
 
 def video_3d_wanted(opts):
-    """Whether this conversion makes 3D movies: --video-3d / --no-video-3d,
-    else whenever it can."""
+    """Whether this conversion makes 3D movies: --3d (or --video-3d for the
+    movies alone)."""
     on = getattr(opts, "video_3d", None)
-    if on is False or opts.no_video or (opts.video_codec or "h264") != "h264":
+    if on is None:
+        on = getattr(opts, "three_d", None)
+    if not on or opts.no_video or (opts.video_codec or "h264") != "h264":
         return False
-    if on:
-        return True
-    from . import stereo
-    return stereo.available() is not None
+    return True
+
+
+def scenes_3d_wanted(opts):
+    """Whether this conversion makes the scenes 3D (--3d)."""
+    return bool(getattr(opts, "three_d", None))
 
 
 # Per-file sizes the presets come out at, measured on Eternum's Wi-Fi
 # edition (12,702 textures in 104 MiB) and Snapshot's pictures (sd's JPEG at
 # quantiser 2 is 1.7x the Wi-Fi one); audio and video by their length.
-EST_PICTURE = {"wifi": 8.4e3, "sd": 14.5e3}
-EST_AUDIO_BPS = {"wifi": 20e3 / 8, "sd": 96e3 / 8}     # transcoded audio
-EST_VIDEO_BPS = {"wifi": 100e3 / 8, "sd": 450e3 / 8}
+EST_PICTURE = {"wifi": 8.4e3, "balanced": 11.5e3, "sd": 14.5e3}
+EST_AUDIO_BPS = {"wifi": 20e3 / 8, "balanced": 64e3 / 8, "sd": 96e3 / 8}     # transcoded audio
+EST_VIDEO_BPS = {"wifi": 100e3 / 8, "balanced": 240e3 / 8, "sd": 450e3 / 8}
 EST_VIDEO_3D_BPS = {q: k * 1e3 / 8 for q, k in VIDEO_3D_KBPS.items()}
 MOVIE_EXTS = (".webm", ".mp4", ".ogv", ".mkv", ".avi", ".mpg", ".mpeg", ".mov")
 
@@ -341,7 +377,7 @@ def _seconds(data):
 def estimate(primary, overlays):
     """Roughly how big the converted game will be, per preset, from the
     game's file list and the length of a sample of its sounds and movies
-    (a few seconds). {"wifi": bytes, "sd": bytes} or None."""
+    (a few seconds). {"wifi": bytes, "balanced": bytes, "sd": bytes} or None."""
     import random
     from .assets import AUDIO_EXTS, IMAGE_EXTS, AssetFS
     try:
@@ -370,9 +406,13 @@ def estimate(primary, overlays):
         [k for k in audio if not k.endswith((".ogg", ".opus", ".oga"))] or audio, 6)
     m_secs = sum(fs.size(k) for k in movies) * seconds_per_byte(movies, 6) if movies else 0
     out = {}
-    for q in ("wifi", "sd"):
-        audio_q = a_secs * EST_AUDIO_BPS["wifi"] if q == "wifi" else \
-            ogg_bytes + other_secs * EST_AUDIO_BPS["sd"]
+    for q in ("wifi", "balanced", "sd"):
+        if q == "wifi":
+            audio_q = a_secs * EST_AUDIO_BPS["wifi"]
+        elif q == "balanced":   # Ogg files above the target are re-encoded down to it
+            audio_q = min(a_bytes, a_secs * EST_AUDIO_BPS["balanced"])
+        else:
+            audio_q = ogg_bytes + other_secs * EST_AUDIO_BPS["sd"]
         out[q] = int(pictures * EST_PICTURE[q] + audio_q + m_secs * EST_VIDEO_BPS[q] +
                      len(movies) * EST_PICTURE[q])
         out[q + "_3d"] = int(m_secs * (EST_VIDEO_3D_BPS[q] - EST_VIDEO_BPS[q]))
@@ -416,6 +456,8 @@ def vnpack_args(opts, quality, primary, overlays, scripts):
     vargs += quality_args(quality)
     if video_3d_wanted(opts) and "--video-3d" in "".join(quality_args_src()):
         vargs += ["--video-3d", "--video-3d-kbps", str(VIDEO_3D_KBPS.get(quality, 150))]
+    if scenes_3d_wanted(opts) and "--scenes-3d" in "".join(quality_args_src()):
+        vargs.append("--scenes-3d")
     for flag, val in (("--video-codec", opts.video_codec), ("--video-kbps", opts.video_kbps),
                       ("--video-fps", getattr(opts, "video_fps", None)),
                       ("--jpeg-encoder", getattr(opts, "jpeg_encoder", None)),
@@ -439,6 +481,7 @@ def convert(opts, quality, ui):
     the steps to ui (see flow.UI). Returns vnpack's summary plus "report"
     (the compatibility report's text)."""
     from . import flow
+    os.makedirs(os.path.dirname(os.path.abspath(opts.output)), exist_ok=True)
     work = opts.work or tempfile.mkdtemp(
         prefix="vn3ds-port-", dir=os.path.dirname(os.path.abspath(opts.output)) or ".")
     os.makedirs(work, exist_ok=True)
@@ -464,17 +507,15 @@ def convert(opts, quality, ui):
         est = estimate(primary, overlays) if getattr(opts, "estimate", True) else None
         v3d = video_3d_wanted(opts)
         if est:
-            other = "sd" if quality == "wifi" else "wifi"
+            others = [q for q in ("balanced", "wifi", "sd") if q != quality]
             if v3d:
-                for q in (quality, other):
+                for q in [quality] + others:
                     est[q] += est[q + "_3d"]
-            ui.log(f"projected size: about {est[quality] / 1e6:.0f} MB ({quality}); the "
-                   f"{other} preset would be about {est[other] / 1e6:.0f} MB "
-                   f"(--quality {other})")
+            ui.log(f"projected size: about {est[quality] / 1e6:.0f} MB ({quality}); " +
+                   ", ".join(f"--quality {q}: about {est[q] / 1e6:.0f} MB" for q in others))
             if v3d and est["movie_seconds"]:
                 ui.log(f"3D movies ({est['movie_seconds'] / 60:.0f} min): about "
-                       f"{est[quality + '_3d'] / 1e6:.0f} MB more than 2D ones "
-                       f"(--no-video-3d for 2D)")
+                       f"{est[quality + '_3d'] / 1e6:.0f} MB more than 2D ones")
         seen = set()
 
         def progress(step, state=None, done=None, total=None, **info):
@@ -491,8 +532,11 @@ def convert(opts, quality, ui):
                 else:
                     ui.step(step, state or "active", "", done=done, total=total)
         summary = vnpack.main(vnpack_args(opts, quality, primary, overlays, scripts), progress)
-        if "video" not in seen:
-            ui.step("video", "skip")
+        for step in ("video", "scenes3d"):
+            if step not in seen:
+                ui.step(step, "skip")
+        if getattr(opts, "app", False):   # what the standalone app's SMDH shows
+            opts.app_meta = app_meta_from_game(primary, overlays)
         text = report(summary, os.path.join(summary["out_dir"], "port-report.txt"))
         summary["report"] = text
         ui.log(text)
@@ -500,6 +544,181 @@ def convert(opts, quality, ui):
     finally:
         if not opts.keep_work and not opts.work:
             shutil.rmtree(work, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
+# --app: the game as an app of its own (see app3dsx.py)
+# --------------------------------------------------------------------------
+
+def app_meta_from_game(primary, overlays):
+    """What the Ren'Py game says about itself for the app: its window icon
+    (config.window_icon, else gui/window_icon.png) and its author (vn3ds.json
+    "author", else the itch.io account of build.itch_project)."""
+    import io
+    import json
+    meta = {}
+    try:
+        fs = AssetFS(primary, lambda *a: None, overlay_dirs=overlays)
+    except OSError:
+        return meta
+    text = ""
+    for k in sorted(fs.keys(), key=lambda k: (not k.endswith("options.rpy"), k)):
+        if k.endswith(".rpy") and not k.startswith(("renpy/", "tl/")):
+            try:
+                text += fs.read(k).decode("utf-8", "replace") + "\n"
+            except OSError:
+                pass
+    cfg_key = fs.find("vn3ds.json", dirs=("",))
+    try:
+        cfg = json.loads(fs.read(cfg_key)) if cfg_key else {}
+    except (OSError, ValueError):
+        cfg = {}
+    author = cfg.get("author")
+    m = re.search(r"build\.itch_project\s*=\s*[\"']([^/\"']+)/", text)
+    if not author and m:
+        author = m.group(1)
+    if author:
+        meta["author"] = author
+    names = [cfg.get("icon")]
+    m = re.search(r"config\.window_icon\s*=\s*[\"']([^\"']+)[\"']", text)
+    names += [m and m.group(1), "gui/window_icon.png"]
+    for name in names:
+        key = name and fs.find(name, dirs=("",))
+        if key:
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(fs.read(key)))
+                img.load()
+                meta["icon"], meta["icon_from"] = img, fs.display(key)
+                break
+            except Exception:
+                continue
+    return meta
+
+
+def ported_title(game_dir):
+    """(title, version) of a ported game, from its game.bin."""
+    import struct
+    from .packs import _strings, read_game
+    sec = dict(read_game(os.path.join(game_dir, "game.bin")))
+    strings, meta = _strings(sec[b"STR "]), sec[b"META"]
+    title, version = struct.unpack_from("<II", meta, 0)
+    return (strings[title] if title < len(strings) else "",
+            strings[version] if version < len(strings) else "")
+
+
+def cover_icon(game_dir):
+    """The middle of the game's home screen card (cover.thm), or None."""
+    import struct
+    try:
+        with open(os.path.join(game_dir, "cover.thm"), "rb") as f:
+            data = f.read()
+        if data[:4] != b"THM1":
+            return None
+        w, h = struct.unpack_from("<HH", data, 4)
+        from PIL import Image
+        img = Image.new("RGB", (w, h))
+        px = struct.unpack_from(f"<{w * h}H", data, 8)
+        img.putdata([((v >> 11) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31)
+                     for v in px])
+        side = min(w, h)
+        return img.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
+    except (OSError, struct.error):
+        return None
+
+
+# A .3dsx sits on the SD card's FAT32: one file can't be 4 GiB or more.
+APP_LIMIT = (4 << 30) - 1
+
+
+def build_app(game_dir, game_id, output, meta=None, title=None, author=None, icon=None,
+              engine=None):
+    """Writes <output>/<id>.3dsx: the engine with game_dir inside. Returns
+    (path, size, what the icon was made from)."""
+    from PIL import Image
+    from . import app3dsx
+    meta = meta or {}
+    engine = engine or ENGINE_3DSX
+    if not os.path.exists(engine):
+        raise PortError(f"vn3ds-port: {engine} isn't built yet (run make in engine/)")
+    size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(game_dir) for f in fs)
+    if size + os.path.getsize(engine) > APP_LIMIT:
+        raise PortError(f"vn3ds-port: the game is {size / 2**30:.1f} GiB, too big for one .3dsx "
+                        f"on the SD card (FAT32 files stop at 4 GiB); try --quality wifi, or "
+                        f"leave out --app and play it in vn3ds's library")
+    got_title, version = ported_title(game_dir)
+    title = title or got_title or game_id
+    author = author or meta.get("author") or "vn3ds"
+    if icon:
+        img, src = Image.open(icon), os.path.basename(icon)
+    elif meta.get("icon") is not None:
+        img, src = meta["icon"], meta["icon_from"]
+    else:
+        img, src = cover_icon(game_dir), "the cover"
+        if img is None:
+            img, src = Image.open(os.path.join(REPO, "engine", "icon.png")), "vn3ds's icon"
+    desc = f"{title} {version}".strip() + " - plays with vn3ds"
+    os.makedirs(output, exist_ok=True)
+    path = os.path.join(output, f"{game_id}.3dsx")
+    total = app3dsx.build_app(engine, path, game_dir, game_id, title, author, img, desc)
+    return path, total, src
+
+
+def place_app(src, target):
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.copyfile(src, target + ".part")
+    os.replace(target + ".part", target)
+
+
+def register_app(folder_3ds, game_id, game_dir, app_path):
+    """sdmc:/3ds/<id>/app.cfg and its cover, so vn3ds's library lists the app
+    before its first start (engine/source/link.h)."""
+    folder = os.path.join(folder_3ds, game_id)
+    os.makedirs(folder, exist_ok=True)
+    title = ported_title(game_dir)[0] or game_id
+    with open(os.path.join(folder, "app.cfg"), "w", encoding="utf-8") as f:
+        f.write(f"id={game_id}\ntitle={title}\napp={app_path}\nslot=0\ntime=0\n")
+    if os.path.exists(os.path.join(game_dir, "cover.thm")):
+        shutil.copyfile(os.path.join(game_dir, "cover.thm"), os.path.join(folder, "cover.thm"))
+
+
+def ported_games(folders):
+    """The ported game folders in (or at) each of folders."""
+    out = []
+    for f in folders:
+        if os.path.isfile(os.path.join(f, "game.bin")):
+            out.append(os.path.abspath(f))
+            continue
+        for name in sorted(os.listdir(f)) if os.path.isdir(f) else ():
+            g = os.path.join(f, name)
+            if os.path.isfile(os.path.join(g, "game.bin")):
+                out.append(os.path.abspath(g))
+    return out
+
+
+def export_apps(games, dest, report=None, engine=None):
+    """Every game in `games` as <dest>/<id>.3dsx, with vn3ds.3dsx beside them
+    (an emulator's games folder, or sdmc:/3ds/ of a card). report(i, n, id).
+    Returns [(id, path, bytes)]."""
+    engine = engine or ENGINE_3DSX
+    os.makedirs(dest, exist_ok=True)
+    out = []
+    tmp = tempfile.mkdtemp(prefix="vn3ds-apps-")
+    try:
+        for i, g in enumerate(games):
+            gid = os.path.basename(g.rstrip("/\\"))
+            if report:
+                report(i, len(games), gid)
+            path, size, _ = build_app(g, gid, tmp, engine=engine)
+            target = os.path.join(dest, gid + ".3dsx")
+            place_app(path, target)
+            os.remove(path)
+            out.append((gid, target, size))
+        if os.path.exists(engine):
+            place_app(engine, os.path.join(dest, "vn3ds.3dsx"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out
 
 
 def default_output():
@@ -559,18 +778,18 @@ def ask_for_game():
 
 
 def prepare_video_3d():
-    """--video-3d: fetch the depth model the first time, and say what else
-    is missing."""
+    """--3d / --video-3d: fetch the depth model the first time, and say what
+    else is missing."""
     from . import stereo
     if not stereo.find_model():
         try:
             stereo.download_model(say=lambda m: print("   " + m, flush=True))
         except OSError as e:
-            print(f"   {e}; movies stay 2D")
+            print(f"   {e}; the game stays 2D")
             return
     if not stereo.runtime_python():
-        print("   3D movies need onnxruntime: python3 -m pip install onnxruntime "
-              "(or into a .venv in the repository); movies stay 2D")
+        print("   3D needs onnxruntime: python3 -m pip install onnxruntime "
+              "(or into a .venv in the repository); the game stays 2D")
 
 
 def main(argv=None):
@@ -607,9 +826,11 @@ def main(argv=None):
                     help="H.264 bitrate (default: 900 for the SD card, 100 for Wi-Fi)")
     ap.add_argument("--video-fps", type=int,
                     help="highest movie frame rate (default: 30 for the SD card, 20 for Wi-Fi)")
+    ap.add_argument("--3d", dest="three_d", action=argparse.BooleanOptionalAction, default=None,
+                    help="stereoscopic 3D: movies and every whole-screen scene get a right-eye "
+                         "view from estimated depth (slower; downloads a 99 MB model once)")
     ap.add_argument("--video-3d", action=argparse.BooleanOptionalAction, default=None,
-                    help="stereoscopic movies from estimated depth (default: on when the "
-                         "depth model is installed; --video-3d downloads it once, 99 MB)")
+                    help="3D for the movies alone (see --3d)")
     ap.add_argument("--jpeg-encoder", choices=("pillow", "ffmpeg"),
                     help="JPEG encoder (default: ffmpeg for Wi-Fi, pillow otherwise)")
     ap.add_argument("--jpeg-qscale", type=float, metavar="QS",
@@ -621,13 +842,44 @@ def main(argv=None):
                     help="JPEG movie poster frames (default: on for Wi-Fi)")
     ap.add_argument("--fit", action="store_true")
     ap.add_argument("-j", "--jobs", type=int, default=0)
-    ap.add_argument("--quality", choices=("auto", "wifi", "sd"), default="auto",
-                    help="wifi: compact files for sending over Wi-Fi; sd: best quality for "
-                         "copying to the SD card (default: from where the game is going)")
+    ap.add_argument("--quality", choices=("auto", "balanced", "wifi", "sd"), default="auto",
+                    help="balanced (the default, for Wi-Fi and the SD card alike): the "
+                         "smallest files without a visible or audible loss on the 3DS; "
+                         "wifi: smaller still, with some loss; sd: larger, for no visible gain")
+    ap.add_argument("--no-saves", action="store_true",
+                    help="don't take this computer's Ren'Py saves of the game along")
+    ap.add_argument("--sync-saves", action="store_true",
+                    help="just sync the saves of games sent before (with --3ds IP or --sd)")
     ap.add_argument("--no-detect", action="store_true",
                     help="don't look for an SD card or a 3DS on the network: just build")
+    ap.add_argument("--app", action="store_true",
+                    help="make the game an app of its own: one .3dsx with vn3ds and the game "
+                         "inside, listed in the Homebrew Launcher with the game's icon, title "
+                         "and author (copied to the card with --sd, otherwise just built)")
+    ap.add_argument("--author", help="--app: the author the Homebrew Launcher shows")
+    ap.add_argument("--export-apps", metavar="FOLDER",
+                    help="write every ported game (the folders given, else the output folder's) "
+                         "as <id>.3dsx into FOLDER, with vn3ds.3dsx: an emulator's games folder "
+                         "(Azahar, Citra, Lime3DS) or a card's 3ds folder")
+    ap.add_argument("--icon", metavar="PNG",
+                    help="--app: the app's icon (default: the game's window icon, else its cover)")
     args = ap.parse_args(argv)
     inputs = [clean_path(i) for i in args.inputs]
+    if args.export_apps:
+        games = ported_games(inputs or [args.output or default_output()])
+        if not games:
+            ap.error("no ported games to export (give their folders, or -o where they are)")
+        done = export_apps(games, args.export_apps,
+                           lambda i, n, gid: say(f"{i + 1}/{n}: {gid}.3dsx"))
+        for gid, path, size in done:
+            print(f"  {path}  ({size / 1e6:.1f} MB)")
+        print(f"Done: {len(done)} apps and vn3ds.3dsx in {args.export_apps}. On an emulator, "
+              f"add that folder to its games list; on a 3DS, copy them to sdmc:/3ds/.")
+        return
+    if args.sync_saves:
+        from . import savesync
+        return savesync.main(["sync"] + (["--host", args.console] if args.console else []) +
+                             (["--sd", args.sd] if args.sd else []) + inputs)
     if not inputs and not args.install and sys.stdin.isatty():
         inputs = ask_for_game()
     if not inputs and not args.install:
@@ -635,13 +887,22 @@ def main(argv=None):
     missing = [i for i in inputs if not os.path.exists(i)]
     if missing:
         ap.error(f"{missing[0]} does not exist")
+    if args.app and (args.console or args.ftp):
+        ap.error("--app builds a .3dsx for the SD card; vn3ds can't receive apps over Wi-Fi "
+                 "yet, so give --sd or copy it to sdmc:/3ds/<id>/ yourself")
+    if args.app and not inputs:
+        ap.error("--app needs a game")
     opts = flow.Options(
         inputs=inputs, output=args.output or default_output(), quality=args.quality,
         sd=args.sd, console=args.console, ftp=args.ftp, detect=not args.no_detect,
         with_engine=not args.no_engine or not inputs, work=args.work, keep_work=args.keep_work,
         id=args.id, title=args.title, rgb565=args.rgb565, jpeg=args.jpeg,
         no_audio=args.no_audio, no_video=args.no_video, video_codec=args.video_codec,
-        video_kbps=args.video_kbps, fit=args.fit, jobs=args.jobs)
+        video_kbps=args.video_kbps, fit=args.fit, jobs=args.jobs, saves=not args.no_saves)
+    if args.app:   # build only: the app is copied below, not the library's folder
+        opts.sd = opts.console = opts.ftp = None
+        opts.detect = opts.with_engine = False
+        opts.app, opts.app_meta = True, None
     # not in flow.Options: the app never sets these
     opts.video_fps = args.video_fps
     opts.jpeg_encoder = args.jpeg_encoder
@@ -649,7 +910,8 @@ def main(argv=None):
     opts.cg_patches = args.cg_patches
     opts.jpeg_posters = args.jpeg_posters
     opts.video_3d = args.video_3d
-    if args.video_3d and inputs:
+    opts.three_d = args.three_d
+    if (args.video_3d or args.three_d) and inputs:
         prepare_video_3d()
     ui = flow.ConsoleUI()
     try:
@@ -658,6 +920,25 @@ def main(argv=None):
         ui._end_live()
         print("\nStopped. Run the same command again to carry on: only what's missing is sent.")
         sys.exit(130)
+    if args.app:
+        game_dir = r["out_dir"] or os.path.abspath(inputs[0])
+        game_id = r["id"] or os.path.basename(game_dir.rstrip("/\\"))
+        path, size, icon_from = build_app(game_dir, game_id, os.path.dirname(game_dir),
+                                          opts.app_meta, args.title, args.author, args.icon)
+        say(f"built {path} ({size / 1e6:.1f} MB, icon from {icon_from})")
+        dest = f"sdmc:/3ds/{game_id}.3dsx"   # beside vn3ds.3dsx
+        if args.sd:
+            target = os.path.join(args.sd, "3ds", game_id + ".3dsx")
+            say(f"copying to {target}")
+            place_app(path, target)
+            register_app(os.path.join(args.sd, "3ds"), game_id, game_dir, dest)
+            print(f"Done. Eject the SD card; the game is in the Homebrew Launcher as its own app "
+                  f"({dest}). Its saves go to sdmc:/3ds/{game_id}/saves/.")
+        else:
+            print(f"Done. Copy {path} to sdmc:/3ds/ on the 3DS's SD card, beside vn3ds.3dsx (or "
+                  f"run again with --sd), or into an emulator's games folder; the Homebrew "
+                  f"Launcher or the emulator lists it as its own app.")
+        return
     if r["target"] == "sd":
         print("Done. Eject the SD card, put it back in the 3DS and start vn3ds from the "
               "Homebrew Launcher.")

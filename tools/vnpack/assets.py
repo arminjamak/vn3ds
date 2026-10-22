@@ -52,8 +52,9 @@ def _fix_bytes(v):
 
 def read_rpa(path, base=0):
     """Index of an .rpa archive that starts `base` bytes into `path` (non-zero
-    when the archive is stored inside an .apk). Offsets returned are absolute."""
-    with open(path, "rb") as f:
+    when the archive is stored inside an .apk). Offsets returned are absolute.
+    `path` may be "zip::member" (see open_container)."""
+    with open_container(path) as f:
         f.seek(base)
         header = f.readline()
         parts = header.split()
@@ -88,6 +89,159 @@ def _zip_data_offset(path, info):
             raise ValueError("bad zip local header")
         n, m = _st.unpack("<HH", hdr[26:30])
     return info.header_offset + 30 + n + m
+
+
+class InflatedMember:
+    """Random access to a deflated zip member without unpacking it: one pass
+    through the member keeps a copy of the decompressor every CHECKPOINT
+    bytes of output, and a read resumes from the nearest one before it (a
+    few MiB of inflating at most). For a big .rpa shipped compressed in a
+    .zip download (Android builds' archive.rpa), which would otherwise need
+    its full size in free disk space. Thread-safe; forked workers inherit
+    the checkpoints."""
+
+    CHECKPOINT = 4 << 20
+    _cache = {}
+
+    def __init__(self, zip_path, member):
+        import threading
+        import zipfile
+        with zipfile.ZipFile(zip_path) as z:
+            info = z.getinfo(member)
+        self.zip_path, self.member = zip_path, member
+        self.size = info.file_size
+        self.start = _zip_data_offset(zip_path, info)
+        self.comp_size = info.compress_size
+        self.stored = info.compress_type == zipfile.ZIP_STORED
+        self.lock = threading.Lock()
+        self.points = []   # (output offset, input offset, decompressor, unconsumed input)
+        self.cur = None    # the running decompressor: (out pos, in pos, d, pending)
+        if not self.stored:
+            self._scan()
+
+    @classmethod
+    def get(cls, zip_path, member):
+        key = (os.path.abspath(zip_path), member, os.path.getmtime(zip_path))
+        if key not in cls._cache:
+            cls._cache[key] = cls(zip_path, member)
+        return cls._cache[key]
+
+    def _scan(self):
+        d = zlib.decompressobj(-15)
+        out = inp = 0
+        nxt = 0
+        with open(self.zip_path, "rb") as f:
+            f.seek(self.start)
+            pending = b""
+            while out < self.size:
+                if out >= nxt:
+                    self.points.append((out, inp - len(pending), d.copy(), b""))
+                    nxt = out + self.CHECKPOINT
+                if not pending:
+                    pending = f.read(min(1 << 16, self.comp_size - inp))
+                    inp += len(pending)
+                    if not pending:
+                        break
+                chunk = d.decompress(pending, nxt - out)
+                pending = d.unconsumed_tail
+                out += len(chunk)
+
+    def _advance(self, state, upto, f, keep_from):
+        """Inflate from state up to output offset `upto`; returns (new state,
+        the bytes from keep_from on)."""
+        out, inp, d, pending = state
+        got = []
+        while out < upto:
+            if not pending:
+                f.seek(self.start + inp)
+                pending = f.read(min(1 << 16, self.comp_size - inp))
+                inp += len(pending)
+                if not pending:
+                    break
+            chunk = d.decompress(pending, upto - out)
+            pending = d.unconsumed_tail
+            if out + len(chunk) > keep_from:
+                got.append(chunk[max(0, keep_from - out):])
+            out += len(chunk)
+        return (out, inp, d, pending), b"".join(got)
+
+    def pread(self, offset, n):
+        n = max(0, min(n, self.size - offset))
+        if n == 0:
+            return b""
+        with open(self.zip_path, "rb") as f:
+            if self.stored:
+                f.seek(self.start + offset)
+                return f.read(n)
+            with self.lock:
+                cur = self.cur
+                if cur is None or cur[0] > offset or offset - cur[0] > self.CHECKPOINT:
+                    import bisect
+                    i = bisect.bisect_right([p[0] for p in self.points], offset) - 1
+                    o, inp, d, pending = self.points[i]
+                    cur = (o, inp, d.copy(), pending)
+                self.cur, data = self._advance(cur, offset + n, f, offset)
+                return data
+
+    def open(self):
+        return _MemberFile(self)
+
+
+class _MemberFile(io.RawIOBase):
+    """A seekable, read-only file over an InflatedMember."""
+
+    def __init__(self, m):
+        self.m, self.pos = m, 0
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.pos
+
+    def seek(self, pos, whence=0):
+        self.pos = pos if whence == 0 else self.pos + pos if whence == 1 else self.m.size + pos
+        return self.pos
+
+    def read(self, n=-1):
+        if n is None or n < 0:
+            n = self.m.size - self.pos
+        data = self.m.pread(self.pos, n)
+        self.pos += len(data)
+        return data
+
+    def readinto(self, b):
+        data = self.read(len(b))
+        b[:len(data)] = data
+        return len(data)
+
+    def readline(self, limit=-1):
+        out = b""
+        while not out.endswith(b"\n") and (limit < 0 or len(out) < limit):
+            chunk = self.m.pread(self.pos, 256)
+            if not chunk:
+                break
+            cut = chunk.find(b"\n")
+            chunk = chunk[:cut + 1] if cut >= 0 else chunk
+            out += chunk
+            self.pos += len(chunk)
+        return out
+
+
+# A pointer file for an archive read in place from a .zip download:
+# {"zip": path, "member": "archive.rpa"} (vn3ds-port writes these).
+RPA_REF = ".rpa.ref"
+
+
+def open_container(path):
+    """Open an archive container: a file on disk, or "zip::member"."""
+    if "::" in path and not os.path.exists(path):
+        zp, member = path.split("::", 1)
+        return InflatedMember.get(zp, member).open()
+    return open(path, "rb")
 
 
 def apk_game_path(member):
@@ -133,6 +287,12 @@ class AssetFS:
                     rel = os.path.relpath(full, top).replace(os.sep, "/")
                     if fn.lower().endswith(".rpa"):
                         archives.append((full, 0, fn))
+                        continue
+                    if fn.lower().endswith(RPA_REF):
+                        import json
+                        with open(full, encoding="utf-8") as f:
+                            ref = json.load(f)
+                        archives.append((ref["zip"] + "::" + ref["member"], 0, fn[:-4]))
                         continue
                     self.files.setdefault(rel.lower(), ("disk", full, rel))
         if is_zip:
@@ -184,7 +344,7 @@ class AssetFS:
             with self._zip_lock:   # ZipFile is not safe across threads
                 return self.zips[entry[1]].read(entry[3])
         _, arc, _, off, length, prefix = entry
-        with open(arc, "rb") as f:
+        with open_container(arc) as f:
             f.seek(off)
             return prefix + f.read(length - len(prefix))
 
@@ -265,6 +425,11 @@ class ImageBuilder:
             if s.startswith("#"):
                 return ("solid", parse_color(s), None, None)
             key = self.fs.find(s)
+            if key is None and s.lower().endswith(IMAGE_EXTS):
+                # releases that convert their art (to .webp, say) and redirect
+                # the old names in Python: the same file with another extension
+                stem = s.rsplit(".", 1)[0]
+                key = next((k for k in (self.fs.find(stem + e) for e in IMAGE_EXTS) if k), None)
             if key is not None:
                 return ("file", key)
             if s in self.comp.image_defs or s in self.extra_defs:
@@ -659,6 +824,32 @@ SD_OPUS_MONO = "64k"
 SD_MASTER_STEREO = "80k"
 SD_MASTER_MONO = "56k"
 
+# The balanced profile: one file for Wi-Fi and the SD card alike, the smallest
+# that still sounds like the source on the 3DS (its speakers, and headphones):
+# Opus is effectively transparent from about 64 kbps for stereo music, speech
+# is clean at 32 kbps mono and short effects at 48 kbps. Stereo stays stereo
+# (the wifi profile's mono music and 14 kbps voices were audibly worse).
+BALANCED_MUSIC = ("64k", "40k")      # (stereo, mono)
+BALANCED_SFX = ("48k", "32k")        # 20 s or shorter
+BALANCED_VOICE = "32k"               # a voice/ or vo/ folder: mono
+# an Ogg file already at most this much above the target is kept as it is:
+# re-encoding it would only lose quality for little gain
+BALANCED_KEEP_RATIO = 1.25
+
+
+def _is_voice(name):
+    folders = name.replace("\\", "/").lower().split("/")[:-1]
+    return any(d in ("voice", "voices", "vo") for d in folders)
+
+
+def balanced_rate(name, channels, seconds):
+    """(bitrate, channels) of the balanced profile for this sound."""
+    if _is_voice(name):
+        return BALANCED_VOICE, 1
+    stereo = (channels or 1) >= 2
+    pair = BALANCED_SFX if seconds is not None and seconds <= 20 else BALANCED_MUSIC
+    return pair[0 if stereo else 1], 2 if stereo else 1
+
 
 def _probe(ffprobe, src):
     """(channels, seconds) of an audio file; (2, None) if unknown."""
@@ -703,7 +894,20 @@ def convert_audio(data, name, out_path, warn, profile="sd", master=None):
         start = 27 + data[26]          # after the first page's segment table
         return data[start:start + len(magic)] == magic
     is_ogg = first_packet(b"\x01vorbis") or first_packet(b"OpusHead")
-    if is_ogg and profile != "wifi" and master is None:
+    if is_ogg and profile == "balanced" and master is None:
+        # small enough already: keep the shipped file (no second lossy pass)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "in.ogg")
+            with open(src, "wb") as f:
+                f.write(data)
+            channels, seconds = _probe(shutil.which("ffprobe"), src)
+        if seconds:
+            rate, _ = balanced_rate(name, channels, seconds)
+            if len(data) * 8 / seconds <= int(rate[:-1]) * 1000 * BALANCED_KEEP_RATIO:
+                with open(out_path, "wb") as f:
+                    f.write(data)
+                return True
+    if is_ogg and profile not in ("wifi", "balanced") and master is None:
         with open(out_path, "wb") as f:
             f.write(data)
         return True
@@ -750,9 +954,13 @@ def convert_audio(data, name, out_path, warn, profile="sd", master=None):
                 return False
             return True
         stereo = channels >= 2
+        bitrate = SD_OPUS_STEREO if stereo else SD_OPUS_MONO
+        if profile == "balanced":
+            bitrate, ch = balanced_rate(name, channels, seconds)
+            stereo = ch == 2
         cmd = [ffmpeg, "-v", "error", "-y", "-i", src, "-vn", "-map_metadata", "-1",
                "-ac", "2" if stereo else "1", "-ar", "48000", *bitexact, "-c:a", "libopus",
-               "-b:a", SD_OPUS_STEREO if stereo else SD_OPUS_MONO, "-vbr", "on",
+               "-b:a", bitrate, "-vbr", "on",
                "-application", "audio", "-compression_level", "10", "-f", "ogg", out_path]
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
@@ -791,6 +999,11 @@ def _encode_master(ffmpeg, master, ext, name, out_path, warn, profile, bitexact,
                 rate = ["-b:a", "19k", "-vbr", "constrained"]
             mix = "pan=mono|c0=0.5*c0+0.5*c1" if channels == 2 else "anull"
             layout = ["-ac", "1"]
+        elif profile == "balanced":
+            bitrate, ch = balanced_rate(name, channels, seconds)
+            rate = ["-b:a", bitrate, "-vbr", "on"]
+            mix = "pan=mono|c0=0.5*c0+0.5*c1" if ch == 1 and channels == 2 else "anull"
+            layout = ["-ac", str(ch)]
         else:
             rate = ["-b:a", SD_MASTER_STEREO if channels >= 2 else SD_MASTER_MONO, "-vbr", "on"]
             mix, layout = "anull", ["-ac", "2" if channels >= 2 else "1"]
@@ -915,6 +1128,78 @@ def encode_cvid(frames, logical_w, logical_h, fps, loop, threshold=2):
 CVH_HEADER = 64
 CVH_FRAME = 12
 
+# Another H.264 encoder for encode_cvh: in a web page, the browser decodes
+# and x264 runs in helper workers (server/link/web/convert/h264.js, set up by
+# vn3ds_browser.py). Called as
+#   H264_ENCODER(key, data, ext, w, h, fps_cap, kbps, gop_seconds, max_seconds,
+#                profile, level, preset, wait)
+# it returns (annexb, first_rgb or None, fps) or None to use ffmpeg: an
+# Annex B stream with no B-frames and an IDR frame at frame 0 and every GOP,
+# the first frame as decoded (w*h*3 bytes, RGB; None: decoded here) and the
+# frame rate (a Fraction). wait=False only starts the work (prefetch_cvh);
+# the call with the same key and wait=True collects it. Not used for 3D.
+H264_ENCODER = None
+
+
+def prefetching():
+    """True when movies can be started ahead of their turn (prefetch_cvh)."""
+    return H264_ENCODER is not None
+
+
+def _h264_key(name, w, h, fps_cap, kbps, max_seconds, profile, level, preset):
+    return f"{name}|{w}x{h}|{fps_cap}|{kbps}|{max_seconds}|{profile}|{level}|{preset}"
+
+
+def prefetch_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30, max_seconds=None,
+                 profile="main", level="3.0", gop_seconds=4.0, preset="slower", stereo=None,
+                 sbs=False, **_):
+    """Start encode_cvh's H.264 for this movie, to be collected by the
+    encode_cvh call with the same arguments (H264_ENCODER only)."""
+    if not H264_ENCODER or stereo or sbs:
+        return
+    w, h = h264_size(logical_w, logical_h)
+    ext = os.path.splitext(name)[1] or ".webm"
+    H264_ENCODER(_h264_key(name, w, h, fps_cap, kbps, max_seconds, profile, level, preset), data,
+                 ext, w, h, fps_cap, kbps, gop_seconds, max_seconds, profile, level, preset, False)
+CVH_STEREO_SBS = 2      # flags: left view | right view, side by side
+STEREO_QOFFSET = 0.08   # libx264 ROI quantiser offset for the right view (x25 = QP steps)
+
+
+def _stereo_intermediate(ffmpeg, dec, w, h, fps, stereo, tmp):
+    """Runs the clip (decoded by `dec`, w x h) through stereo.py's filter
+    into tmp/sbs.mkv (lossless H.264, 2w x h). Returns (path, stats)."""
+    import json
+    from . import stereo as st
+    py, model = stereo
+    src = dec[:dec.index("-vf") + 2]
+    src[-1] = src[-1].replace(",format=yuv420p", "")
+    src += ["-pix_fmt", "rgb24", "-f", "rawvideo", "-"]
+    stats = os.path.join(tmp, "stereo.json")
+    out = os.path.join(tmp, "sbs.mkv")
+    filt = st.filter_command(py) + ["filter", "--model", model, "--size", f"{w}x{h}",
+                                    "--stats", stats]
+    enc = [ffmpeg, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+           "-s", f"{2 * w}x{h}", "-r", f"{fps.numerator}/{fps.denominator}", "-i", "-",
+           "-vf", "format=yuv420p", "-c:v", "libx264", "-qp", "0", "-preset", "ultrafast",
+           "-threads", "1", out]
+    with tempfile.TemporaryFile() as e1, tempfile.TemporaryFile() as e2, \
+            tempfile.TemporaryFile() as e3:
+        d = subprocess.Popen(src, stdout=subprocess.PIPE, stderr=e1)
+        f = subprocess.Popen(filt, stdin=d.stdout, stdout=subprocess.PIPE, stderr=e2)
+        d.stdout.close()
+        x = subprocess.Popen(enc, stdin=f.stdout, stderr=e3)
+        f.stdout.close()
+        codes = (x.wait(), f.wait(), d.wait())
+        if any(codes):
+            for e in (e2, e1, e3):
+                e.seek(0)
+                msg = e.read().decode(errors="replace").strip()
+                if msg:
+                    raise OSError("3D: " + msg[-300:])
+            raise OSError(f"3D: the depth filter failed {codes}")
+    with open(stats) as fh:
+        return out, json.load(fh)
+
 
 def _ffprobe_fps(path):
     """The clip's frame rate as a Fraction (None when unknown)."""
@@ -966,23 +1251,155 @@ def split_annexb(stream):
     return out
 
 
+# Converted movies are kept in a cache (VN3DS_CACHE, else ~/.cache/vn3ds), by
+# the clip's bytes and every setting: the depth pass of a 3D movie takes
+# longer than the clip lasts, and porting the same game again (an update,
+# the Mac app after the command line) gives the same files. Bump the
+# version when encode_cvh's output changes; at most MOVIE_CACHE_MAX bytes
+# are kept, the least recently used going first.
+MOVIE_CACHE_VERSION = 1
+MOVIE_CACHE_MAX = 3 << 30
+
+
+def movie_cache_dir():
+    root = os.environ.get("VN3DS_CACHE") or os.path.join(
+        os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "vn3ds")
+    return os.path.join(root, "movies")
+
+
+def _movie_cache_key(data, args, kwargs):
+    import hashlib
+    import json
+    h = hashlib.sha256()
+    h.update(data)
+    st = kwargs.get("stereo")
+    opts = dict(kwargs, stereo=os.path.basename(st[1]) if st else None)
+    h.update(json.dumps([MOVIE_CACHE_VERSION, list(args), opts], sort_keys=True,
+                        default=str).encode())
+    return h.hexdigest()[:40]
+
+
+def _movie_cache_trim(d):
+    try:
+        files = [(e.stat().st_mtime, e.stat().st_size, e.path) for e in os.scandir(d)]
+    except OSError:
+        return
+    total = sum(f[1] for f in files)
+    for _t, size, path in sorted(files):
+        if total <= MOVIE_CACHE_MAX:
+            break
+        try:
+            os.remove(path)
+            total -= size
+        except OSError:
+            pass
+
+
+def encode_cvh_cached(data, name, *args, **kwargs):
+    """encode_cvh, through the movie cache (see above)."""
+    import json
+    if H264_ENCODER:   # (in a browser: the cache would only hold memory)
+        return encode_cvh(data, name, *args, **kwargs)
+    d = movie_cache_dir()
+    key = _movie_cache_key(data, args, kwargs)
+    base = os.path.join(d, key)
+    try:
+        with open(base + ".json") as f:
+            info = json.load(f)
+        with open(base + ".cvh", "rb") as f:
+            cvh = f.read()
+        with open(base + ".poster", "rb") as f:
+            poster = f.read()
+        if len(cvh) == info.get("bytes") and len(poster) == info.get("poster_bytes"):
+            for ext in (".json", ".cvh", ".poster"):
+                os.utime(base + ext)
+            return cvh, poster, info
+    except (OSError, ValueError):
+        pass
+    cvh, poster, info = encode_cvh(data, name, *args, **kwargs)
+    try:
+        os.makedirs(d, exist_ok=True)
+        tmp = f"{base}.{os.getpid()}.tmp"
+        for ext, blob in ((".cvh", cvh), (".poster", poster),
+                          (".json", json.dumps(info).encode())):
+            with open(tmp, "wb") as f:
+                f.write(blob)
+            os.replace(tmp, base + ext)   # the .json last: it marks the entry complete
+        if int.from_bytes(key[:2].encode(), "little") % 64 == 0:
+            _movie_cache_trim(d)
+    except OSError:
+        pass
+    return cvh, poster, info
+
+
 def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
                max_seconds=None, profile="main", level="3.0", gop_seconds=4.0,
                preset="slower", poster_scale=1.0, poster_jpeg=0, jpeg_encoder="pillow",
-               jpeg_qscale=5.0):
+               jpeg_qscale=5.0, stereo=None, sbs=False):
     """Convert a movie into .cvh bytes plus its poster (.ctex bytes).
 
     Returns (cvh, poster_ctex, info). Two-pass libx264 at `kbps`, no
     B-frames, one slice per frame, an IDR frame at least every `gop_seconds`.
     The frame rate is the clip's own, capped at `fps_cap`. The poster is
     stored at `poster_scale` of the video's size (RGB565) and drawn scaled up;
-    poster_jpeg > 0 stores it as a JPEG at that quality (with jpeg_encoder)."""
+    poster_jpeg > 0 stores it as a JPEG at that quality (with jpeg_encoder).
+
+    stereo = (python, model) makes a stereoscopic clip (tools/vnpack/stereo.py,
+    run with that Python): each frame is the left view (the movie itself)
+    and a synthesised right view side by side, coded 2w x h; the right half
+    gets STEREO_QOFFSET more quantisation (it costs fewer bits, and the eyes
+    take the sharper view's detail). The poster is the left view.
+    sbs=True: the movie is already a stereo pair, the left eye's view and
+    the right eye's side by side (rendered, not synthesised); it is coded
+    the same way, with a median disparity of 0."""
+    from fractions import Fraction
+    w, h = h264_size(logical_w, logical_h)
+    ext = os.path.splitext(name)[1] or ".webm"
+    got = None
+    if H264_ENCODER and not (stereo or sbs):
+        got = H264_ENCODER(_h264_key(name, w, h, fps_cap, kbps, max_seconds, profile, level, preset),
+                           data, ext, w, h, fps_cap, kbps, gop_seconds, max_seconds, profile, level,
+                           preset, True)
+    if got:
+        stream, first, fps = got
+        stream = bytes(stream)
+        if first is None or len(first) < w * h * 3:
+            first = _first_frame(stream, w, h)
+        else:
+            first = np.frombuffer(bytes(first[: w * h * 3]), np.uint8).reshape(h, w, 3)
+        sinfo = None
+    else:
+        stream, first, fps, sinfo, w, w_view = _encode_h264_ffmpeg(
+            data, ext, w, h, kbps, fps_cap, max_seconds, profile, level, gop_seconds, preset,
+            stereo, sbs)
+    return _pack_cvh(stream, first, fps, w, h, w_view if (stereo or sbs) else w, logical_w,
+                     logical_h, loop, stereo or sbs, sinfo, poster_scale, poster_jpeg,
+                     jpeg_encoder, jpeg_qscale)
+
+
+def _first_frame(stream, w, h):
+    """An Annex B stream's first frame, decoded (RGB array)."""
+    ffmpeg = shutil.which("ffmpeg")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "v.h264")
+        with open(path, "wb") as f:
+            f.write(stream)
+        r = subprocess.run([ffmpeg, "-v", "error", "-f", "h264", "-i", path, "-frames:v", "1",
+                            "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
+    if r.returncode != 0 or len(r.stdout) < w * h * 3:
+        raise OSError("cannot decode the encoded movie's first frame")
+    return np.frombuffer(r.stdout[: w * h * 3], np.uint8).reshape(h, w, 3)
+
+
+def _encode_h264_ffmpeg(data, ext, w, h, kbps, fps_cap, max_seconds, profile, level,
+                        gop_seconds, preset, stereo, sbs):
+    """encode_cvh's x264 pass: (annexb, first frame as an RGB array, fps,
+    stereo info or None, coded width, one view's width)."""
     from fractions import Fraction
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise OSError("ffmpeg is needed to convert movies")
-    w, h = h264_size(logical_w, logical_h)
-    ext = os.path.splitext(name)[1] or ".webm"
+    w_view = w
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "in" + ext)
         with open(src, "wb") as f:
@@ -999,6 +1416,19 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
         dec += ["-an", "-vf", f"fps={fps.numerator}/{fps.denominator},"
                 f"scale={w}:{h}:flags=lanczos,setsar=1,format=yuv420p",
                 "-f", "yuv4mpegpipe", "-"]
+        sinfo = None
+        if sbs:
+            dec[-4] = (f"fps={fps.numerator}/{fps.denominator},"
+                       f"scale={2 * w}:{h}:flags=lanczos,setsar=1,format=yuv420p")
+            sinfo = dict(mid=0.0)
+            w_view, w = w, 2 * w
+        elif stereo:
+            # Once through the depth filter into a lossless side-by-side
+            # intermediate (small: it compresses well), which both passes read.
+            sbs, sinfo = _stereo_intermediate(ffmpeg, dec, w, h, fps, stereo, tmp)
+            dec = [ffmpeg, "-v", "error", "-nostdin", "-i", sbs, "-an", "-vf",
+                   "setsar=1,format=yuv420p", "-f", "yuv4mpegpipe", "-"]
+            w_view, w = w, 2 * w
         gop = max(1, int(round(float(fps) * gop_seconds)))
         x264 = (f"bframes=0:ref=3:keyint={gop}:min-keyint={max(1, gop // 4)}:scenecut=40:"
                 "open-gop=0:slices=1:sliced-threads=0:aud=0:annexb=1:"
@@ -1008,6 +1438,8 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
                 "-c:v", "libx264",
                 "-profile:v", profile, "-level:v", level, "-preset", preset,
                 "-b:v", f"{int(kbps)}k", "-x264-params", x264,
+                *(["-vf", f"addroi=x={w // 2}:y=0:w={w // 2}:h={h}:qoffset={STEREO_QOFFSET}"]
+                  if stereo or sbs else []),
                 "-passlogfile", os.path.join(tmp, "x264")]
         for p, dst in ((1, ["-f", "null", os.devnull]), (2, ["-f", "h264", out])):
             with tempfile.TemporaryFile() as derr:
@@ -1029,15 +1461,26 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
         if r.returncode != 0 or len(r.stdout) < w * h * 3:
             raise OSError("cannot decode the encoded movie's first frame")
         first = np.frombuffer(r.stdout[: w * h * 3], np.uint8).reshape(h, w, 3)
+        if stereo or sbs:
+            first = np.ascontiguousarray(first[:, :w_view])   # the poster: the left view
+    return stream, first, fps, sinfo, w, w_view
 
+
+def _pack_cvh(stream, first, fps, w, h, w_view, logical_w, logical_h, loop, stereo, sinfo,
+              poster_scale, poster_jpeg, jpeg_encoder, jpeg_qscale):
+    """The .cvh file around an Annex B stream, and its poster."""
     sps = pps = None
     frames = []   # [nal, ...] per frame
     idr = []
     for nal in split_annexb(stream):
         t = nal[0] & 0x1F
         if t == 7:
+            if sps is not None and nal != sps:
+                raise OSError("the movie's parts were coded with different settings (SPS)")
             sps = sps or nal
         elif t == 8:
+            if pps is not None and nal != pps:
+                raise OSError("the movie's parts were coded with different settings (PPS)")
             pps = pps or nal
         elif t in (1, 5):
             if not frames or (len(nal) > 1 and nal[1] & 0x80):   # first_mb_in_slice == 0
@@ -1063,16 +1506,21 @@ def encode_cvh(data, name, logical_w, logical_h, loop, kbps=900, fps_cap=30,
     max_frame = max(len(b) for b in blobs)
     head = b"CVH1" + struct.pack("<HHHHHHfffIIIIBBBBIIII", 1, 1, w, h, tw, th,
                                  float(logical_w), float(logical_h), float(fps), n,
-                                 1 if loop else 0, params_at, len(params),
+                                 (1 if loop else 0) | (CVH_STEREO_SBS if stereo else 0),
+                                 params_at, len(params),
                                  sps[1], sps[3], 3, 0, max_frame, sum(idr), 0, 0)
+    if stereo:   # reserved[0]: the clip's median disparity (f32, coded px)
+        head = head[:56] + struct.pack("<f", float(sinfo["mid"])) + head[60:]
     assert len(head) == CVH_HEADER
     cvh = head + b"".join(table) + params + b"".join(blobs)
     img = Image.fromarray(first, "RGB").convert("RGBA")
     if poster_scale < 1.0:
-        img = img.resize((max(8, int(w * poster_scale)), max(8, int(h * poster_scale))),
+        img = img.resize((max(8, int(img.width * poster_scale)), max(8, int(h * poster_scale))),
                          Image.LANCZOS)
     poster, _ = encode_ctex(img, logical_w, logical_h, allow_565=True, jpeg_quality=poster_jpeg,
                             jpeg_encoder=jpeg_encoder, jpeg_qscale=jpeg_qscale)
     info = dict(w=w, h=h, fps=float(fps), frames=n, keyframes=sum(idr),
                 seconds=n / float(fps), bytes=len(cvh), poster_bytes=len(poster))
+    if sinfo:
+        info["stereo"] = sinfo
     return cvh, poster, info

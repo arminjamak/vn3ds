@@ -1,7 +1,7 @@
-/* Miso's Hunt: the leak is spitting cat food out of the walls of Aron's
- * flat, and Miso wants all of it. Pouches, boxes and the odd golden tin
- * shimmer out of the walls and land around the room, while Commander
- * Seraphiel's angels sweep the floor with soft, slow beams of light.
+/* Miso's Hunt: the leak is seeping round motes of light out of the walls of
+ * Aron's flat, and Miso wants every one. Small motes, bright orbs and the
+ * odd golden orb shimmer out of the walls and drift down to hover over the
+ * floor, while Commander Seraphiel's angels sweep it with soft, slow beams.
  *
  * The flat is seen from a high three-quarter angle. Game logic works in
  * room units on the floor: X 0..320 (left to right), Y 0..160 (back wall to
@@ -9,22 +9,22 @@
  * the screen and to a stereo depth: the back of the room sits behind the
  * screen, the front of the floor slightly in front of it.
  *
- * Controls: D-pad / Circle Pad walk (walking over a package grabs it), A or
+ * Controls: D-pad / Circle Pad walk (walking into a light catches it), A or
  * B leaps a long way in the steered (or facing) direction, grabbing
  * everything on the way; furniture stops a leap. Each of the four leap
  * directions has its own animation: side-on to the left and right, from
  * behind going up the room (away from the camera), from the front coming
  * down the room (towards the camera, popping out of the screen).
- * The cheat, "Nap", stops every beam for 5 seconds and stops the packages'
+ * The cheat, "Nap", stops every beam for 5 seconds and stops the lights'
  * clocks.
  *
- * Run: 75 seconds in three phases of 25 s. Each phase drops packages faster,
+ * Run: 75 seconds in three phases of 25 s. Each phase seeps lights faster,
  * adds a beam, and every beam sweeps faster.
  *
  * Score (0..100):
- *     60 * min(1, points / 250)     a package is worth 1 (pouch), 2 (box) or
- *                                   3 (golden tin) times the combo multiplier
- *                                   (x1..x4); each extra package grabbed in
+ *     60 * min(1, points / 250)     a light is worth 1 (mote), 2 (orb) or
+ *                                   3 (golden orb) times the combo multiplier
+ *                                   (x1..x4); each extra light caught in
  *                                   the same leap adds +1 x multiplier
  *   + 20 * min(1, best combo / 15)
  *   + 20 * max(0, 1 - spotted / 5)
@@ -46,7 +46,7 @@
 
 #define MISO_R 9.0f          /* Miso's footprint against furniture */
 #define MISO_SPEED 112.0f
-#define PICK_RX 17.0f        /* walking over a package: an ellipse round Miso */
+#define PICK_RX 17.0f        /* walking into a light: an ellipse round Miso */
 #define PICK_RY 12.0f
 #define LEAP_RX 21.0f        /* a leap sweeps a wider path */
 #define LEAP_RY 15.0f
@@ -61,9 +61,9 @@
 #define SPOT_FREEZE 1.4f
 #define SPOT_GRACE 1.6f
 #define NAP_TIME 5.0f
-#define SHIMMER_TIME 0.5f    /* a package shimmering in the wall */
+#define SHIMMER_TIME 0.5f    /* a light shimmering in the wall */
 #define FLY_TIME 0.6f        /* ... then tossed out onto the floor */
-#define TIN_LIFE 4.2f        /* golden tins don't wait */
+#define GOLD_LIFE 4.2f       /* golden orbs don't wait */
 
 #define PTS_FULL 250.0f
 #define COMBO_FULL 15.0f
@@ -77,7 +77,7 @@
 #define PI_F 3.14159265f
 #define TAU_F 6.2831853f
 
-enum { PK_POUCH, PK_BOX, PK_TIN };
+enum { PK_MOTE, PK_ORB, PK_GOLD };
 static const int PK_VALUE[3] = {1, 2, 3};
 
 enum { LD_RIGHT, LD_LEFT, LD_UP, LD_DOWN };
@@ -86,7 +86,7 @@ enum { LS_CROUCH, LS_AIR, LS_LAND };
 typedef struct {
     float interval, life;
     int maxpacks, beams;
-    float bspeed, box, tin, hard;
+    float bspeed, orb, gold, hard;
 } PhaseDef;
 
 static const PhaseDef PH[3] = {
@@ -399,15 +399,16 @@ static void popup(float sx, float sy, float d, const char *text, u32 c)
     snprintf(p->text, sizeof(p->text), "%s", text);
 }
 
-/* A pouch comes in three flavours (colours); boxes are card, tins gold. */
+/* Motes come in the leak's colours (cyan, magenta, violet); orbs are a
+ * pale moonlight blue, the rare ones gold. */
 static u32 pack_color(const Pack *p)
 {
-    static const u32 POUCH[3] = {RGBA(150, 92, 200, 255), RGBA(54, 160, 170, 255), RGBA(224, 96, 140, 255)};
-    return p->kind == PK_TIN ? RGBA(240, 196, 70, 255) : p->kind == PK_BOX ? RGBA(206, 160, 104, 255)
-                                                                           : POUCH[p->seed % 3];
+    static const u32 MOTE[3] = {RGBA(110, 236, 255, 255), RGBA(240, 120, 255, 255), RGBA(176, 150, 255, 255)};
+    return p->kind == PK_GOLD ? RGBA(255, 206, 90, 255) : p->kind == PK_ORB ? RGBA(196, 226, 255, 255)
+                                                                           : MOTE[p->seed % 3];
 }
 
-/* ---- packages ------------------------------------------------------------------ */
+/* ---- lights (the leak's motes and orbs) ---------------------------------------- */
 
 static int pack_count(void)
 {
@@ -440,12 +441,12 @@ static void spawn_pack(void)
     memset(p, 0, sizeof(*p));
     const PhaseDef *ph = &PH[S.phase];
     float r = mg_randf();
-    p->kind = r < ph->tin ? PK_TIN : r < ph->tin + ph->box ? PK_BOX : PK_POUCH;
+    p->kind = r < ph->gold ? PK_GOLD : r < ph->gold + ph->orb ? PK_ORB : PK_MOTE;
     p->seed = mg_rand();
 
-    /* where it lands: tins (and some pouches) in a hard spot far from Miso */
+    /* where it settles: golden orbs (and some motes) in a hard spot far from Miso */
     bool placed = false;
-    if (p->kind == PK_TIN || mg_randf() < ph->hard) {
+    if (p->kind == PK_GOLD || mg_randf() < ph->hard) {
         int start = mg_randi(0, NHARD - 1);
         for (int k = 0; k < NHARD && !placed; k++) {
             const float *h = HARD[(start + k) % NHARD];
@@ -468,8 +469,8 @@ static void spawn_pack(void)
         p->on = false;
         return;
     }
-    if (p->kind == PK_TIN && !p->hard)
-        p->kind = PK_BOX;
+    if (p->kind == PK_GOLD && !p->hard)
+        p->kind = PK_ORB;
 
     /* the nearest stretch of wall the leak can push it through */
     float bx = clampf(p->x, 108, 312), by = 0;
@@ -483,16 +484,16 @@ static void spawn_pack(void)
     else
         p->wx = rx, p->wy = ry;
     p->wh = 16 + 10 * mg_randf();
-    p->life = p->kind == PK_TIN ? TIN_LIFE : ph->life * (0.9f + 0.25f * mg_randf());
+    p->life = p->kind == PK_GOLD ? GOLD_LIFE : ph->life * (0.9f + 0.25f * mg_randf());
     p->on = true;
     S.spawned++;
-    if (p->kind == PK_TIN)
+    if (p->kind == PK_GOLD)
         sfx("miso_rare_appear");
     else
         sfx("miso_package_appear");
 }
 
-/* Where a package is right now: on the floor, or tumbling out of the wall. */
+/* Where a light is right now: hovering over the floor, or drifting out of the wall. */
 static void pack_pos(const Pack *p, float *x, float *y, float *h)
 {
     if (p->landed || p->t >= SHIMMER_TIME + FLY_TIME) {
@@ -525,19 +526,19 @@ static void collect(Pack *p, bool leap)
         S.lhits++;
     }
     p->on = false;
-    burst(g.x, g.y, g.d - 0.05f, p->kind == PK_TIN ? 14 : 9, 90, pack_color(p));
+    burst(g.x, g.y, g.d - 0.05f, p->kind == PK_GOLD ? 14 : 9, 90, pack_color(p));
     char buf[16];
     snprintf(buf, sizeof(buf), "+%d", pts);
-    popup(g.x, g.y - 8, g.d - 0.15f, buf, S.mult > 1 || p->kind == PK_TIN ? MG_GOLD : MG_WHITE);
+    popup(g.x, g.y - 8, g.d - 0.15f, buf, S.mult > 1 || p->kind == PK_GOLD ? MG_GOLD : MG_WHITE);
     if (S.mult > old) {
         snprintf(buf, sizeof(buf), "Combo x%d!", S.mult);
         popup(g.x, g.y - 24, g.d - 0.25f, buf, RGBA(255, 160, 220, 255));
         sfx("miso_combo");
-    } else if (p->kind == PK_TIN) {
+    } else if (p->kind == PK_GOLD) {
         sfx("miso_pickup_rare");
     } else {
-        /* a pouch sounds lighter than a box; a combo climbs in pitch */
-        sfx_pitch("miso_pickup", (p->kind == PK_BOX ? 0.85f : 1.05f) + 0.04f * (float)(S.combo % 3));
+        /* a mote rings higher than an orb; a combo climbs in pitch */
+        sfx_pitch("miso_pickup", (p->kind == PK_ORB ? 0.85f : 1.05f) + 0.04f * (float)(S.combo % 3));
     }
 }
 
@@ -571,7 +572,7 @@ static void update_packs(float dt, bool napping)
     }
 }
 
-/* Grab every landed package within reach (an ellipse: Miso is long). */
+/* Catch every settled light within reach (an ellipse: Miso is long). */
 static void pickups(float rx, float ry, bool leap)
 {
     for (int i = 0; i < MAX_PACKS; i++) {
@@ -661,7 +662,7 @@ static void land(bool bonk)
         sfx("miso_land");
     }
     if (S.lhits >= 2) {
-        /* a bonus for every extra package swept up in one leap */
+        /* a bonus for every extra light swept up in one leap */
         int bonus = (S.lhits - 1) * S.mult;
         S.points += bonus;
         if (S.lhits > S.best_multi)
@@ -935,7 +936,7 @@ static bool update(const Input *in, float dt, bool cheat)
         S.expose = fmaxf(0, S.expose - dt * 2);
     }
 
-    /* ---- packages ---- */
+    /* ---- lights ---- */
     S.spawn_t -= dt * (napping ? 0.5f : 1.0f);
     if (S.spawn_t <= 0) {
         if (pack_count() < PH[S.phase].maxpacks)
@@ -1282,57 +1283,31 @@ static void draw_beam_cones(int eye)
     }
 }
 
-/* ---- packages ----------------------------------------------------------------------------- */
+/* ---- lights ------------------------------------------------------------------------------- */
 
 static const u32 LEAK_C = RGBA(90, 240, 255, 255), LEAK_M = RGBA(235, 90, 255, 255);
 
-/* The fish on every package: a body and a tail, facing right. */
-static void draw_fish(int eye, float x, float y, float s, float d, u32 c)
-{
-    ell(eye, x + 0.6f * s, y, 2.4f * s, 1.45f * s, d, c, 5);
-    mg_tri(eye, x - 1.4f * s, y, x - 3.4f * s, y - 1.6f * s, x - 3.4f * s, y + 1.6f * s, d, c);
-}
-
-/* One package standing on the floor at screen (x, y), `lift` px up. */
+/* One light hovering at screen (x, y): a soft halo, a bright body and a white
+ * core, breathing a little; the golden orb also glints. `k` scales it. */
 static void draw_pack_shape(int eye, const Pack *p, float x, float y, float k, float d, float sy, float a)
 {
-    u32 c = rgba_alpha(pack_color(p), a);
-    if (p->kind == PK_POUCH) {
-        /* an upright foil pouch with a crimped top */
-        float w = 9.5f * k, h = 12.5f * k * sy;
-        u32 dark = rgba_alpha(mixc(pack_color(p), RGBA(30, 20, 40, 255), 0.35f), a);
-        u32 light = rgba_alpha(mixc(pack_color(p), MG_WHITE, 0.45f), a);
-        mg_rect(eye, x - w / 2, y - h, w, h, d, c);
-        mg_rect(eye, x + w / 2 - 2 * k, y - h, 2 * k, h, d - 0.002f, dark);
-        mg_rect(eye, x - w / 2, y - h - 1.2f * k, w, 2.6f * k, d - 0.003f, light);
-        mg_rect(eye, x - w / 2 + 1.5f * k, y - h * 0.62f, 1.2f * k, h * 0.45f, d - 0.003f, rgba_alpha(MG_WHITE, a * 0.35f));
-        draw_fish(eye, x - 0.3f * k, y - h * 0.42f, 1.15f * k, d - 0.006f, rgba_alpha(MG_WHITE, a));
-    } else if (p->kind == PK_BOX) {
-        /* a card box: front, top and side, with a blue label */
-        float w = 14.5f * k, h = 9.5f * k * sy, t = 4.0f * k;
-        u32 top = rgba_alpha(RGBA(232, 192, 140, 255), a), side = rgba_alpha(RGBA(160, 118, 76, 255), a);
-        mg_rect(eye, x - w / 2, y - h, w, h, d, c);
-        mg_tri(eye, x - w / 2, y - h, x + w / 2, y - h, x + w / 2 + t * 0.6f, y - h - t, d + 0.004f, top);
-        mg_tri(eye, x - w / 2, y - h, x + w / 2 + t * 0.6f, y - h - t, x - w / 2 + t * 0.6f, y - h - t, d + 0.004f,
-               top);
-        mg_tri(eye, x + w / 2, y - h, x + w / 2 + t * 0.6f, y - h - t, x + w / 2 + t * 0.6f, y - t, d + 0.004f, side);
-        mg_tri(eye, x + w / 2, y - h, x + w / 2 + t * 0.6f, y - t, x + w / 2, y, d + 0.004f, side);
-        mg_rect(eye, x - w / 2, y - h * 0.78f, w, h * 0.56f, d - 0.003f, rgba_alpha(RGBA(70, 120, 205, 255), a));
-        draw_fish(eye, x, y - h * 0.5f, 1.25f * k, d - 0.006f, rgba_alpha(MG_WHITE, a));
-    } else {
-        /* a golden tin, glinting */
-        float w = 11 * k, h = 9 * k * sy;
-        u32 rim = rgba_alpha(RGBA(176, 128, 40, 255), a);
-        ell(eye, x, y, w / 2, 2.2f * k, d + 0.002f, rim, 6);
-        mg_rect(eye, x - w / 2, y - h, w, h, d, c);
-        mg_rect(eye, x - w / 2, y - h * 0.68f, w, h * 0.4f, d - 0.003f, rgba_alpha(RGBA(46, 80, 160, 255), a));
-        draw_fish(eye, x + 0.3f * k, y - h * 0.48f, 0.95f * k, d - 0.006f, rgba_alpha(MG_WHITE, a));
-        mg_rect(eye, x - w / 2 + 1.2f * k, y - h + 1 * k, 1.4f * k, h - 2 * k, d - 0.004f, rgba_alpha(MG_WHITE, a * 0.45f));
-        ell(eye, x, y - h, w / 2, 2.2f * k, d - 0.004f, rgba_alpha(RGBA(255, 232, 160, 255), a), 6);
-        mg_line(eye, x - w / 2 + 1.5f * k, y - h, x + w / 2 - 1.5f * k, y - h, 1.2f * k, d - 0.006f, rim);
+    u32 base = pack_color(p);
+    float r = (p->kind == PK_MOTE ? 4.5f : p->kind == PK_ORB ? 6.6f : 6.2f) * k;
+    float breath = 1 + 0.12f * sinf(S.t * 4.2f + (float)(p->seed & 31) * 0.4f);
+    float cy = y - r * 1.1f * sy;
+    /* halo: rings fading out */
+    for (int i = 3; i >= 1; i--) {
+        float rr = r * (1 + 0.55f * (float)i) * breath;
+        mg_circle(eye, x, cy, rr, d + 0.002f * (float)i, rgba_alpha(base, a * (0.10f + 0.04f * (3 - i))));
+    }
+    mg_circle(eye, x, cy, r, d, rgba_alpha(mixc(base, MG_WHITE, 0.25f), a));
+    mg_circle(eye, x - r * 0.18f, cy - r * 0.2f, r * 0.55f, d - 0.002f, rgba_alpha(MG_WHITE, a * 0.9f));
+    if (p->kind == PK_GOLD) {
+        /* a golden orb: a ring round it, and now and then a glint */
+        mg_circle(eye, x, cy, r * 1.25f, d + 0.001f, rgba_alpha(RGBA(255, 236, 170, 255), a * 0.35f));
         float tw = fmodf(S.t * 1.7f + (float)(p->seed & 15) * 0.1f, 1.0f);
-        if (tw < 0.25f) {   /* a glint */
-            float g = sinf(tw / 0.25f * PI_F) * 4 * k, gx = x + w * 0.3f, gy = y - h - 1 * k;
+        if (tw < 0.25f) {
+            float g = sinf(tw / 0.25f * PI_F) * 5 * k, gx = x + r * 0.5f, gy = cy - r * 0.6f;
             mg_line(eye, gx - g, gy, gx + g, gy, 1.2f, d - 0.03f, rgba_alpha(MG_WHITE, a));
             mg_line(eye, gx, gy - g, gx, gy + g, 1.2f, d - 0.03f, rgba_alpha(MG_WHITE, a));
         }
@@ -1371,12 +1346,11 @@ static void draw_pack(int eye, const Pack *p)
     P3 g = pj(x, y, 0), q = pj(x, y, h);
     float k = q.k * 1.05f, d = q.d - 0.03f;
     if (p->t < SHIMMER_TIME) {
-        /* a ghost of the package shimmers in the wall, in the leak's colours */
+        /* a ghost of the light shimmers in the wall, in the leak's colours */
         P3 w = pj(p->wx, p->wy, p->wh - 6);
         float u = p->t / SHIMMER_TIME, j = (1 - u) * 3 + hashf(p->seed + (u32)(S.t * 20)) * 1.5f;
         draw_pack_shape(eye, p, w.x - j, w.y, k * u, w.d - 0.02f, 1, 0.45f * fade);
-        mg_rect(eye, w.x - 6 * k * u + j, w.y - 12 * k * u, 12 * k * u, 12 * k * u, w.d - 0.025f,
-                rgba_alpha(LEAK_C, 0.3f * u * fade));
+        mg_circle(eye, w.x + j, w.y - 6 * k * u, 7 * k * u, w.d - 0.025f, rgba_alpha(LEAK_C, 0.3f * u * fade));
         return;
     }
     if (p->landed) {
@@ -1384,26 +1358,29 @@ static void draw_pack(int eye, const Pack *p)
         if (left < 1.6f && fmodf(S.t, 0.2f) < 0.08f + 0.06f * left / 1.6f)
             return;   /* flickering out */
     }
-    /* shadow, bigger and softer while it's in the air */
+    /* the pool of light it casts on the floor, wider and fainter while it's high */
     float hs = clampf(h / 40, 0, 1);
-    mg_circle(eye, g.x, g.y, (5.5f - 2.5f * hs) * g.k, g.d, RGBA(30, 16, 30, (int)((90 - 50 * hs) * fade)));
+    mg_circle(eye, g.x, g.y, (7.5f + 3.0f * hs) * g.k, g.d, rgba_alpha(pack_color(p), (0.22f - 0.12f * hs) * fade));
+    mg_circle(eye, g.x, g.y, (4.0f + 1.5f * hs) * g.k, g.d - 0.001f, rgba_alpha(MG_WHITE, (0.16f - 0.08f * hs) * fade));
     float sy = 1, lift = 0;
     if (p->landed && p->age < 0.32f) {   /* a little bounce on landing */
         float u = p->age / 0.32f;
         sy = u < 0.25f ? 1 - 0.35f * sinf(u / 0.25f * PI_F) : 1;
         lift = u >= 0.25f ? sinf((u - 0.25f) / 0.75f * PI_F) * 4 * k : 0;
     }
-    float bx = q.x, by = q.y - lift;
+    /* settled lights hover a little above the floor, bobbing */
+    float hover = p->landed ? (5 + 1.6f * sinf(S.t * 2.6f + (float)(p->seed & 63) * 0.2f)) * k : 0;
+    float bx = q.x, by = q.y - lift - hover;
     /* now and then a flicker of the leak: a cyan / magenta double */
     float gl = hashf(p->seed + (u32)(S.t * 12));
     if (!p->landed || gl < 0.05f) {
-        float o = 2.2f;
-        mg_rect(eye, bx - 5 * k - o, by - 12 * k, 10 * k, 11 * k, d + 0.01f, rgba_alpha(LEAK_C, 0.35f * fade));
-        mg_rect(eye, bx - 5 * k + o, by - 12 * k, 10 * k, 11 * k, d + 0.01f, rgba_alpha(LEAK_M, 0.35f * fade));
+        float o = 2.2f, r = 6 * k;
+        mg_circle(eye, bx - o, by - r, r, d + 0.01f, rgba_alpha(LEAK_C, 0.3f * fade));
+        mg_circle(eye, bx + o, by - r, r, d + 0.01f, rgba_alpha(LEAK_M, 0.3f * fade));
     }
     draw_pack_shape(eye, p, bx, by, k, d, sy, fade);
-    /* a golden tin's clock: a ring of ticks round it on the floor */
-    if (p->kind == PK_TIN && p->landed && !S.over) {
+    /* a golden orb's clock: a ring of ticks round it on the floor */
+    if (p->kind == PK_GOLD && p->landed && !S.over) {
         float left = clampf(1 - p->age / p->life, 0, 1);
         int n = 8, lit = (int)ceilf(left * n);
         for (int i = 0; i < lit; i++) {
@@ -2078,11 +2055,11 @@ static void draw_bottom(void)
         if (p->landed && p->life - p->age < 1.6f && fmodf(S.t, 0.2f) < 0.08f)
             continue;
         u32 c = p->landed ? pack_color(p) : rgba_alpha(LEAK_C, 0.7f);
-        if (p->kind == PK_TIN) {
+        if (p->kind == PK_GOLD) {
             gfx_circle(mx, my, 3.5f, c);
             if (p->landed)
                 gfx_rect(mx - 3.5f, my + 5, 7 * clampf(1 - p->age / p->life, 0, 1), 1.5f, MG_GOLD);
-        } else if (p->kind == PK_BOX) {
+        } else if (p->kind == PK_ORB) {
             gfx_rect(mx - 4, my - 3, 8, 6, c);
         } else {
             gfx_rect(mx - 2.5f, my - 3.5f, 5, 7, c);
@@ -2106,7 +2083,7 @@ static void draw_bottom(void)
 
     /* stats */
     float y = 180;
-    snprintf(buf, sizeof(buf), "Packages %d   Points %d", S.got, S.points);
+    snprintf(buf, sizeof(buf), "Lights %d   Points %d", S.got, S.points);
     gfx_text(buf, 12, y, 0.45f, MG_WHITE);
     snprintf(buf, sizeof(buf), "Combo %d (x%d)   Best %d", S.combo, S.mult, S.best_combo);
     gfx_text(buf, 12, y + 18, 0.45f, S.mult > 1 ? MG_GOLD : MG_WHITE);
@@ -2143,14 +2120,14 @@ static const char *verdict(void)
 {
     static char buf[112];
     int sc = score();
-    const char *tail = sc >= 90 ? "Purr-fect." : sc >= 70 ? "Well fed." : sc >= 45 ? "A decent snack."
-                                                                                    : "Still hungry.";
-    snprintf(buf, sizeof(buf), "%d packages (%d on the leap), best combo %d, spotted %d. %s", S.got, S.leap_got,
+    const char *tail = sc >= 90 ? "Purr-fect." : sc >= 70 ? "The room is dark again." : sc >= 45 ? "A fair hunt."
+                                                                                              : "The wall wins.";
+    snprintf(buf, sizeof(buf), "%d lights (%d on the leap), best combo %d, spotted %d. %s", S.got, S.leap_got,
              S.best_combo, S.spotted, tail);
     return buf;
 }
 
-/* ---- bot: chase the best package, leap when the way is clear ------------------------------ */
+/* ---- bot: chase the best light, leap when the way is clear -------------------------------- */
 
 /* No furniture along the way (for a body of radius r). */
 static bool path_clear(float x0, float y0, float x1, float y1, float r)
@@ -2297,20 +2274,20 @@ static void bot(Input *in, float t)
 const MiniGame MG_MISO = {
     .id = "miso",
     .title = "Miso's Hunt",
-    .rules = "Cat food is leaking out of the walls of Aron's\n"
-             "flat! Walk Miso over the packages to grab them,\n"
-             "or leap to cover ground fast. Golden tins hide\n"
-             "in corners and vanish fast; nothing waits long.\n"
+    .rules = "Round motes of light are seeping out of the\n"
+             "walls of Aron's flat! Walk Miso into them to\n"
+             "catch them, or leap to cover ground fast. Golden\n"
+             "orbs hide in corners and fade fast; none wait long.\n"
              "Grab them back to back for a combo multiplier.\n"
              "The angels' beams are watching: if one spots\n"
              "Miso she freezes and the combo resets. 75 s.",
-    .controls = "D-pad / Circle Pad: walk (walk over a\n"
-                "     package to grab it)\n"
+    .controls = "D-pad / Circle Pad: walk (walk into a\n"
+                "     light to catch it)\n"
                 "A or B: leap the way you steer: far and\n"
                 "     fast, grabbing all on the way\n"
                 "Furniture stops a leap. Mind the beams.\n"
                 "START: pause",
-    .cheat = "Nap: beams stop for 5 s, packages stay put",
+    .cheat = "Nap: beams stop for 5 s, lights stay put",
     .music = "miso",
     .start = start,
     .update = update,

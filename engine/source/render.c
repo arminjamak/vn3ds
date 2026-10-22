@@ -7,6 +7,9 @@
  * 3D slider. Behind-screen layers get uncrossed disparity (left eye image to
  * the left), in-front layers crossed disparity. */
 
+/* Below this 3D strength (slider x depth setting) stereo videos play flat. */
+#define STEREO_MIN 0.3f
+
 static inline float eye_sign(int eye)
 {
     return eye == EYE_LEFT ? -1.0f : 1.0f;
@@ -166,7 +169,19 @@ void render_sprite(const Sprite *s, int eye, int rank, float dx, float dy)
         float sx = aw / im->w, sy = ah / im->h;
         for (int k = 0; k < im->nlayers; k++) {
             const ImageLayer *L = &im->layers[k];
-            GfxTex *tex = L->anim == ANIM_STARS ? NULL : texcache_get(L->res);
+            GfxTex *tex = NULL;
+            if (L->anim == ANIM_VIDEO) {
+                /* A stereo clip's own relief (rendered with parallel
+                 * cameras: far things line up, near ones come forward) sits
+                 * on top of the layer's depth; with the 3D low it plays flat. */
+                float mid;
+                if (g->max_shift > 0 && strength / g->max_shift >= STEREO_MIN)
+                    tex = video_tex_stereo(L->res, eye, &mid);
+                if (!tex)
+                    tex = video_tex(L->res);
+            } else if (L->anim != ANIM_STARS) {
+                tex = texcache_get(L->res);
+            }
             if (!tex && L->anim != ANIM_STARS)
                 continue;
             float lshift = eye_sign(eye) * L->depth * strength;
@@ -230,7 +245,31 @@ void render_sprite(const Sprite *s, int eye, int rank, float dx, float dy)
         gfx_rect(r.x + shift, r.y, aw, ah, rgba_alpha(im->color, r.alpha));
         return;
     }
+    if (im->flags & IMG_VIDEO) {
+        /* A stereo video carries its own depth: each eye gets its own view,
+         * not the layer's shift. Its disparity was made for full 3D; other
+         * slider settings move its median plane by (1 - k) of itself (the
+         * relief stays as encoded), and below STEREO_MIN it plays flat. */
+        float k = g->max_shift > 0 ? clampf(strength / g->max_shift, 0, 2) : 0, mid = 0;
+        GfxTex *st = k >= STEREO_MIN ? video_tex_stereo(im->res, eye, &mid) : NULL;
+        if (st) {
+            float s2 = -eye_sign(eye) * (1.0f - k) * mid * aw / 2;
+            gfx_image(st, r.x + s2, r.y, r.w, r.h, r.angle, r.alpha);
+            return;
+        }
+    }
     GfxTex *tex = (im->flags & IMG_VIDEO) ? video_tex(im->res) : texcache_image(im);
+    if (tex && (im->flags & IMG_STEREO) && (eye == EYE_LEFT || eye == EYE_RIGHT) &&
+        g->max_shift > 0 && strength / g->max_shift >= STEREO_MIN) {
+        /* A stereo scene carries its own depth, as a stereo video does:
+         * each eye its own view (texcache_image gave the left one). */
+        int tw, th;
+        gfx_tex_size(tex, &tw, &th);
+        gfx_tex_window(tex, eye == EYE_RIGHT ? tw / 2 : 0, 0, tw / 2, th);
+        gfx_image(tex, r.x, r.y, r.w, r.h, r.angle, r.alpha);
+        gfx_tex_window(tex, 0, 0, tw / 2, th);
+        return;
+    }
     if (tex)
         gfx_image(tex, r.x + shift, r.y, r.w, r.h, r.angle, r.alpha);
 }

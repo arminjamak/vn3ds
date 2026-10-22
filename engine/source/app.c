@@ -1,7 +1,12 @@
 #include "app.h"
+#include "link.h"
+#include "export.h"
 #include "vfs.h"
 #include "minigame.h"
 #include "leaderboard.h"
+#include "fetch.h"
+#include "relay.h"
+#include "update.h"
 #include "net.h"
 #include "video.h"
 #include "bg.h"
@@ -15,6 +20,7 @@
 #include <unistd.h>
 
 bool app_start_receiving;
+bool app_single_game;
 
 Engine E;
 FramePerf FP;
@@ -141,6 +147,8 @@ void app_error(const char *msg)
 
 static void add_game(const char *name, void *ud)
 {
+    if (E.ngames < MAX_GAMES)
+        E.game_app[E.ngames][0] = E.game_app_dir[E.ngames][0] = 0;
     (void)ud;
     if (E.ngames >= MAX_GAMES)
         return;
@@ -154,6 +162,36 @@ static void add_game(const char *name, void *ud)
     E.ngames++;
 }
 
+/* A novel exported as its own app (link.h): a card that starts that app. */
+static void add_app(const char *id, const char *title, const char *app, const char *dir, void *ud)
+{
+    (void)ud;
+    if (E.ngames >= MAX_GAMES)
+        return;
+    for (int i = 0; i < E.ngames; i++)
+        if (!strcmp(E.games[i], id))
+            return;   /* also in the library: that one opens here */
+    int i = E.ngames++;
+    snprintf(E.games[i], sizeof(E.games[0]), "%s", id);
+    snprintf(E.game_titles[i], sizeof(E.game_titles[0]), "%s", title[0] ? title : id);
+    snprintf(E.game_app[i], sizeof(E.game_app[0]), "%s", app);
+    snprintf(E.game_app_dir[i], sizeof(E.game_app_dir[0]), "%s", dir);
+}
+
+/* Starts game i's own app (straight at its resume point with --continue);
+ * where that can't be done, says which app to open. */
+static void start_app(int i, bool resume)
+{
+    if (link_launch(E.game_app[i], resume ? "--continue" : NULL, NULL)) {
+        E.quit = true;
+        return;
+    }
+    char msg[200];
+    snprintf(msg, sizeof(msg), "Open %s from the Homebrew Launcher or your emulator's games: "
+             "it carries on where you left off.", E.game_titles[i]);
+    app_error(msg);
+}
+
 static void unload_game(void)
 {
     if (!E.loaded)
@@ -165,10 +203,13 @@ static void unload_game(void)
     audio_vox_free();
     video_close_all();
     texcache_clear();
+    pys_unload();
     vm_free(&E.vm);
     game_free(&E.game);
     E.loaded = false;
     net_set_live_game(NULL);
+    if (!E.quit)
+        sync_event(SYNC_LIBRARY);   /* back in the library: a computer may take the saves */
 }
 
 /* Opening a game can take a while on a 3DS card (an update to apply, the
@@ -396,6 +437,9 @@ static bool load_game_dir(const char *dir, const char *id)
         return false;
     }
     E.loaded = true;
+    link_note_reading(false);
+    link_register_app();
+    story_game_opened();
     prune_game(dir, &E.game);
     net_set_live_game(id);
     opening_step("Looking for your saves", 0.45f);
@@ -434,6 +478,10 @@ bool app_load_game(int index)
     }
     if (index < 0 || index >= E.ngames)
         return false;
+    if (E.game_app_dir[index][0]) {   /* its own app: to its title screen */
+        start_app(index, false);
+        return false;
+    }
     if (app_rx_busy(E.games[index])) {
         rx_wait_toast(E.game_titles[index]);
         return false;
@@ -456,6 +504,9 @@ static void thumb_path(const char *id, char *out, size_t len)
     snprintf(out, len, "%s/saves/%s/slot%02d.thm", E.root, id, RESUME_SLOT);
 }
 
+/* The saves of home card i: the library's, or a standalone app's own. */
+static const char *card_root(int i) { return E.game_app_dir[i][0] ? E.game_app_dir[i] : E.root; }
+
 static void autosave(bool background)
 {
     if (!E.loaded || E.screen != SCR_GAME)
@@ -464,6 +515,7 @@ static void autosave(bool background)
     if (!save_write_ex(RESUME_SLOT, background))
         return;
     E.has_resume = true;
+    link_note_reading(background);
     if (!thumb_valid)
         return;
     char path[400];
@@ -507,34 +559,149 @@ static void drop_resume(void)
     E.has_resume = false;
 }
 
-/* The home screen's cards: each game's resume snapshot and line. */
-static void home_refresh(void)
+/* A picture of at most THUMB_W x THUMB_H in a .thm file (a resume
+ * snapshot, a story point's or a game's cover.thm), or NULL. */
+GfxTex *app_load_thm(const char *path)
 {
     static u16 buf[THUMB_W * THUMB_H];
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return NULL;
+    char magic[4];
+    u16 wh[2];
+    GfxTex *t = NULL;
+    if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "THM1", 4) && fread(wh, 2, 2, f) == 2 &&
+        wh[0] > 0 && wh[1] > 0 && wh[0] <= THUMB_W && wh[1] <= THUMB_H &&
+        fread(buf, 2, (size_t)wh[0] * wh[1], f) == (size_t)wh[0] * wh[1])
+        t = gfx_tex_from_rgb565(buf, wh[0], wh[1]);
+    fclose(f);
+    return t;
+}
+
+static void cover_path(const char *id, char *out, size_t len)
+{
+    snprintf(out, len, "%s/games/%s/cover.thm", E.root, id);
+}
+
+/* Where game i was left: its resume line and snapshot. */
+static void home_resume(int i)
+{
+    gfx_tex_free(E.game_thumb[i]);
+    save_peek_at(card_root(i), E.games[i], RESUME_SLOT, &E.game_resume[i]);
+    char path[400];
+    snprintf(path, sizeof(path), "%s/saves/%s/slot%02d.thm", card_root(i), E.games[i], RESUME_SLOT);
+    E.game_thumb[i] = app_load_thm(path);
+}
+
+/* Back on the home screen from a game: where that one was left now. */
+void app_home_refresh_loaded(void)
+{
+    for (int i = 0; i < E.ngames && E.loaded; i++)
+        if (!strcmp(E.games[i], E.game.id))
+            home_resume(i);
+}
+
+/* The home screen's cards: each game's cover, resume snapshot and line. */
+static void home_refresh(void)
+{
     for (int i = 0; i < MAX_GAMES; i++) {
         gfx_tex_free(E.game_thumb[i]);
-        E.game_thumb[i] = NULL;
+        gfx_tex_free(E.game_cover[i]);
+        E.game_thumb[i] = E.game_cover[i] = NULL;
     }
     for (int i = 0; i < E.ngames; i++) {
-        save_peek(E.games[i], RESUME_SLOT, &E.game_resume[i]);
+        home_resume(i);
         char path[400];
-        thumb_path(E.games[i], path, sizeof(path));
-        FILE *f = fopen(path, "rb");
-        if (!f)
-            continue;
-        char magic[4];
-        u16 wh[2];
-        if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "THM1", 4) && fread(wh, 2, 2, f) == 2 &&
-            wh[0] == THUMB_W && wh[1] == THUMB_H &&
-            fread(buf, 2, THUMB_W * THUMB_H, f) == THUMB_W * THUMB_H)
-            E.game_thumb[i] = gfx_tex_from_rgb565(buf, THUMB_W, THUMB_H);
-        fclose(f);
+        if (E.game_app_dir[i][0])
+            snprintf(path, sizeof(path), "%s/cover.thm", E.game_app_dir[i]);
+        else
+            cover_path(E.games[i], path, sizeof(path));
+        E.game_cover[i] = app_load_thm(path);
     }
+    home_reset();
+}
+
+/* Quitting a novel inside vn3ds: save, close it and go back to the library
+ * with its card selected (the app itself quits from the library). */
+void app_to_library(void)
+{
+    char id[sizeof(E.games[0])];
+    snprintf(id, sizeof(id), "%s", E.loaded ? E.game.id : "");
+    unload_game();
+    E.overlay = OV_NONE;
+    E.screen = SCR_GAMELIST;
+    for (int i = 0; id[0] && i < E.ngames; i++)
+        if (!strcmp(E.games[i], id)) {
+            E.game_sel = i;
+            home_reset();
+        }
+}
+
+/* ---- Export as app ---------------------------------------------------- */
+
+/* The .3dsx to build apps from: this program's own, else vn3ds.3dsx on the
+ * card (vn3ds started as a CIA, or by an emulator). */
+static const char *export_engine(void)
+{
+    const char *self = platform_self_path();
+    size_t n = strlen(self);
+    struct stat st;
+    if (n > 5 && !strcmp(self + n - 5, ".3dsx") && stat(self, &st) == 0)
+        return self;
+    return link_vn3ds_path();
+}
+
+bool app_can_export(void)
+{
+    return !app_single_game && E.loaded && export_engine() != NULL;
+}
+
+static void export_progress(u64 done, u64 total, void *ud)
+{
+    (void)ud;
+    opening_step("Writing the app", total ? (float)done / (float)total : -1.0f);
+}
+
+void app_export_game(void)
+{
+    const char *engine = export_engine();
+    if (!E.loaded || !engine) {
+        app_toast("vn3ds.3dsx isn't on the SD card to build the app from");
+        return;
+    }
+    char out[300], err[256];
+    snprintf(out, sizeof(out), "%s/3ds/%s.3dsx", platform_sdmc(), E.game.id);
+    const char *title = E.game.title && E.game.title[0] ? E.game.title : E.game.id;
+    E.opening = true;
+    opening_t0 = opening_drawn = platform_ms() - 1000;   /* the card from the start */
+    snprintf(E.opening_title, sizeof(E.opening_title), "%.63s", title);
+    E.opening_step[0] = 0;
+    opening_step("Writing the app", 0);
+    bool ok = export_app(engine, E.game.dir, E.game.id, title, "vn3ds", out, export_progress,
+                         NULL, err, sizeof(err));
+    LOG("export %s -> %s: %s", E.game.id, out, ok ? "done" : err);
+    E.opening = false;
+    E.opening_title[0] = 0;
+    if (!ok) {
+        app_toast(err);
+        return;
+    }
+    char cover[400];
+    snprintf(cover, sizeof(cover), "%s/cover.thm", E.game.dir);
+    link_register(E.game.id, title, out, cover);
+    char msg[200];
+    snprintf(msg, sizeof(msg), "Saved %s.3dsx beside vn3ds: start it from the Homebrew Launcher",
+             E.game.id);
+    app_toast(msg);
 }
 
 void app_play_game(int index)
 {
     bool resume = index >= 0 && index < E.ngames && E.game_resume[index].used;
+    if (index >= 0 && index < E.ngames && E.game_app_dir[index][0]) {
+        start_app(index, resume);
+        return;
+    }
     if (app_load_game(index) && resume && E.loaded)
         app_load_slot(RESUME_SLOT);
 }
@@ -555,11 +722,18 @@ void app_init(const char *game_dir)
     if (game_dir) {
         const char *slash = strrchr(game_dir, '/');
         load_game_dir(game_dir, slash ? slash + 1 : game_dir);
-        if (!app_start_receiving && app_listen_background)
+        if (link_continue && E.loaded && E.has_resume)   /* started from vn3ds's Continue */
+            app_load_slot(RESUME_SLOT);
+        if (!app_start_receiving && app_listen_background && !app_single_game)
             net_start(NET_PORT);
         return;
     }
     app_rescan_games();
+    for (int i = 0; link_from[0] && i < E.ngames; i++)   /* back from that game's own app */
+        if (!strcmp(E.games[i], link_from)) {
+            E.game_sel = i;
+            home_reset();
+        }
     if (app_start_receiving)
         app_receive_open();
     else {
@@ -580,6 +754,7 @@ void app_rescan_games(void)
     E.ngames = 0;
     snprintf(games, sizeof(games), "%s/games", E.root);
     platform_list_dirs(games, add_game, NULL);
+    link_scan_apps(add_app, NULL);
     for (int i = 0; i < E.ngames; i++)
         if (!strcmp(E.games[i], keep))
             E.game_sel = i;
@@ -606,6 +781,10 @@ void app_receive_close(void)
 void app_shutdown(void)
 {
     app_autosave();
+    bg_flush_files();
+    sync_event(SYNC_EXIT);   /* (waits a moment for a computer that should get new saves) */
+    fetch_stop();
+    update_stop();
     lb_shutdown();
     settings_save();
     unload_game();
@@ -616,8 +795,12 @@ void app_to_title(void)
 {
     app_autosave();   /* only does something when leaving a running story */
     talk_end();
+    /* with title music the music channel isn't stopped: the title loop takes
+     * over from the story's music on the beat (eng_play below) */
+    bool title_music = E.game.title_music >= 0;
     for (int ch = 0; ch < CH_COUNT; ch++)
-        audio_stop(ch, 0.5f);
+        if (ch != CH_MUSIC || !title_music)
+            audio_stop(ch, 0.5f);
     mstop.on = false;
     E.music_res = -1;
     stage_clear(&E.stage);
@@ -628,6 +811,8 @@ void app_to_title(void)
     E.screen = SCR_TITLE;
     E.title_sel = 0;
     E.skip = E.skip_toggle = E.auto_mode = E.hide_ui = false;
+    if (title_music)
+        eng_play(CH_MUSIC, E.game.title_music, 1, 1.5f, 0.0f);
 }
 
 static void reset_presentation(void)
@@ -647,6 +832,7 @@ static void reset_presentation(void)
 void app_new_game(void)
 {
     reset_presentation();
+    E.story_step = 0;
     vm_new_game(&E.vm);
     run_vm();
 }
@@ -657,8 +843,23 @@ bool app_new_game_at(const char *label)
     if (addr < 0)
         return false;
     reset_presentation();
+    E.story_step = 0;
     if (!vm_new_game_at(&E.vm, (u32)addr))
         return false;
+    run_vm();
+    return true;
+}
+
+/* The story goes on at `label` (a game's own screen jumped there from an
+ * overlay, see pyscreen.c), as Ren'Py's Jump() ends the interaction. */
+bool app_story_jump(const char *label)
+{
+    s32 addr = game_label(&E.game, label);
+    if (addr < 0 || !E.loaded)
+        return false;
+    E.screen = SCR_GAME;
+    E.vm.pc = (u32)addr;
+    E.vm.state = VM_RUNNING;
     run_vm();
     return true;
 }
@@ -758,7 +959,8 @@ static void preload(const Stage *st, const char *tag)
     if (!(im->flags & IMG_VIDEO))
         texcache_image(im);
     for (int k = 0; k < im->nlayers; k++)
-        texcache_get(im->layers[k].res);
+        if (im->layers[k].anim != ANIM_VIDEO)
+            texcache_get(im->layers[k].res);
 }
 
 static void sprite_key(const char *spec, const char *as_tag, char *key, size_t len)
@@ -778,6 +980,7 @@ void eng_scene(const char *spec, const char *as_tag, s32 zorder, const char *beh
                const s32 *atl, int natl)
 {
     stage_clear(&E.stage);
+    story_scene();
     if (!spec)
         return;
     stage_show(&E.stage, &E.game, spec, as_tag, zorder, behind, atl, natl, false, true);
@@ -991,6 +1194,8 @@ static void run_vm(void)
     switch (vm->state) {
     case VM_SAY: {
         E.say_serial++;
+        if (!(vm->say_flags & SAY_EXTEND))
+            E.story_step++;
         if (E.time - E.autosave_t > 120.0f) {
             u64 t0 = platform_us();
             autosave(true);   /* written by the background thread */
@@ -1118,6 +1323,7 @@ static void game_update(const Input *in, float dt)
         E.skip = E.skip_toggle = false;
 
     stage_update(&E.stage, &E.game, dt);
+    pys_story_update(dt);
     bool click = (in->down & KEY_A_) != 0;
     if (E.tr.active) {
         update_transition(dt, click);
@@ -1297,6 +1503,8 @@ static void rx_track_new_game(void)
     if (!id[0] || game_index(id) >= 0) {
         if (E.rx_new) {
             E.rx_new = false;
+            gfx_tex_free(E.rx_new_cover);
+            E.rx_new_cover = NULL;
             if (E.game_sel >= E.ngames)
                 E.game_sel = E.ngames > 0 ? E.ngames - 1 : 0;
         }
@@ -1306,6 +1514,8 @@ static void rx_track_new_game(void)
         E.rx_new = true;
         snprintf(E.rx_new_id, sizeof(E.rx_new_id), "%s", id);
         snprintf(E.rx_new_title, sizeof(E.rx_new_title), "%s", id);
+        gfx_tex_free(E.rx_new_cover);
+        E.rx_new_cover = NULL;
         looked_up = -10;
     }
     if (E.time - looked_up > 1.0f) {   /* its real title, once game.bin is in */
@@ -1314,6 +1524,11 @@ static void rx_track_new_game(void)
         snprintf(dir, sizeof(dir), "%s/games/%s", E.root, id);
         if (game_peek_title(dir, title, sizeof(title)))
             snprintf(E.rx_new_title, sizeof(E.rx_new_title), "%s", title);
+        if (!E.rx_new_cover) {   /* and its cover, once that is in */
+            char path[400];
+            cover_path(id, path, sizeof(path));
+            E.rx_new_cover = app_load_thm(path);
+        }
     }
 }
 
@@ -1342,6 +1557,16 @@ static void rx_done_toast(void)
 static void rx_update(Input *in)
 {
     net_poll();
+    update_poll();  /* a newer vn3ds release (update.h) */
+    if (sync_poll()) {   /* a computer synced saves: what the screens show may have changed */
+        app_toast("Saves updated from your computer");
+        if (E.loaded) {
+            SlotInfo info;
+            E.has_resume = save_peek(E.game.id, RESUME_SLOT, &info);
+        }
+        home_refresh();
+    }
+    fetch_poll();
     rx_measure();
     /* overnight transfers: stay awake. (The screens stay on: switching the
      * backlights off during a transfer froze vn3ds on a real New 3DS.) */
@@ -1443,25 +1668,7 @@ static void update_frame(const Input *in_real, float dt)
         break;
     }
     case SCR_GAMELIST:
-        if (in->down & KEY_Y_) {
-            app_receive_open();
-            break;
-        }
-        if (app_home_count() == 0) {
-            if (in->down & KEY_START_)
-                E.quit = true;
-            break;
-        }
-        if ((in->down & (KEY_LEFT_ | KEY_UP_)) && E.game_sel > 0)
-            E.game_sel--;
-        if ((in->down & (KEY_RIGHT_ | KEY_DOWN_)) && E.game_sel < app_home_count() - 1)
-            E.game_sel++;
-        if (in->down & KEY_A_)
-            app_play_game(E.game_sel);   /* carry on where you left off */
-        else if (in->down & KEY_X_)
-            app_load_game(E.game_sel);   /* its title screen */
-        if (in->down & KEY_START_)
-            E.quit = true;
+        home_update(in, dt);   /* home.c */
         break;
     case SCR_TITLE:
         if (E.overlay != OV_NONE) {
@@ -1469,7 +1676,7 @@ static void update_frame(const Input *in_real, float dt)
             break;
         }
         {
-            int ids[6], cnt = ui_title_items(ids);
+            int ids[8], cnt = ui_title_items(ids);
             if (in->down & KEY_UP_)
                 E.title_sel = (E.title_sel + cnt - 1) % cnt;
             if (in->down & KEY_DOWN_)
@@ -1479,12 +1686,16 @@ static void update_frame(const Input *in_real, float dt)
             if (in->down & KEY_A_)
                 ui_activate(ids[E.title_sel]);
         }
-        if (in->down & KEY_B_)
-            E.screen = SCR_GAMELIST;
-        if (in->down & KEY_Y_)
+        if ((in->down & KEY_B_) && !app_single_game)
+            app_to_library();
+        if ((in->down & KEY_Y_) && !app_single_game)
             app_receive_open();
-        if (in->down & KEY_START_)
-            E.quit = true;
+        if (in->down & KEY_START_) {
+            if (app_single_game)
+                E.quit = true;
+            else
+                app_to_library();
+        }
         break;
     case SCR_GAME:
         game_update(in, dt);
@@ -1517,6 +1728,8 @@ static void update_frame(const Input *in_real, float dt)
         if (in->down & (KEY_A_ | KEY_START_)) {
             if (E.loaded)
                 app_to_title();
+            else if (app_single_game)
+                E.quit = true;   /* the game didn't open: nothing else to show */
             else
                 E.screen = SCR_GAMELIST;
         }
@@ -1540,6 +1753,8 @@ void app_render(void)
     if (snap_pending) {
         thumb_valid = gfx_snapshot_read(thumb, THUMB_W, THUMB_H);
         snap_pending = false;
+        if (thumb_valid)
+            story_thumb(thumb, THUMB_W, THUMB_H);
     }
     /* keep a snapshot of each new line (or choice) for the home screen. Like the
      * captures below it is drawn before the screens: drawn after the bottom
@@ -1547,6 +1762,7 @@ void app_render(void)
     if (!E.opening && E.screen == SCR_GAME && E.overlay == OV_NONE && E.say_serial != snapped_serial &&
         ((E.vm.state == VM_SAY && E.text_done) || E.vm.state == VM_MENU)) {
         snapped_serial = E.say_serial;
+        story_snapshot();
         gfx_target_snapshot(0x000000FF);
         ui_draw_top(EYE_LEFT);
         snap_pending = true;

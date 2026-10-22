@@ -135,6 +135,7 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
     g->depth_ui = rd_f32(m + 48);
     g->max_shift = rd_f32(m + 52);
     g->title_image = rd_s32(m + 56);
+    g->title_music = s.size >= 64 ? rd_s32(m + 60) : -1;
     if (!g->title)
         g->title = id;
 
@@ -290,6 +291,10 @@ bool game_load(Game *g, const char *dir, const char *id, char *err, size_t errle
     if (find_section(d, g->size, "PORT", &s) && s.size >= 4) {
         g->ported = s.p;
         g->ported_size = s.size;
+    }
+    if (find_section(d, g->size, "PYSC", &s) && s.size > 0) {
+        g->pysc = (const char *)s.p;
+        g->pysc_size = s.size;
     }
     if (find_section(d, g->size, "TALK", &s) && s.size >= 4)
         g->speaking_attr = game_str(g, rd_u32(s.p));

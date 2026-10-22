@@ -29,11 +29,18 @@ jobs:
         run: |
           if [ -n "$SECRET_H" ]; then printf '%s\n' "$SECRET_H" > engine/source/leaderboard_secret.h; fi
       - name: Build vn3ds.3dsx
-        run: make -C engine
+        # the tag is the version vn3ds compares against /latest to update itself
+        run: make -C engine VERSION="$([ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" || echo dev)"
+      - name: Build vn3ds.cia (the HOME Menu app FBI installs)
+        run: |
+          apt-get update -qq && apt-get install -y -qq g++ unzip git curl >/dev/null
+          sh engine/cia/build_cia.sh
       - uses: actions/upload-artifact@v4
         with:
           name: engine
-          path: engine/vn3ds.3dsx
+          path: |
+            engine/vn3ds.3dsx
+            engine/vn3ds.cia
 
   cli:
     needs: engine
@@ -144,6 +151,13 @@ jobs:
           pattern: cli-*
           path: dist
           merge-multiple: true
+      # vn3ds itself: FBI installs the .cia (vn3ds.com's QR code goes to
+      # link.vn3ds.com/vn3ds.cia, always the newest), and vn3ds updates
+      # itself from these two (engine/source/update.h)
+      - uses: actions/download-artifact@v5
+        with:
+          name: engine
+          path: dist
       - name: FFmpeg source (the GPL asks for it next to the binaries)
         run: |
           curl -fsSL -o dist/ffmpeg-9.0.2.tar.xz https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
@@ -159,6 +173,8 @@ jobs:
           macOS (Terminal): `curl -fsSL https://arminjamak.github.io/vn3ds/install.sh | sh -s -- ` then drag your game in and press Enter.
 
           Windows (PowerShell): `& ([scriptblock]::Create([Text.Encoding]::UTF8.GetString((iwr -useb https://arminjamak.github.io/vn3ds/install.ps1).RawContentStream.ToArray()))) ` then drag your game in and press Enter.
+
+          On the 3DS: in FBI, Remote Install > Scan QR Code, and scan the code on vn3ds.com (it installs vn3ds.cia from this release as a HOME Menu app). vn3ds.3dsx is the same app for the Homebrew Launcher. Both update themselves from new releases.
 
           The downloads bundle FFmpeg 9.0.2 (GPL v3); its source is attached (ffmpeg-9.0.2.tar.xz). See THIRD_PARTY_NOTICES.md inside each download.
           EOF

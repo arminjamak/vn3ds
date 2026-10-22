@@ -11,7 +11,22 @@
  *              [--perf]   (prints the engine's timing lines, "[perf] ...")
  *              [--hud-at N]   (presses a game's overlay button at line N, see minigame.h)
  *              [--no-draw]   (draws only for screenshots: fast)
+ *              [--app]   (a standalone app's single-game mode, as vn3ds-port --app
+ *              builds it: prints the title menu, which has no game list)
+ *              [--sdmc dir --self app.3dsx]   (app linking, see link.h: the
+ *              card's root and this app's own file; --open-vn3ds presses the
+ *              title menu's "Open vn3ds"; --continue as vn3ds passes it;
+ *              --export presses "Export as app": <sdmc>/3ds/<id>.3dsx from --self)
+ *   vn3ds-host --home ... [--sdmc dir] [--from id] [--home-play]
+ *              (--home-play presses Play on the selected card; a standalone
+ *              app's card prints the jump to it)
+ *   vn3ds-host --home --root dir --out frames [--listen] [--download-url http://...]
+ *              (the home screen; with an empty library and --download-url it
+ *              presses A on the Snapshot offer and films the download)
  *              [--music-wav out.wav]   (writes the music channel's mix)
+ *   vn3ds-host --home-tour --root dir --out frames
+ *              (the home screen's views: carousel, drag, receive, the grid
+ *              by double tap, the story timeline by long press, see home.c)
  *   vn3ds-host --decode-audio in.ogg [out.wav] [--loops N]
  *              (decodes through the 3DS streaming code, prints the decode cost)
  *
@@ -26,11 +41,15 @@
  */
 
 #include "../source/app.h"
+#include "../source/fetch.h"
 #include "../source/leaderboard.h"
 #include "../source/minigame.h"
 #include "host.h"
 #include "../source/net.h"
+#include "../source/qr.h"
+#include "../source/update.h"
 #include "../source/bg.h"
+#include "../source/link.h"
 #include <unistd.h>
 
 #include <dirent.h>
@@ -95,6 +114,25 @@ static void record_frame(FILE *f)
 }
 
 const char *platform_root(void) { return root_dir; }
+
+/* --sdmc dir: the SD card's root for app linking (link.c); --self path: this
+ * run's own .3dsx. platform_launch prints the jump instead of making it. */
+static char sdmc_dir[512] = "host_sdmc";
+static bool open_vn3ds_test, home_play, export_test;
+static char self_path[512] = "";
+const char *platform_sdmc(void) { return sdmc_dir; }
+const char *platform_self_path(void) { return self_path; }
+bool platform_launch(int argc, const char **argv)
+{
+    if (argc < 1 || !argv[0][0])
+        return false;   /* (an app an emulator started: no file to start) */
+    printf("    [launch]");
+    for (int i = 0; i < argc; i++)
+        printf(" %s", argv[i]);
+    printf("\n");
+    fflush(stdout);
+    return true;
+}
 bool platform_mkdir(const char *path) { return mkdir(path, 0755) == 0; }
 u32 platform_time(void) { return (u32)time(NULL); }
 u64 platform_ms(void)
@@ -228,6 +266,107 @@ static void dump(const char *dir, int index, const char *tag)
     snprintf(path, sizeof(path), "%s/%04d_%s.png", dir, index, tag);
     write_png(path, img, W, H);
     free(img);
+}
+
+/* --home-tour: the home screen's views, with touches and keys as a player
+ * would use them (see home.c), one picture at each step. */
+static void home_frames(int n, u32 down, u32 held, int tx, int ty)
+{
+    for (int f = 0; f < n; f++) {
+        Input in;
+        memset(&in, 0, sizeof(in));
+        in.down = f == 0 ? down : 0;
+        in.held = held | (f == 0 ? down : 0);
+        in.tx = tx;
+        in.ty = ty;
+        u64 t0 = platform_us();
+        app_update(&in, 1.0f / 60.0f);
+        static u64 worst;
+        u64 us = platform_us() - t0;
+        if (us > worst) {
+            worst = us;
+            printf("home: slowest update so far %.2f ms (frame %u)\n", us / 1000.0, (unsigned)E.frame);
+        }
+        app_render();   /* (pictures load as they are drawn) */
+    }
+}
+
+static void home_shot(const char *out, int *k, const char *tag)
+{
+    app_render();
+    dump(out, (*k)++, tag);
+}
+
+static void home_tap(int x, int y)
+{
+    home_frames(1, KEY_TOUCH_, KEY_TOUCH_, x, y);
+    home_frames(2, 0, KEY_TOUCH_, x, y);
+    home_frames(1, 0, 0, 0, 0);
+}
+
+static void run_home_tour(const char *out)
+{
+    int k = 0;
+    home_frames(40, 0, 0, 0, 0);
+    home_shot(out, &k, "carousel");
+    /* drag the bottom carousel to the next game */
+    home_frames(1, KEY_TOUCH_, KEY_TOUCH_, 250, 80);
+    for (int x = 250; x > 120; x -= 13)
+        home_frames(1, 0, KEY_TOUCH_, x, 80);
+    home_shot(out, &k, "carousel-drag");
+    home_frames(1, 0, 0, 0, 0);
+    home_frames(30, 0, 0, 0, 0);
+    home_shot(out, &k, "carousel-next");
+    home_frames(1, KEY_LEFT_, 0, 0, 0);
+    home_frames(30, 0, 0, 0, 0);
+    /* Y: the receive screen over it */
+    home_frames(1, KEY_Y_, 0, 0, 0);
+    home_frames(20, 0, 0, 0, 0);
+    home_shot(out, &k, "receive");
+    home_frames(1, KEY_B_, 0, 0, 0);
+    home_frames(20, 0, 0, 0, 0);
+    /* double tap: the library grid */
+    home_tap(160, 80);
+    home_frames(6, 0, 0, 0, 0);
+    home_tap(162, 82);
+    home_frames(30, 0, 0, 0, 0);
+    home_shot(out, &k, "grid");
+    home_frames(1, KEY_RIGHT_, 0, 0, 0);
+    home_frames(4, 0, 0, 0, 0);
+    home_shot(out, &k, "grid-sliding-right");
+    home_frames(30, 0, 0, 0, 0);
+    home_shot(out, &k, "grid-right");
+    home_frames(1, KEY_DOWN_, 0, 0, 0);
+    home_frames(4, 0, 0, 0, 0);
+    home_shot(out, &k, "grid-sliding-down");
+    home_frames(30, 0, 0, 0, 0);
+    home_shot(out, &k, "grid-down");
+    home_tap(264, 30);   /* a tile on the first row */
+    home_frames(30, 0, 0, 0, 0);
+    home_shot(out, &k, "grid-tapped");
+    home_frames(1, KEY_LEFT_, 0, 0, 0);
+    home_frames(1, KEY_LEFT_, 0, 0, 0);
+    home_frames(1, KEY_B_, 0, 0, 0);
+    home_frames(30, 0, 0, 0, 0);
+    /* long press: the story timeline */
+    home_frames(1, KEY_TOUCH_, KEY_TOUCH_, 160, 80);
+    home_frames(32, 0, KEY_TOUCH_, 160, 80);
+    home_frames(1, 0, 0, 0, 0);
+    home_frames(28, 0, 0, 0, 0);
+    home_shot(out, &k, "timeline-growing");
+    home_frames(80, 0, 0, 0, 0);
+    home_shot(out, &k, "timeline");
+    for (int i = 0; i < 3; i++)
+        home_frames(8, KEY_UP_, 0, 0, 0);
+    home_frames(3, 0, 0, 0, 0);
+    home_shot(out, &k, "timeline-moving");
+    home_frames(40, 0, 0, 0, 0);
+    home_shot(out, &k, "timeline-back3");
+    home_frames(1, KEY_A_, 0, 0, 0);
+    for (int f = 0; f < 240 && E.screen == SCR_GAME && !(E.vm.state == VM_SAY && E.text_done); f++)
+        home_frames(1, 0, 0, 0, 0);
+    printf("home: A on a story point -> screen %d, line \"%s\"\n", (int)E.screen, E.vm.say_text);
+    home_shot(out, &k, "timeline-started");
 }
 
 /* --ui-tour: one picture of each screen and panel, to check the UI's look. */
@@ -443,13 +582,26 @@ int main(int argc, char **argv)
 {
     const char *game = NULL, *out = NULL, *choices = "", *label = NULL;
     bool receive = false;
+    int serve_s = 0;   /* --receive --serve N: keep answering (transfers, save syncs) for N s */
+    /* --load N: start from save slot N; --save-at LINE:SLOT: save there and carry on */
+    int load_slot = -1, save_at_line = 0, save_at_slot = 1;
     int every = 0, max_lines = 0, hud_at = 0;
     bool talk_frames = false;
     u32 talk_serial = 0;
     setvbuf(stdout, NULL, _IOLBF, 0);
-    bool test_save = false, pace = false, home = false, ui_tour = false;
+    bool test_save = false, pace = false, home = false, home_tour = false, ui_tour = false;
     FILE *rec = NULL;
     const char *stop_label = NULL, *minigame = NULL, *board = NULL;
+    if (argc >= 3 && !strcmp(argv[1], "--qr")) {   /* --qr TEXT [MASK]: the module grid, 1 = dark */
+        static u8 mods[QR_MAX_SIZE * QR_MAX_SIZE];
+        int size = qr_encode(argv[2], argc >= 4 ? atoi(argv[3]) : -1, mods);
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++)
+                putchar('0' + mods[y * size + x]);
+            putchar('\n');
+        }
+        return size ? 0 : 1;
+    }
     if (argc >= 3 && !strcmp(argv[1], "--decode-audio")) {
         const char *wav = argc >= 4 && strncmp(argv[3], "--", 2) ? argv[3] : NULL;
         int loops = 1;
@@ -475,6 +627,12 @@ int main(int argc, char **argv)
             label = argv[++i];
         else if (!strcmp(argv[i], "--receive"))
             receive = true;
+        else if (!strcmp(argv[i], "--serve") && i + 1 < argc)
+            serve_s = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--load") && i + 1 < argc)
+            load_slot = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--save-at") && i + 1 < argc)
+            sscanf(argv[++i], "%d:%d", &save_at_line, &save_at_slot);
         else if (!strcmp(argv[i], "--talk-frames"))
             talk_frames = true;
         else if (!strcmp(argv[i], "--test-save"))
@@ -491,6 +649,12 @@ int main(int argc, char **argv)
             app_listen_background = true;
         else if (!strcmp(argv[i], "--home"))
             home = true;
+        else if (!strcmp(argv[i], "--home-tour"))
+            home = home_tour = true;
+        else if (!strcmp(argv[i], "--version-as") && i + 1 < argc)   /* (update.c's tests) */
+            update_version_override = argv[++i];
+        else if (!strcmp(argv[i], "--download-url") && i + 1 < argc)
+            fetch_url_override = argv[++i];
         else if (!strcmp(argv[i], "--ui-tour"))
             ui_tour = true;
         else if (!strcmp(argv[i], "--hud-at") && i + 1 < argc)
@@ -499,6 +663,22 @@ int main(int argc, char **argv)
             host_perf = true;
         else if (!strcmp(argv[i], "--no-draw"))
             no_draw = true;
+        else if (!strcmp(argv[i], "--app"))
+            app_single_game = true;
+        else if (!strcmp(argv[i], "--sdmc") && i + 1 < argc)
+            snprintf(sdmc_dir, sizeof(sdmc_dir), "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--self") && i + 1 < argc)
+            snprintf(self_path, sizeof(self_path), "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--continue"))
+            link_continue = true;
+        else if (!strcmp(argv[i], "--open-vn3ds"))
+            open_vn3ds_test = true;
+        else if (!strcmp(argv[i], "--home-play"))
+            home_play = true;
+        else if (!strcmp(argv[i], "--export"))
+            export_test = true;
+        else if (!strcmp(argv[i], "--from") && i + 1 < argc)
+            snprintf(link_from, sizeof(link_from), "%s", argv[++i]);
         else if (!strcmp(argv[i], "--music-wav") && i + 1 < argc) {
             extern const char *host_music_wav_path;
             host_music_wav_path = argv[++i];
@@ -534,11 +714,18 @@ int main(int argc, char **argv)
         Input none;
         memset(&none, 0, sizeof(none));
         int after = 0;   /* a few frames after completion, so the app rescans */
-        for (int frame = 0; frame < 60 * 600 && (NET.completed == 0 || after++ < 5); frame++) {
+        u64 serve_until = platform_ms() + (u64)serve_s * 1000;
+        for (int frame = 0; serve_s ? platform_ms() < serve_until
+                                    : frame < 60 * 600 && (NET.completed == 0 || after++ < 5);
+             frame++) {
             app_update(&none, 1.0f / 60.0f);
             if (frame % 2 == 0)
                 app_render();
             usleep(4000);
+        }
+        if (serve_s) {
+            printf("save syncs: %u\n", (unsigned)sync_sessions());
+            return 0;
         }
         printf("%s\nfiles %u, refused %u, %.1f MB, games now: %d\n", NET.message, (unsigned)NET.files_done,
                (unsigned)NET.refused, NET.bytes_done / 1048576.0, E.ngames);
@@ -558,6 +745,11 @@ int main(int argc, char **argv)
         E.screen = SCR_GAMELIST;
         Input none;
         memset(&none, 0, sizeof(none));
+        if (home_tour) {
+            if (out && E.ngames > 0)
+                run_home_tour(out);
+            return 0;
+        }
         for (int k = 0; k < E.ngames && k < 4; k++) {
             E.game_sel = k;
             for (int f = 0; f < 40; f++)
@@ -566,7 +758,32 @@ int main(int argc, char **argv)
             if (out)
                 dump(out, k, "home");
         }
-        if (app_listen_background && out) {
+        if (home_play && E.ngames > 0) {
+            for (int i = 0; i < E.ngames; i++)
+                if (!strcmp(E.games[i], link_from[0] ? link_from : E.games[0]))
+                    E.game_sel = i;
+            printf("    [home] %d cards; playing %s%s\n", E.ngames, E.games[E.game_sel],
+                   E.game_app[E.game_sel][0] ? " (its own app)" : "");
+            app_play_game(E.game_sel);
+            printf("    [home] %s\n", E.quit ? "quits to start it" : E.screen == SCR_ERROR ? E.error : "opened here");
+            return 0;
+        }
+        bool download = E.ngames == 0 && fetch_url_override;
+        if (E.ngames == 0 && out) {   /* the first-run offer */
+            for (int f = 0; f < 40; f++)
+                app_update(&none, 1.0f / 60.0f);
+            app_render();
+            dump(out, 0, "home-empty");
+        }
+        if (download) {
+            Input press = none;
+            press.down = KEY_A_;
+            app_update(&press, 1.0f / 60.0f);
+            app_render();
+            if (out)
+                dump(out, 1, "home-connecting");
+        }
+        if ((app_listen_background || download) && out) {
             /* --listen: stay on the home screen in real time while a transfer
              * comes in, one frame a second, until two seconds after it ends */
             int shot = 0, after = -1;
@@ -587,6 +804,12 @@ int main(int argc, char **argv)
                 }
                 if (E.rx_new && E.game_sel != E.ngames)
                     E.game_sel = E.ngames;   /* look at the arriving card */
+                if (download && FETCH.failed) {
+                    printf("home: download failed: %s\n", FETCH.error);
+                    app_render();
+                    dump(out, shot++, "home-failed");
+                    break;
+                }
                 if (NET.completed && after < 0)
                     after = 0;
                 if (after >= 0)
@@ -621,6 +844,26 @@ int main(int argc, char **argv)
         return 1;
     }
     printf("== %s ==\n", E.game.title);
+    if (export_test) {   /* the title menu's "Export as app" (needs --sdmc and --self) */
+        printf("    [export] %s\n", app_can_export() ? "offered" : "not offered");
+        app_export_game();
+        printf("    [export] %s\n", E.toast);
+        return 0;
+    }
+    if (app_single_game) {
+        int ids[8], n = ui_title_items(ids);
+        printf("    [app] title menu:");
+        for (int i = 0; i < n; i++)
+            printf(" %d", ids[i]);
+        printf("  (screen %s, saves in %s/saves/%s)\n",
+               E.screen == SCR_TITLE ? "title" : E.screen == SCR_GAME ? "game" : "other",
+               platform_root(), E.game.id);
+        if (open_vn3ds_test) {
+            ui_activate(3);   /* B_TITLE_GAMES: "Open vn3ds" in a standalone app */
+            printf("    [app] open vn3ds: %s\n", E.quit ? "quits to start it" : E.toast);
+            return 0;
+        }
+    }
     if (ui_tour)
         return run_ui_tour(out);
     if (board)
@@ -668,6 +911,22 @@ int main(int argc, char **argv)
             }
             if (frame == title_frames) {
                 started = true;
+                if (load_slot >= 0) {
+                    bool ok = app_load_slot(load_slot);
+                    printf("    [load] slot %d: %s\n", load_slot, ok ? "ok" : "FAILED");
+                    if (!ok) {
+                        failed = true;
+                        break;
+                    }
+                    printf("    [load] on screen:");
+                    for (int k = 0; k < E.stage.n; k++) {
+                        s32 im = E.stage.s[k].image;
+                        printf("%s%s", k ? ", " : " ", im >= 0 ? E.game.images[im].name : "?");
+                    }
+                    printf("\n    [load] music: res %d (%s)\n", (int)E.music_res,
+                           E.music_res >= 0 ? E.game.res[E.music_res] : "none");
+                    continue;
+                }
                 if (label) {
                     if (!app_new_game_at(label)) {
                         printf("ERROR: no label '%s'\n", label);
@@ -700,16 +959,29 @@ int main(int argc, char **argv)
                         printf("    [hud] overlay hidden\n");
                     hud_seen = h;
                 }
+                /* the game's own overlay screens (pyscreen.c) */
+                static char py_seen[48];
+                const char *pl = pys_hud_label();
+                if (strcmp(pl ? pl : "", py_seen)) {
+                    if (pl)
+                        printf("    [hud] screen button shown: \"%s\"\n", pl);
+                    else
+                        printf("    [hud] screen button hidden\n");
+                    snprintf(py_seen, sizeof(py_seen), "%s", pl ? pl : "");
+                }
             }
             if (vm->state == VM_SAY && E.text_done) {
                 if (wait == 0) {
                     lines++;
                     if (max_lines && lines > max_lines)
                         break;
-                    if (hud_at && lines >= hud_at && mg_hud_entry() >= 0) {
+                    if (hud_at && lines >= hud_at && (mg_hud_entry() >= 0 || pys_hud_label())) {
                         hud_at = 0;
                         printf("    [hud] pressed the overlay button\n");
-                        mg_hud_open();
+                        if (mg_hud_entry() >= 0)
+                            mg_hud_open();
+                        else
+                            pys_hud_open();
                         continue;
                     }
                     if (E.say_serial != last_serial) {
@@ -724,6 +996,9 @@ int main(int argc, char **argv)
                         app_render();
                         dump(out, shots++, "say");
                     }
+                    if (save_at_line && lines == save_at_line)
+                        printf("    [save] slot %d: %s\n", save_at_slot,
+                               save_write(save_at_slot) ? "ok" : "FAILED");
                     if (test_save && saved_at < 0 && lines == 3) {
                         saved_at = lines;
                         snprintf(saved_text, sizeof(saved_text), "%s", vm->say_text);
@@ -791,6 +1066,10 @@ int main(int argc, char **argv)
                 }
             } else if (vm->state == VM_PAUSE && E.pause_left < 0) {
                 if (++wait > (pace ? 90 : 10)) {
+                    if (out) {   /* what waits for the click (a text message, ...) */
+                        app_render();
+                        dump(out, shots++, "click");
+                    }
                     in.down = KEY_A_;
                     wait = 0;
                 }

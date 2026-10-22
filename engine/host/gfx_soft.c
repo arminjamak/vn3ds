@@ -175,6 +175,12 @@ static void untile(GfxTex *t, const u8 *pix, int fmt, int tw, int th)
     (void)th;
 }
 
+void gfx_tex_size(GfxTex *t, int *w, int *h)
+{
+    *w = t ? t->w : 0;
+    *h = t ? t->h : 0;
+}
+
 GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
 {
     return gfx_tex_create(tw, th, fmt, iw, ih);

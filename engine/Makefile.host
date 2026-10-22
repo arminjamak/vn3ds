@@ -27,9 +27,18 @@ AUDIO_LIBS += $(shell pkg-config --libs vorbisfile)
 endif
 TP_CFLAGS := -O2 -g -std=gnu11 -w
 
-$(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h $(OPUS_LIB)
+# pocketpy (the screen runtime's Python, see source/pyscreen.c)
+PY_OBJ := build-host/tp/pocketpy.o
+PY_CFLAGS := -Ithird_party/pocketpy
+
+$(OUT): $(SRC) $(wildcard source/*.h) host/font_data.h host/host.h $(OPUS_LIB) $(PY_OBJ)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(AUDIO_CFLAGS) -o $@ $(SRC) $(AUDIO_LIBS) -lz -lm -lpthread
+	$(CC) $(CFLAGS) $(AUDIO_CFLAGS) $(PY_CFLAGS) -o $@ $(SRC) $(PY_OBJ) $(AUDIO_LIBS) -lz -lm -lpthread
+
+$(PY_OBJ): third_party/pocketpy/pocketpy.c third_party/pocketpy/pocketpy.h
+	@mkdir -p $(dir $@)
+	@echo "cc pocketpy.c"
+	@$(CC) $(TP_CFLAGS) $(PY_CFLAGS) -c $< -o $@
 
 build-host/tp/opus/%.o: third_party/opus/%.c
 	@mkdir -p $(dir $@)

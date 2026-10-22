@@ -410,14 +410,14 @@ class Node:
         return f"{type(self).__name__}({fields})"
 
 
-class Label(Node): pass          # name, block
+class Label(Node): pass          # name, block, params (source of "(...)" or None)
 class Say(Node): pass            # who (str|None), who_is_string, attrs, what, flags, with_
 class Show(Node): pass           # spec, expression, at, as_, behind, zorder, with_, atl
 class Scene(Node): pass          # same as Show, spec may be None
 class Hide(Node): pass           # tag, with_
 class With(Node): pass           # expr
 class Jump(Node): pass           # target, expression
-class Call(Node): pass           # target, expression
+class Call(Node): pass           # target, expression, args (source of "(...)" or None)
 class Return(Node): pass         # expr
 class Menu(Node): pass           # label, caption (Say|None), items[(text, cond, block)]
 class If(Node): pass             # branches[(cond, block)], else_
@@ -436,7 +436,7 @@ class Init(Node): pass           # priority, block
 class Unsupported(Node): pass    # what
 class Screen(Node): pass         # name, items (see screen_items), background, body (lines)
 class CallScreen(Node): pass     # name, with_, args (source of "(...)" or None)
-class ShowScreen(Node): pass     # name, hide (show screen / hide screen)
+class ShowScreen(Node): pass     # name, hide, args (source of "(...)" or None), with_
 
 
 # --------------------------------------------------------------------------
@@ -487,13 +487,14 @@ def parse_statement(line):
         name = lex.label_name()
         if name is None:
             raise line.error("expected label name")
+        params = None
         if lex.peek("("):
-            lex.balanced()
+            params = lex.balanced()
         lex.keyword("hide")
         if not lex.lit(":"):
             raise line.error("expected ':' after label")
         lex.expect_eol()
-        return Label(line, name=name, block=parse_block(line.block))
+        return Label(line, name=name, block=parse_block(line.block), params=params)
 
     if w == "init":
         priority = 0
@@ -544,12 +545,13 @@ def parse_statement(line):
         else:
             target = lex.label_name()
             expression = False
+        args = None
         if lex.peek("("):
-            lex.balanced()
+            args = lex.balanced()
         if lex.keyword("from"):
             lex.label_name()
         lex.expect_eol()
-        return Call(line, target=target, expression=expression)
+        return Call(line, target=target, expression=expression, args=args)
 
     if w == "return":
         r = lex.rest()
@@ -558,8 +560,18 @@ def parse_statement(line):
     if w in ("scene", "show"):
         if w == "show" and (lex.keyword("screen")):
             name = lex.word()
-            lex.rest()
-            return ShowScreen(line, name=name, hide=False) if name else \
+            args = lex.balanced() if name and lex.peek("(") else None
+            with_ = None
+            while name and not lex.eol():
+                if lex.keyword("with"):
+                    with_ = lex.simple_expression()
+                elif lex.keyword("nopredict"):
+                    pass
+                elif lex.keyword("onlayer") or lex.keyword("zorder") or lex.keyword("as"):
+                    lex.simple_expression()
+                else:
+                    lex.rest()
+            return ShowScreen(line, name=name, hide=False, args=args, with_=with_) if name else \
                 Unsupported(line, what="show screen")
         if w == "show" and lex.keyword("layer"):
             return Unsupported(line, what="show layer")

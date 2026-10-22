@@ -1,20 +1,25 @@
-/* The download page: the one-command converter for Mac and Windows. */
-#define VN3DS_SITE "arminjamak.github.io/vn3ds"
+/* The website: the one-command converter for Mac and Windows, and where to
+ * find games. */
+#define VN3DS_SITE "vn3ds.com"
 
 #include "app.h"
+#include "link.h"
+#include "fetch.h"
 #include "leaderboard.h"
 #include "minigame.h"
 #include "net.h"
+#include "qr.h"
+#include "relay.h"
 
 #include <time.h>
 
 enum {
     B_TITLE_START = 1, B_TITLE_LOAD = 2, B_TITLE_GAMES = 3, B_TITLE_QUIT = 4, B_TITLE_MINI = 5,
-    B_TITLE_CONTINUE = 6, B_HOME_PLAY = 50, B_HOME_PREV, B_HOME_NEXT, B_HOME_TITLE,
+    B_TITLE_CONTINUE = 6, B_TITLE_EXPORT = 7, B_HOME_PLAY = 50, B_HOME_PREV, B_HOME_NEXT, B_HOME_TITLE, B_HOME_DOWNLOAD,
     B_MG = 60, B_MG_BACK = 90, B_MG_BOARD = 91,
-    B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU, B_HUD,
+    B_LOG = 10, B_AUTO, B_SKIP, B_SAVE, B_LOAD, B_MENU, B_HUD, B_PYHUD,
     B_BACK = 20, B_PAGE_PREV, B_PAGE_NEXT, B_LOG_UP, B_LOG_DOWN,
-    B_TO_TITLE = 30,
+    B_TO_TITLE = 30, B_OPEN_VN3DS = 31,
     B_RECEIVE = 40, B_RECEIVE_DONE,
     B_CHOICE = 100, B_SLOT = 200, B_PREF_DEC = 300, B_PREF_INC = 320, B_GAME = 400,
 };
@@ -236,6 +241,10 @@ static int list_window(int sel, int count, int visible)
     return first < 0 ? 0 : first;
 }
 
+/* The pause menu has "Open vn3ds" beside "Return to title" in a standalone
+ * app with vn3ds on the card (selection 8, right of row 6). */
+static bool prefs_has_vn3ds(void) { return app_single_game; }
+
 static const char *PREF_NAMES[NUM_PREFS] = {
     "Text speed", "Auto-forward", "3D depth", "Textbox", "Music", "Sound",
     "Return to title", "Close",
@@ -265,20 +274,12 @@ int ui_title_items(int *ids)
     ids[n++] = B_TITLE_LOAD;
     if (E.loaded && E.game.nminigames > 0)
         ids[n++] = B_TITLE_MINI;
-    ids[n++] = B_TITLE_GAMES;
-    ids[n++] = B_TITLE_QUIT;
+    if (app_single_game)   /* a standalone app: "Open vn3ds" (or where to find it) */
+        ids[n++] = B_TITLE_GAMES;
+    if (app_can_export())   /* in vn3ds: the game as an app of its own */
+        ids[n++] = B_TITLE_EXPORT;
+    ids[n++] = B_TITLE_QUIT;   /* in vn3ds: back to the library */
     return n;
-}
-
-/* The game shown on home card `i` (a new one may still be arriving). */
-static const char *home_title(int i)
-{
-    return i < E.ngames ? E.game_titles[i] : E.rx_new_title;
-}
-
-static bool home_arriving(int i)
-{
-    return i >= E.ngames ? E.rx_new : app_rx_busy(E.games[i]);
 }
 
 int ui_buttons(Button *b, int max)
@@ -307,40 +308,20 @@ int ui_buttons(Button *b, int max)
         break;
     case SCR_MINIGAME:   /* minigame.c handles its own touch areas */
         break;
-    case SCR_GAMELIST: {
-        int count = app_home_count();
-        if (count > 0) {
-            static char play[48];
-            int sel = E.game_sel;
-            bool arriving = home_arriving(sel);
-            bool resume = sel < E.ngames && E.game_resume[sel].used;
-            if (arriving)
-                snprintf(play, sizeof(play), "Arriving  %d%%", (int)(app_rx_progress() * 100));
-            else
-                snprintf(play, sizeof(play), resume ? "A  Continue" : "A  Play");
-            n = add(b, n, max, 70, 84, 180, 48, play, B_HOME_PLAY);
-            b[n - 1].hot = !arriving;
-            b[n - 1].disabled = arriving;
-            n = add(b, n, max, 14, 90, 48, 36, "<", B_HOME_PREV);
-            b[n - 1].disabled = sel == 0;
-            n = add(b, n, max, 258, 90, 48, 36, ">", B_HOME_NEXT);
-            b[n - 1].disabled = sel >= count - 1;
-            n = add(b, n, max, 10, 200, 146, 34, "X  Title screen", B_HOME_TITLE);
-            b[n - 1].disabled = arriving;
-        }
-        n = add(b, n, max, 164, 200, 146, 34, "Y  Receive", B_RECEIVE);
+    case SCR_GAMELIST:   /* home.c handles its own touches */
         break;
-    }
     case SCR_TITLE:
         if (E.overlay == OV_LOAD)
             return slot_buttons(b, n, max);
         {
-            int ids[6], cnt = ui_title_items(ids);
+            int ids[8], cnt = ui_title_items(ids);
             float step = cnt > 5 ? 30 : cnt > 4 ? 36 : 44;
             for (int i = 0; i < cnt; i++) {
                 const char *label = ids[i] == B_TITLE_CONTINUE ? "Continue" : ids[i] == B_TITLE_START ? "Start" : ids[i] == B_TITLE_LOAD ? "Load"
                                   : ids[i] == B_TITLE_MINI ? "Minigames" : ids[i] == B_TITLE_GAMES
-                                  ? "Game list" : "Quit";
+                                  ? (app_single_game ? "Open vn3ds" : "Game list")
+                                  : ids[i] == B_TITLE_EXPORT ? "Export as app"
+                                  : app_single_game ? "Quit" : "Library";
                 n = add(b, n, max, 60, 32 + i * step, 200, step - 6, label, ids[i]);
                 b[n - 1].hot = i == E.title_sel;
             }
@@ -374,6 +355,13 @@ int ui_buttons(Button *b, int max)
                     const char *label = mg_hud_label();
                     float w = gfx_text_width(label, 0.45f) + 28;
                     n = add(b, n, max, BOT_W - 6 - w, 28, w, 28, label, B_HUD);
+                } else {
+                    /* the game's own overlay screens (a phone, ...) */
+                    const char *label = pys_hud_label();
+                    if (label) {
+                        float w = fminf(gfx_text_width(label, 0.45f) + 28, 200);
+                        n = add(b, n, max, BOT_W - 6 - w, 28, w, 28, label, B_PYHUD);
+                    }
                 }
             }
             break;
@@ -390,8 +378,15 @@ int ui_buttons(Button *b, int max)
                 n = add(b, n, max, 222, 26 + r * 26, 40, 24, "-", B_PREF_DEC + r);
                 n = add(b, n, max, 270, 26 + r * 26, 40, 24, "+", B_PREF_INC + r);
             }
-            n = add(b, n, max, 10, 186, 300, 24, PREF_NAMES[6], B_TO_TITLE);
-            b[n - 1].hot = E.prefs_sel == 6;
+            if (prefs_has_vn3ds()) {
+                n = add(b, n, max, 10, 186, 146, 24, PREF_NAMES[6], B_TO_TITLE);
+                b[n - 1].hot = E.prefs_sel == 6;
+                n = add(b, n, max, 164, 186, 146, 24, "Open vn3ds", B_OPEN_VN3DS);
+                b[n - 1].hot = E.prefs_sel == 8;
+            } else {
+                n = add(b, n, max, 10, 186, 300, 24, PREF_NAMES[6], B_TO_TITLE);
+                b[n - 1].hot = E.prefs_sel == 6;
+            }
             n = add(b, n, max, 10, 212, 300, 24, PREF_NAMES[7], B_BACK);
             b[n - 1].hot = E.prefs_sel == 7;
             break;
@@ -429,6 +424,22 @@ static void pref_change(int row, int dir)
         audio_set_volume(CH_VOICE, s->sound_vol);
         break;
     }
+}
+
+/* A standalone app's way back to vn3ds (link.h): save, note where we are,
+ * start vn3ds at this game's card. */
+static void open_vn3ds(void)
+{
+    app_autosave();
+    link_note_reading(false);
+    const char *vn3ds = link_vn3ds_path();
+    if (vn3ds && link_launch(vn3ds, "--from", E.game.id)) {
+        settings_save();
+        E.quit = true;
+        return;
+    }
+    app_toast("Saved. Open vn3ds from the Homebrew Launcher or your emulator's games: "
+              "it knows where you are");
 }
 
 static void close_overlay(void)
@@ -490,13 +501,24 @@ void ui_activate(int id)
     case B_TITLE_START: app_new_game(); break;
     case B_TITLE_LOAD: E.slot_page = 0; open_slots(OV_LOAD); break;
     case B_TITLE_GAMES:   /* always available: the list is where Receive lives */
-        E.screen = SCR_GAMELIST;
+        if (app_single_game)
+            open_vn3ds();
+        else
+            E.screen = SCR_GAMELIST;
         break;
-    case B_TITLE_QUIT: E.quit = true; break;
+    case B_OPEN_VN3DS: open_vn3ds(); break;
+    case B_TITLE_QUIT:
+        if (app_single_game)
+            E.quit = true;
+        else
+            app_to_library();
+        break;
     case B_TITLE_MINI: E.screen = SCR_MGMENU; break;
     case B_TITLE_CONTINUE: app_load_slot(RESUME_SLOT); break;
+    case B_TITLE_EXPORT: app_export_game(); break;
     case B_HOME_PLAY: app_play_game(E.game_sel); break;
     case B_HOME_TITLE: app_load_game(E.game_sel); break;
+    case B_HOME_DOWNLOAD: fetch_start(); break;
     case B_HOME_PREV: if (E.game_sel > 0) E.game_sel--; break;
     case B_HOME_NEXT: if (E.game_sel < app_home_count() - 1) E.game_sel++; break;
     case B_MG_BACK:
@@ -513,8 +535,11 @@ void ui_activate(int id)
     case B_LOAD: open_slots(OV_LOAD); break;
     case B_MENU: E.overlay = OV_PREFS; E.prefs_sel = 0; break;
     case B_HUD: mg_hud_open(); break;
+    case B_PYHUD: pys_hud_open(); break;
     case B_BACK:
-        if (E.screen == SCR_ERROR)
+        if (E.screen == SCR_ERROR && !E.loaded && app_single_game)
+            E.quit = true;
+        else if (E.screen == SCR_ERROR)
             E.screen = E.loaded ? SCR_TITLE : SCR_GAMELIST;
         else
             close_overlay();
@@ -578,6 +603,17 @@ void ui_overlay_input(const Input *in)
             close_overlay();
         break;
     case OV_PREFS:
+        if (E.prefs_sel == 8) {   /* "Open vn3ds", beside row 6 */
+            if (d & (KEY_UP_ | KEY_DOWN_ | KEY_LEFT_))
+                E.prefs_sel = 6;
+            else if (d & KEY_A_)
+                ui_activate(B_OPEN_VN3DS);
+            if (d & (KEY_LEFT_ | KEY_A_))
+                break;
+        } else if (E.prefs_sel == 6 && (d & KEY_RIGHT_) && prefs_has_vn3ds()) {
+            E.prefs_sel = 8;
+            break;
+        }
         if (d & KEY_UP_)
             E.prefs_sel = (E.prefs_sel + NUM_PREFS - 1) % NUM_PREFS;
         if (d & KEY_DOWN_)
@@ -816,12 +852,9 @@ static void draw_title_top(int eye)
 
 static void header(const char *title);
 
-/* ---- home screen: coverflow of where each game was left -------------------- */
-
 /* The home screen's backdrop: a quiet fall from dark grey to black. */
 #define HOME_TOP RGBA(30, 30, 32, 255)
 #define HOME_BOTTOM RGBA(0, 0, 0, 255)
-static u32 home_bg_at(float y) { return mix(HOME_TOP, HOME_BOTTOM, y / TOP_H); }
 
 /* A small download glyph: an arrow into a tray. */
 static void download_glyph(float cx, float cy, float s, u32 c)
@@ -831,87 +864,23 @@ static void download_glyph(float cx, float cy, float s, u32 c)
     gfx_rect(cx - 5.5f * s, cy + 7 * s, 11 * s, 1.8f * s, c);
 }
 
-static void draw_card(int eye, int i, float o)
-{
-    float a = fabsf(o);
-    float side = o < 0 ? -1.0f : 1.0f;
-    float x = 200 + side * (fminf(a, 1.0f) * 128 + fmaxf(a - 1.0f, 0) * 58);
-    float k = a < 1 ? 1.0f - 0.4f * a : 0.6f - 0.08f * fminf(a - 1.0f, 2.0f);
-    float depth = -0.28f + 0.55f * fminf(a, 1.6f);
-    float w = THUMB_W * k, h = THUMB_H * k, r = 9 * k + 2;
-    float cx = x + shift(eye, depth), cy = 98 - (1 - fminf(a, 1)) * 6;
-    float fade = clampf(1.6f - (a - 1.0f), 0, 1);
-    float x0 = cx - w / 2, y0 = cy - h / 2;
-    bool chosen = a < 0.5f;
-    GfxTex *thumb = i < E.ngames ? E.game_thumb[i] : NULL;
-    if (chosen)   /* a white edge around the chosen card */
-        ui_rrect(x0 - 2.5f, y0 - 2.5f, w + 5, h + 5, r + 2.5f, rgba_alpha(WHITE, fade));
-    if (thumb) {
-        gfx_image(thumb, x0, y0, w, h, 0, fade);
-        if (chosen)
-            round_corners(x0, y0, w, h, r, WHITE, WHITE);
-        else
-            round_corners(x0, y0, w, h, r, home_bg_at(y0), home_bg_at(y0 + h));
-    } else {
-        ui_rrect(x0, y0, w, h, r, rgba_alpha(FILL2, fade));
-        text_centered(home_title(i), cx, cy - (home_arriving(i) ? 2 : 10) * k,
-                      fit_scale(home_title(i), 0.55f * k, w - 16), rgba_alpha(WHITE, fade));
-    }
-    if (home_arriving(i)) {   /* still on its way: a glyph and how far along it is */
-        if (thumb)
-            ui_rrect(x0, y0, w, h, r, RGBA(0, 0, 0, (u8)(120 * fade)));
-        download_glyph(cx, cy - (thumb ? 6 : 24) * k, k, rgba_alpha(WHITE, fade));
-        progress_bar(x0 + 14 * k, y0 + h - 16 * k, w - 28 * k, 4, app_rx_progress(),
-                     RGBA(255, 255, 255, (u8)(60 * fade)), rgba_alpha(WHITE, fade));
-    }
-    if (a > 0.5f)   /* side cards sit back and darker */
-        ui_rrect(x0, y0, w, h, r, RGBA(0, 0, 0, (u8)(120 * fminf(a, 1) * fade)));
-}
+/* ---- drawing helpers for the home screen (home.c) -------------------------- */
 
-static void draw_coverflow(int eye)
+void ui_round_corners(float x, float y, float w, float h, float r, u32 top, u32 bottom)
 {
-    gfx_gradient(0, 0, TOP_W, TOP_H, HOME_TOP, HOME_BOTTOM);
-    int n = app_home_count();
-    if (n == 0) {
-        text_centered("vn3ds", 200 + shift(eye, -0.4f), 66, 1.2f, WHITE);
-        text_centered("No games yet. Send one from your computer:\nvn3ds is listening for it.",
-                      200 + shift(eye, -0.2f), 132, 0.5f, INK2);
-        return;
-    }
-    /* far cards first, the chosen one last (nearest) */
-    int order[MAX_GAMES + 1];
-    for (int i = 0; i < n; i++)
-        order[i] = i;
-    for (int i = 0; i < n; i++)
-        for (int j = i + 1; j < n; j++)
-            if (fabsf(order[j] - E.cf_pos) > fabsf(order[i] - E.cf_pos)) {
-                int t = order[i];
-                order[i] = order[j];
-                order[j] = t;
-            }
-    for (int k = 0; k < n; k++)
-        if (fabsf(order[k] - E.cf_pos) < 3.2f)
-            draw_card(eye, order[k], (float)order[k] - E.cf_pos);
-    /* the chosen game: its name and where you are (or how far it has come) */
-    int sel = E.game_sel;
-    float dx = shift(eye, -0.2f);
-    const char *t = home_title(sel);
-    text_centered(t, 200 + dx, 174, fit_scale(t, 0.62f, 360), WHITE);
-    char line[160];
-    if (home_arriving(sel)) {
-        char eta[48];
-        app_rx_eta_text(eta, sizeof(eta));
-        if (eta[0])
-            snprintf(line, sizeof(line), "Arriving  %d%%  ·  %s", (int)(app_rx_progress() * 100), eta);
-        else
-            snprintf(line, sizeof(line), "Arriving  %d%%", (int)(app_rx_progress() * 100));
-    } else if (sel < E.ngames && E.game_resume[sel].used) {
-        snprintf(line, sizeof(line), "%.80s", E.game_resume[sel].preview);
-    } else {
-        snprintf(line, sizeof(line), "Not started yet");
-    }
-    text_centered(line, 200 + shift(eye, -0.1f), 199, fit_scale(line, 0.45f, 370), INK2);
+    round_corners(x, y, w, h, r, top, bottom);
 }
+void ui_text_centered(const char *s, float cx, float y, float scale, u32 color)
+{
+    text_centered(s, cx, y, scale, color);
+}
+float ui_fit_scale(const char *s, float scale, float width) { return fit_scale(s, scale, width); }
+u32 ui_mix(u32 a, u32 b, float t) { return mix(a, b, t); }
+void ui_progress_bar(float x, float y, float w, float h, float p, u32 track, u32 fill)
+{
+    progress_bar(x, y, w, h, p, track, fill);
+}
+void ui_download_glyph(float cx, float cy, float s, u32 c) { download_glyph(cx, cy, s, c); }
 
 /* ---- the download icon ------------------------------------------------------ */
 
@@ -966,7 +935,7 @@ void ui_draw_top(int eye)
 {
     switch (E.screen) {
     case SCR_GAMELIST:
-        draw_coverflow(eye);
+        home_draw_top(eye);
         break;
     case SCR_TITLE:
         draw_title_top(eye);
@@ -993,18 +962,21 @@ void ui_draw_top(int eye)
     }
     case SCR_GAME:
         render_scene(eye);
+        pys_story_draw(eye);
         if (!E.hide_ui)
             draw_dialogue(eye);
         break;
-    case SCR_RECEIVE: {
-        gfx_gradient(0, 0, TOP_W, TOP_H, HOME_TOP, HOME_BOTTOM);
+    case SCR_RECEIVE: {   /* a dark overlay over the home screen */
+        home_draw_top(eye);
+        gfx_rect(0, 0, TOP_W, TOP_H, RGBA(0, 0, 0, 222));
         float dx = shift(eye, -0.3f);
         text_centered("Receive over Wi-Fi", 200 + dx, 18, 0.8f, WHITE);
         char line[200];
-        if (NET.listening) {   /* the command to type, in a card */
+        if (NET.listening) {   /* where to go, in a card */
             float cd = shift(eye, -0.15f);
             ui_rrect(40 + cd, 56, 320, 52, 12, FILL1);
-            text_centered("On your computer, open", 200 + cd, 62, 0.42f, INK2);
+            text_centered("The Mac app and the terminal command are at", 200 + cd, 62,
+                          fit_scale("The Mac app and the terminal command are at", 0.42f, 300), INK2);
             text_centered(VN3DS_SITE, 200 + cd, 80, fit_scale(VN3DS_SITE, 0.6f, 300), WHITE);
         }
         text_centered(NET.message, 200 + dx, 124, fit_scale(NET.message, 0.5f, 370), INK2);
@@ -1173,53 +1145,25 @@ void ui_draw_bottom(void)
     Button b[48];
     int n;
     switch (E.screen) {
-    case SCR_RECEIVE:
+    case SCR_RECEIVE:   /* a dark overlay over the home screen */
+        home_draw_bottom();
+        gfx_rect(0, 0, BOT_W, BOT_H, RGBA(0, 0, 0, 222));
         header("Wi-Fi");
         {
             char msg[400], wrapped[500];
-            snprintf(msg, sizeof(msg), "Copy the one command from " VN3DS_SITE ", drag your game into "
-                     "the terminal and press Enter. It finds this 3DS by itself.\n\n"
+            snprintf(msg, sizeof(msg), "On a Mac, get the vn3ds app from " VN3DS_SITE " and drop your game "
+                     "on it. Or copy the terminal command from there, drag your game into the terminal "
+                     "and press Enter. Both find this 3DS by themselves.\n\n"
                      "Same Wi-Fi network needed. Games also arrive while you play.\n\n"
                      "This 3DS: %s  (port %d)", NET.address, NET.port);
-            ui_rrect(8, 32, 304, 132, 12, FILL1);
+            ui_rrect(8, 32, 304, 148, 12, FILL1);
             ui_wrap(msg, 280, 0.45f, wrapped, sizeof(wrapped));
             gfx_text(wrapped, 20, 42, 0.45f, INK2);
         }
         break;
     case SCR_GAMELIST:
-        header("vn3ds");
-        if (app_home_count() > 0) {   /* page dots */
-            int cnt = app_home_count();
-            float step = cnt > 16 ? 300.0f / cnt : 12, x0 = 160 - step * (cnt - 1) / 2;
-            for (int i = 0; i < cnt; i++)
-                gfx_circle(x0 + step * i, 52, i == E.game_sel ? 3.0f : 2.2f, i == E.game_sel ? WHITE : INK3);
-        }
-        if (NET.receiving) {   /* what is arriving, and how long it will take */
-            char msg[160], eta[48];
-            const char *who = NET.game[0] && E.rx_new ? E.rx_new_title : "";
-            for (int i = 0; i < E.ngames && !who[0]; i++)
-                if (app_rx_busy(E.games[i]))
-                    who = E.game_titles[i];
-            app_rx_eta_text(eta, sizeof(eta));
-            snprintf(msg, sizeof(msg), "Receiving%s%s  %d%%%s%s", who[0] ? " " : "", who,
-                     (int)(app_rx_progress() * 100), eta[0] ? "  ·  " : "", eta);
-            float sc = fit_scale(msg, 0.42f, 290);
-            gfx_text(msg, 160 - gfx_text_width(msg, sc) / 2, 148, sc, INK2);
-            progress_bar(60, 168, 200, 4, app_rx_progress(), FILL3, WHITE);
-        } else if (NET.listening) {
-            char msg[96];
-            snprintf(msg, sizeof(msg), "Listening for games on %s", NET.address);
-            gfx_text(msg, 160 - gfx_text_width(msg, 0.4f) / 2, 160, 0.4f, INK3);
-        }
-        if (app_home_count() == 0) {
-            char msg[400], wrapped[500];
-            snprintf(msg, sizeof(msg),
-                     "No games yet. Press Y to receive one over Wi-Fi, or copy games made with "
-                     "vn3ds-port to\n%s/games/\n\nSTART: exit", E.root);
-            ui_wrap(msg, 296, 0.48f, wrapped, sizeof(wrapped));
-            gfx_text(wrapped, 12, 36, 0.48f, INK2);
-        }
-        break;
+        home_draw_bottom();
+        return;
     case SCR_TITLE:
         header(E.game.title);
         if (E.overlay == OV_LOAD) {

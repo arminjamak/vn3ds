@@ -38,6 +38,80 @@ RenPy/
 
 ## Quick start
 
+### On a Mac: the vn3ds app
+
+`vn3ds.dmg` holds an ordinary Mac app (built by `apps/mac/build_dmg.sh`, see
+below). Drag a visual novel onto its window (the folder, `.zip`, `.apk` or
+`.app`), pick **Over Wi-Fi** (very easy) or **With the SD card** (fast),
+and it converts the game and puts it into vn3ds. Both ways get the same
+build: the `balanced` preset below.
+
+The first time, it gets vn3ds onto the 3DS before the game. Over Wi-Fi it
+shows two ways side by side, and whichever you use wins:
+
+- **Homebrew Launcher:** open it and press **Y**. The app sends vn3ds, which
+  starts and saves itself to `sdmc:/3ds/vn3ds.3dsx`.
+- **or FBI:** *Remote Install > Scan QR Code* and scan the code in the app.
+  FBI downloads `vn3ds.cia` from the Mac and installs vn3ds on the HOME
+  Menu; open it there.
+
+With the SD card, putting the card into the Mac is enough: vn3ds is copied
+onto it with the game. The route step's **Also send Snapshot** checkbox (on
+the first time) sends Snapshot, the demo visual novel that comes inside the
+app, along with the game. After that the game is sent (Wi-Fi) or copied (SD
+card), and **Port another game** starts the next one. From the second time
+on, the app only asks you to open vn3ds.
+
+**Make it 3D** (on the same step, off at first and remembered) is the
+command line's `--3d`: movies and every full-screen scene are made
+stereoscopic from estimated depth. It makes the conversion slower, and the
+first time it downloads the 99 MB depth model, with its progress shown under
+the conversion; offline, the game stays 2D and the app says why. **Export
+apps for an emulator** (`--export-apps`) writes every game converted in the
+app as its own `<id>.3dsx`, with `vn3ds.3dsx`, into a folder you pick.
+
+**Games already on this Mac** are listed under the drop area: Ren'Py games
+in `/Applications` and `~/Applications` (Mac `.app` builds), the Downloads,
+Desktop, Documents and Games folders, and Steam's library, each with its
+cover, size and how many saves it has. **Send to 3DS** converts one and sends
+it over Wi-Fi in one step.
+
+**Saves go along.** When a game is sent, its Ren'Py saves on this Mac
+(`~/Library/RenPy/<save_directory>/` and the game's own `game/saves/`) are
+converted and appear in vn3ds: page P slot S becomes vn3ds slot (P-1)x6+S
+(slots 1-30) and the newest autosave becomes vn3ds's Continue. A save keeps
+its place in the story (statement and call stack), the variables vn3ds
+keeps (numbers, true/false, text; lists and objects start at the game's
+defaults), the pictures on screen and the music. The app lists the saves
+that can't go across and why (quick saves, pages past 5, a place in the
+story vn3ds leaves out). **Keep saves in sync** adds a login item that keeps
+them in step from then on: a save made on either side appears on the other;
+if both changed, the newer wins and the other is kept as a backup (on the
+Mac in `~/Library/Application Support/vn3ds/sync/backups/`, on the 3DS as
+`slotNN.sav.bak`). It syncs when vn3ds opens, after a save, when a game is
+closed, when vn3ds exits and every 20 seconds while it is open. The 3DS
+can't run vn3ds while it's closed, so saves made then wait on the SD card
+until vn3ds is next open, even for a moment. Saves written for Ren'Py are
+built on one of your own Ren'Py saves of the game, so save once in the game
+on the Mac first. From the command line: `vn3ds-port --sync-saves [--3ds IP]`,
+or `python3 -m vnpack.savesync` (see `tools/vnpack/savesync.py`).
+
+Building the app (Swift command line tools, no Xcode project):
+
+```bash
+apps/mac/build_dmg.sh          # apps/mac/dist/vn3ds.dmg, with the converter inside
+apps/mac/build_dmg.sh --dev    # apps/mac/dist/vn3ds.app using this repository's Python
+```
+
+Everything is inside the app (about 150 MB), so nothing is downloaded: the
+full build freezes the converter (`tools/cli-release/build_cli.py`, Python,
+ffmpeg and `engine/vn3ds.3dsx` included), builds `vn3ds.cia`
+(`engine/cia/build_cia.sh`) and adds the ported Snapshot (`build/snapshot`)
+when they're missing (`REBUILD_CONVERTER=1` freezes the converter again). The app is signed ad hoc,
+so the first time it is opened with a right-click > **Open**; set
+`DEVELOPER_ID` to sign it with a Developer ID and notarise the `.dmg`. It
+talks to the converter through `tools/vnpack/appbridge.py` (JSON lines).
+
 ### 1. Port a game (on your computer): one command
 
 Without installing anything (the standalone command, with Python and ffmpeg
@@ -82,19 +156,27 @@ it does the rest:
   skipped or approximated, and with `--sd` the game and `vn3ds.3dsx` are
   copied onto the SD card (or an emulator's `sdmc` folder).
 
-**Two presets**, picked by where the game goes (the SD card: `sd`; Wi-Fi:
-`wifi`) and shown before converting together with the projected size of
-both; `--quality sd` or `--quality wifi` overrides the choice:
+**Three presets.** `balanced` is the default, for Wi-Fi and the SD card
+alike: the smallest files with no loss you can see or hear on a 3DS
+(measured at the 3DS's resolution: pictures SSIM 0.986 against the
+original, movies VMAF 96+). The projected size of all three is shown
+before converting; `--quality wifi` or `--quality sd` picks another:
 
-| | `wifi`: the smallest that still looks and sounds good | `sd`: close to the original |
-|---|---|---|
-| pictures | trellis JPEG (ffmpeg, quantiser 5.5), RGB565 | trellis JPEG at quantiser 2 (about 45 dB), RGB8 textures |
-| CG variants | stored as patches over the picture before them | the same (no loss) |
-| audio | Opus, mono: music 19 kbps, voices 14, effects 20 | the game's own Ogg Vorbis / Opus untouched, the rest Opus 96 kbps |
-| movies | H.264 100 kbps / 20 fps | H.264 450 kbps / 30 fps |
-| files | a few pack files (see below) | the same |
+| | `balanced` (default) | `wifi`: smallest, some loss | `sd`: close to the original |
+|---|---|---|---|
+| pictures | trellis JPEG at quantiser 3, RGB8 textures | trellis JPEG at quantiser 5.5, RGB565 | trellis JPEG at quantiser 2, RGB8 |
+| CG variants | patches over the picture before them | the same | the same |
+| audio | the game's own Ogg kept up to 1.25× the target, else Opus: music 64 kbps stereo (40 mono), effects 48/32, voices 32 mono | Opus, mono: music 19 kbps, voices 14, effects 20 | the game's own Ogg / Opus untouched, the rest Opus 96 kbps |
+| movies | H.264 240 kbps / 30 fps; 3D: 360 kbps | H.264 100 kbps / 20 fps; 3D: 150 kbps | H.264 450 kbps / 30 fps; 3D: 675 kbps |
+| files | a few pack files (see below) | the same | the same |
 
 Eternum comes to about 300 MB with `wifi` and 790 MB with `sd`.
+
+**3D (`--3d`, off unless asked for).** Movies and every whole-screen scene
+(backgrounds, CGs) become stereoscopic, from estimated depth (see "Movies
+and scenes in 3D" below). It makes the conversion slower and downloads a
+99 MB model the first time; the Mac app's "Make it 3D" is the same switch.
+`--video-3d` does the movies alone.
 Other options: `--rgb565`, `--jpeg 80`, `--no-audio`, `--fit`, `-o build`,
 `--no-cg-patches`, `--no-jpeg-posters`.
 
@@ -133,8 +215,19 @@ stops for it: a small download icon turns in the top corner, and the home
 screen shows the arriving game as a card with a progress bar and the time
 left. You can open and play any other game meanwhile; the arriving one opens
 once it is complete. An update to the game you are playing is kept aside and
-applied the next time you open it. The IP to use is shown at the bottom of
-the home screen and on the **Receive over Wi-Fi** screen (press **Y**).
+applied the next time you open it. The IP to use is shown on the **Receive
+over Wi-Fi** screen (press **Y** on the home screen; the small green dot on
+its button means vn3ds is listening, which it always is).
+
+**The home screen.** The top screen shows your games' covers (a game's
+`cover.png` or vn3ds.json `"cover"`; without one, vnpack picks the most
+striking of its main menu picture and backgrounds). The bottom screen slides
+through where you left each game; the red **A** carries on, **X** opens its
+title screen. **Double tap** the bottom screen for the whole library as a
+grid (the top screen follows as a big grid of covers). **Long press** for the
+game's story timeline: snapshots taken as you played (one every 30 lines or
+so, at a scene change, at most 40 a game), **Up**/**Down** to travel, **A**
+to play on from there.
 
 **Installing or updating vn3ds itself, also over Wi-Fi:**
 
@@ -155,10 +248,100 @@ tools/vn3ds-port --install --3ds 192.168.1.23
 **Using the ftpd homebrew app instead:** `--ftp 192.168.1.23:5000` uploads
 the engine (with `--install`) and the game into `sdmc:/3ds/`.
 
+**When the 3DS moves or gets stuck.** A given `--3ds` IP is only where the
+3DS was last: if it stays silent there for a few seconds, the whole network
+is searched for vn3ds (and the Homebrew Launcher's netloader is asked by
+broadcast), so a new IP after a restart is followed by itself, also in the
+middle of a transfer. If the 3DS answers on the Wi-Fi but nothing on it
+listens (vn3ds says it can't open the port: an earlier run's socket is still
+held, which only a restart frees), the sender says to restart the 3DS, then
+carries on when it's back; if the 3DS isn't on the Wi-Fi at all, it says so.
+vn3ds itself retries a busy port every 2 seconds and shows the same advice.
+The netloader is only ever asked by UDP ping: an empty TCP connection makes
+the Homebrew Launcher show "an error occurred: namelen".
+
 The receiver only writes inside `sdmc:/3ds/vn3ds/games/` and to the engine
-file itself; any other path is refused. Expect roughly 0.5–1 MB/s over the
-3DS's Wi-Fi: a small game takes seconds, a 1 GB game like Eternum about
-20–30 minutes.
+file itself; any other path is refused. Expect roughly 1.5 MB/s over the
+3DS's Wi-Fi: a small game takes seconds, Eternum (about 320 MB) about
+4 minutes.
+
+### One game as its own app
+
+```bash
+tools/vn3ds-port path/to/Game --app
+```
+
+This turns the visual novel into a standalone app: one `.3dsx` (vn3ds
+with the game inside) that the Homebrew Launcher lists under the game's own
+name and icon, and that starts straight on the game's title screen with no
+library, home screen or receive screen. Copy `build/<id>.3dsx` beside
+vn3ds, to `sdmc:/3ds/<id>.3dsx`, or add `--sd /Volumes/3DS` to copy it there.
+Saves, settings and the log go to `sdmc:/3ds/<id>/`, apart from vn3ds's
+library, and the save files are the same format as the library's.
+
+- **Icon:** the game's window icon (`config.window_icon`, else
+  `gui/window_icon.png`), else the middle of its home screen cover; `--icon
+  file.png` picks one. It is scaled to the 48x48 and 24x24 icons.
+- **Title and author:** the game's title (`--title`) and author (`--author`,
+  vn3ds.json `"author"`, or the account in `build.itch_project`; else
+  "vn3ds").
+- **Size:** the whole game sits inside the `.3dsx`. The SD card's FAT32
+  can't hold a file of 4 GiB or more, so a bigger game is refused; the Wi-Fi
+  preset (`--quality wifi`) makes it about half the size. Snapshot's app is
+  48 MB; a game the size of Eternum (about 1 GB) still fits.
+- **No devkitPro needed:** the prebuilt `engine/vn3ds.3dsx` gets a new SMDH and
+  the game appended as its romfs, in Python (`tools/vnpack/app3dsx.py`), the
+  layout `3dsxtool --romfs` writes. An already ported folder works too:
+  `tools/vn3ds-port build/<id> --app`.
+- vn3ds can't receive apps over Wi-Fi yet, so `--app` doesn't combine with
+  `--3ds` or `--ftp`.
+
+**On the console: Export as app.** In vn3ds, a game's title screen has
+**Export as app**: it writes `sdmc:/3ds/<id>.3dsx` beside vn3ds.3dsx (a
+progress card shows while it copies; Snapshot takes a little while) and the
+new app's card appears in the library. It is the same file the computer
+makes, byte for byte in the game part (`engine/source/export.c`, checked
+against `app3dsx.py` by `tests/test_app3dsx.py`); the icon comes from the
+game's cover. It needs vn3ds.3dsx on the card to build from.
+
+**For emulators (Azahar, Citra, Lime3DS; an AYN Thor's `Roms/3ds`).**
+
+```bash
+tools/vn3ds-port --export-apps /path/to/Roms/3ds            # every game in build/
+tools/vn3ds-port --export-apps /path/to/Roms/3ds build/snapshot
+```
+
+writes every ported game as `<id>.3dsx`, with vn3ds.3dsx, into one folder.
+The Mac app does the same with **Export apps for an emulator…** (for the
+games converted with it). An app the emulator starts directly reads its
+game from the RomFS the emulator hands it (as libctru's
+`romfsMountFromCurrentProcess` reads it) instead of from the Homebrew
+Launcher's file.
+
+| | real 3DS (Homebrew Launcher) | emulator (games list) |
+|---|---|---|
+| an exported app starts straight into its game | yes | yes (to be tried on Azahar) |
+| saves and settings | `sdmc:/3ds/<id>/` | the same, on the emulator's virtual SD |
+| Export as app inside vn3ds | yes, beside vn3ds.3dsx | no: an app in an emulator can only write to the virtual SD, not the games folder; use the Mac tool |
+| Open vn3ds / Play an app's card (jump) | yes, through Rosalina's `hb:ldr` (not yet tried) | no jump: it says which game to open |
+| the reading record, app cards in vn3ds's library | yes | yes, on the virtual SD shared by all apps (an app shows in vn3ds's library once it has been started) |
+
+**Jumping between vn3ds and the novel's app.** The app's title menu and its
+pause menu have **Open vn3ds**: it saves, then starts vn3ds on that novel's
+card. vn3ds's library shows every novel installed as its own app (a card
+with its cover and where you left off); **Play** starts that app straight at
+its autosave, **X** at its title screen. Both write
+`sdmc:/3ds/vn3ds/reading.cfg` (game, app, save slot, time) whenever a game
+opens or autosaves, and each app registers itself in
+`sdmc:/3ds/<id>/app.cfg` (with `--sd`, before its first start).
+
+The jump uses Luma3DS's homebrew loader the way the Homebrew Launcher does:
+the app names the next `.3dsx` and its arguments on Rosalina's `hb:ldr`
+port and exits, and Luma starts that one (`engine/source/link.h`). This is
+read from the Homebrew Launcher's and Luma3DS's source, not yet tried on a
+console. Where it can't work (vn3ds installed as a CIA through FBI, a
+setup without Rosalina), vn3ds says which app to open from the Homebrew
+Launcher, and the reading record still says where you were.
 
 ### 2. Build the 3DS app
 
@@ -174,6 +357,12 @@ cd engine && make
 ```
 
 This produces `engine/vn3ds.3dsx`.
+
+`engine/cia/build_cia.sh` then makes `engine/vn3ds.cia`, the same engine as
+an installable HOME Menu title (for FBI). It fetches makerom (3DSGuy's
+Project_CTR release) and builds bannertool from source into
+`engine/cia/tools/` the first time; the banner art is `engine/cia/banner.png`
+and `banner.wav` (`make_banner.py`).
 
 ### 3. Copy to the SD card
 
@@ -270,6 +459,32 @@ stereo offset never shows a black strip at the edge.
   for a Wi-Fi edition), `--video-fps` (cap), `--video-seconds`, `--no-video`, and
   `--video-codec cvid` for the older tiled format (12 fps, any 3DS). They play at the depth
   of the image, flat but with the camera parallax.
+- **Scenes in 3D** (`--3d`): every opaque whole-screen picture gets a
+  right-eye view from its own estimated depth, through the same filter as
+  the movies, each picture on its own. Both views are stored side by side in
+  one texture (image flag 8, see docs/FORMAT.md); each eye draws its half,
+  the 3D slider below 0.3 shows the left view flat, and an Old 3DS shows the
+  left view. Layered scenes (vn3ds.json "layers") already have their depth
+  and stay as they are. On an Intel Mac the standalone command has no
+  onnxruntime, and the game stays 2D.
+- **Movies in 3D** (`--3d`, or `--video-3d` for movies alone): a right-eye view is made for every frame of
+  a movie from its estimated depth (Depth Anything V2 Small, Apache-2.0, run
+  with onnxruntime; `tools/vnpack/stereo.py`), and both views are coded side
+  by side in one H.264 stream at 1.5x the 2D bitrate. A New 3DS shows each
+  eye its view; the 3D slider brings the scene forward as it goes down and
+  plays the movie flat below 0.3 (the relief can't be re-rendered, only
+  shifted). The poster, and so an Old 3DS, shows the left view. Setup, once:
+  `python3 -m pip install onnxruntime` (or into the repository's `.venv`,
+  which vnpack finds by itself); `tools/vn3ds-port --3d ...` downloads
+  the model (99 MB) into `tools/vnpack/models/` (or `~/.cache/vn3ds/models/`)
+  the first time. The depth runs on the CPU:
+  about 3.5 CPU-seconds per second of movie (an M1 Pro converts four at a
+  time); Eternum's 73 minutes of movies add about half an hour to its port
+  and 28 MB to its Wi-Fi edition. The standalone command and the Mac app
+  make them too (they run the depth filter themselves; the app fetches the
+  model the first time it converts). Converted movies are cached
+  (`~/.cache/vn3ds/movies`, at most 3 GB, `VN3DS_CACHE` to move it), so porting
+  the same game again only converts clips that changed.
 - `call screen` navigation screens made of buttons (maps, phone menus) become a menu, with the
   screen's background picture shown behind it
 - `call screen` minigame screens named in an adapter become native minigames (see
@@ -278,6 +493,46 @@ stereo offset never shows a black strip at the edge.
   `Return`/`Jump` actions and the script's tests of `_return` after it)
 - `show screen` of a launcher an adapter names ("overlays", e.g. Eternum's audio logs)
   becomes a button on the bottom screen that opens the launcher's list
+- **the game's own screens and Python**: any other `show screen` (a phone icon,
+  text messages, a HUD), and a `call screen` that needs more than buttons that
+  jump (a minigame with a class and timers, a phone with apps), runs the game's
+  own code on the 3DS: vnpack translates its screen language to Python
+  (`tools/vnpack/screenlang.py`), rewrites that and the game's `init python`
+  into the dialect of the engine's embedded Python (pocketpy, MIT;
+  `tools/vnpack/pkcompat.py`), and the engine runs it with a Ren'Py screen
+  runtime (`tools/vnpack/vn3ds_rt.py`: layout, styles, actions, timers, keys,
+  focus) under it (`engine/source/pyscreen.c`). Story variables stay the
+  story's (and are saved); the game's objects live for the session. Shown
+  screens are drawn over the story in 3D; ones with buttons get a button on the
+  touch screen. In a screen: D-pad = the screen's keys (WASD / arrows) or the
+  focus, Circle Pad = focus, A = press, B = back, taps on the touch screen's
+  copy, START = pause menu. A statement the interpreter can't run is left out
+  on its own (the console log says which); Ripples' phone and its Snake game
+  play this way (`tests/pyscreens/` is the test)
+- an Android build shipped as a `.zip` of the `.apk` plus a separate
+  `archive.rpa`: the archive is read inside the zip, without unpacking it
+  (`assets.InflatedMember`), so a 6 GB archive needs no free disk space
+- `jump expression` / `call expression` / `renpy.jump(x)` with a label computed while
+  playing (the engine looks the name up; an unknown one is skipped)
+- the game's own small Python functions, when all they look at is constant tables from
+  `init python` (lists, dicts, objects of a class whose `__init__` only stores its
+  arguments) and story variables: they are folded into one expression while
+  converting (`tools/vnpack/pyinline.py`). `ready_beat()` that walks a `BEATS` table
+  becomes `"story_beat1" if key_task == 0 and ... else ...`. Functions that change
+  sets or dicts, or loop over story variables, are still skipped
+- a picture referenced as `x.png` that the release ships as `x.webp` (or another
+  image type)
+- story sets and dicts (`default seen_events = set()`, `default last_day = {}`): `in`,
+  `.add`, `.discard`, `d[k]`, `d[k] = v`, `d[k] += v`, `.get(k, default)` and `len`,
+  with keys known only while playing (kept as a string, so saves work as before)
+- calling the game's own functions as statements (`$ event_done("walk")`): their
+  body is compiled in place, with `store.x` as the story variable `x`
+- a table looked up by a story value (`GIFTS[gift_to_give].scene_label`,
+  `EVENTS[eid][1]`): one case per key of the table
+- `label gain(stat, amount, message=True)` and `call gain("trust", 5)`: the
+  parameters are set before the call; `getattr(store, stat)` / `setattr(store, stat,
+  value)` with a computed name
+- text that shows an expression (`[20 - money]`)
 - string methods `upper lower title strip capitalize`, indexing and slicing, and
   `renpy.input` (returns its default name)
 
@@ -318,6 +573,9 @@ name, e.g. `"cg 12*"`) and audio files (by path); `--mg-input` and
 
 Inspect a compiled script with `python3 -m vnpack.disasm build/<id>/game.bin` (from `tools/`).
 
+`--app` runs the title screen the way a standalone app (`vn3ds-port --app`)
+has it, without the game list, and prints its menu and where saves go.
+
 ## Limits worth knowing
 
 - Textures are capped at 1024×1024 and cached in about 20 MB of linear RAM.
@@ -336,8 +594,14 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
 - **`layers`**: draw an image as several depth planes, each with its own 3D
   offset and an optional motion (`sway`, `pulse`, `breathe`, `fall`,
   `rise`, or `stars`: a procedural, twinkling starfield that comes out a
-  little different every time the picture is shown). Snapshot's scenes are drawn this way by `examples/scenes3d.py`;
-  the flat image in `images/` stays for Ren'Py on a PC.
+  little different every time the picture is shown). A layer can also be a
+  looping movie (`"file": "loops/x.mp4"`, optionally `"stereo": true` for a
+  side-by-side pair and a `"box"`): it plays on the New 3DS's video decoder
+  behind or between the other planes, and shows its first frame elsewhere.
+  An entry named `gui/main_menu` layers the title screen. Snapshot's scenes are drawn this way by `examples/scenes3d.py`
+  (its otherworldly places move: stereo loops of the soundtrack video's
+  worlds, `examples/make_loops.py`); the flat image in `images/` stays for
+  Ren'Py on a PC.
 - **`camera`**: a slow camera drift and zoom "breath" with true parallax
   (`{"drift": 4.5, "period": 19, "zoom": 0.015}`).
 - **`voices`**: speech-like machine voices, a bank of synthetic syllables
@@ -380,6 +644,21 @@ the 3DS. Snapshot (`examples/demo`) uses all of them.
   recordings (`{"audiologs": {"kind": "loglist", "button": "Audio logs",
   "list": "audiologs2"}}`). Mechanics and what an entry names:
   `tools/vnpack/ported.py`; an example: `tests/ported/`.
+- **Free roam**: point-and-click games where you walk between rooms and
+  click things in them, drawn by one screen from tables in the game's Python
+  (rooms with a background per time of day, hotspots with the label each
+  starts and an optional condition). A `"free_roam"` entry names those tables
+  and every `call screen` of the room screen (or of a screen that is just
+  `use room(...)`) becomes the room's background and a menu: its hotspots for
+  the time of day, collectibles, and "Go to ..." for the other rooms, worded
+  with the game's own tooltips. A `"topics"` entry does the same for a talk
+  screen fed by a topics table (pages such as Talk / Affection, each topic
+  with its condition and label); its `"gifts"` key adds a page of the gifts
+  the player owns, each leading into the game's own give label. A `"shop"`
+  entry makes a shop screen a menu of what isn't owned yet and is unlocked,
+  each item jumping to its purchase label (which checks the money). The
+  tables are read without running the game's Python. `tools/vnpack/freeroam.py` lists the keys; an example:
+  `tools/vnpack/adapters/my-femboy-roommate.json`, a test: `tests/test_freeroam.py`.
 - **`config.speaking_attribute`** (standard Ren'Py) is honoured: while a
   character speaks, the engine flaps between their image and the image with
   that attribute, e.g. `aron tired` and `aron tired talk`.

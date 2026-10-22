@@ -31,11 +31,15 @@ ICON            := icon.png
 ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS   := -g -Wall -Wno-format-truncation -O2 -mword-relocations -ffunction-sections $(ARCH)
 CFLAGS   += $(INCLUDE) -D__3DS__ -std=gnu11 -DVN_HAVE_OPUS -DVN_HAVE_TREMOR
+# the release tag (CI: make VERSION=v0.3.0); "dev" builds never update themselves (update.h)
+VERSION  ?= dev
+CFLAGS   += -DVN3DS_VERSION=\"$(VERSION)\"
 CFLAGS   += -I$(TOPDIR)/third_party/opus/include -I$(TOPDIR)/third_party/opusfile/include
+CFLAGS   += -I$(TOPDIR)/third_party/pocketpy -DPK_ENABLE_OS=0
 ASFLAGS  := -g $(ARCH)
 LDFLAGS   = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS     := -lcitro2d -lcitro3d -lvnopus -lvorbisidec -logg -lz -lctru -lm
+LIBS     := -lcitro2d -lcitro3d -lvnopus -lvnpy -lvorbisidec -logg -lz -lctru -lm
 LIBDIRS  := $(PORTLIBS) $(CTRULIB)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
@@ -76,7 +80,7 @@ DEPENDS := $(OFILES:.o=.d)
 
 $(OUTPUT).3dsx : $(OUTPUT).elf $(_3DSXDEPS)
 
-$(OUTPUT).elf : $(OFILES) libvnopus.a
+$(OUTPUT).elf : $(OFILES) libvnopus.a libvnpy.a
 
 #---------------------------------------------------------------------------------
 # third-party Opus decoder: its own defines and include paths, warnings off
@@ -100,6 +104,16 @@ libvnopus.a : $(TP_OFILES)
 	@rm -f $@
 	@$(AR) rcs $@ $^
 
--include $(DEPENDS) $(TP_OFILES:.o=.d)
+# pocketpy (the screen runtime's Python, see source/pyscreen.c): one file
+tp/pocketpy.o : $(TP_DIR)/pocketpy/pocketpy.c
+	@mkdir -p $(dir $@)
+	@echo $(notdir $<)
+	@$(CC) -MMD -MP -MF $(@:.o=.d) $(TP_CFLAGS) -DPK_ENABLE_OS=0 -I$(TP_DIR)/pocketpy -c $< -o $@
+
+libvnpy.a : tp/pocketpy.o
+	@rm -f $@
+	@$(AR) rcs $@ $^
+
+-include $(DEPENDS) $(TP_OFILES:.o=.d) tp/pocketpy.d
 
 endif

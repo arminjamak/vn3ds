@@ -5,6 +5,7 @@
 
 enum {
     OP_NOP = 0x00, OP_END, OP_JMP, OP_JZ, OP_JNZ, OP_CALL, OP_RET, OP_POP, OP_DUP,
+    OP_JMP_NAME, OP_CALL_NAME,
     OP_PUSH_NUM = 0x10, OP_PUSH_STR, OP_PUSH_NONE, OP_PUSH_TRUE, OP_PUSH_FALSE, OP_LOAD, OP_STORE,
     OP_ADD = 0x20, OP_SUB, OP_MUL, OP_DIV, OP_FLOORDIV, OP_MOD, OP_POW, OP_NEG, OP_NOT,
     OP_EQ = 0x2A, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_CALLF, OP_IN,
@@ -306,6 +307,89 @@ static void compare(VM *vm, u8 op)
     push(vm, v_bool(r));
 }
 
+/* ---- sets and dicts ------------------------------------------------------
+ *
+ * A Ren'Py set or dict of the story (`default seen = set()`) is kept in an
+ * ordinary string variable, so saves need nothing new: one entry per key,
+ * "key \x1f value \x1e", the value typed by its first byte (n number, s text,
+ * b bool, - None; a set's entries are "b1"). An empty collection is "", as
+ * falsy as an empty set. */
+
+#define C_KEY '\x1f'
+#define C_END '\x1e'
+
+/* The entry for key in c: its start and the start of its value, or NULL. */
+static const char *coll_find(const char *c, const char *key, const char **val)
+{
+    size_t kl = strlen(key);
+    for (const char *e = c; e && *e;) {
+        const char *k = strchr(e, C_KEY), *end = strchr(e, C_END);
+        if (!k || !end)
+            return NULL;
+        if ((size_t)(k - e) == kl && memcmp(e, key, kl) == 0) {
+            *val = k + 1;
+            return e;
+        }
+        e = end + 1;
+    }
+    return NULL;
+}
+
+static Value coll_value(const char *v)
+{
+    const char *end = strchr(v, C_END);
+    size_t n = end ? (size_t)(end - v) : strlen(v);
+    if (n == 0 || v[0] == '-')
+        return (Value){VAL_NONE, 0, NULL};
+    if (v[0] == 'n')
+        return v_num(atof(v + 1));
+    if (v[0] == 'b')
+        return v_bool(v[1] == '1');
+    Value r = {VAL_STR, 0, malloc(n)};
+    memcpy(r.str, v + 1, n - 1);
+    r.str[n - 1] = 0;
+    return r;
+}
+
+/* c without key's entry, then with key -> v (when v is given). */
+static Value coll_set(const char *c, const char *key, const Value *v)
+{
+    char vbuf[VM_TEXT];
+    vbuf[0] = 0;
+    if (v) {
+        switch (v->type) {
+        case VAL_NUM: snprintf(vbuf, sizeof(vbuf), "n%.17g", v->num); break;
+        case VAL_BOOL: snprintf(vbuf, sizeof(vbuf), "b%d", v->num ? 1 : 0); break;
+        case VAL_STR: snprintf(vbuf, sizeof(vbuf), "s%s", v->str ? v->str : ""); break;
+        default: snprintf(vbuf, sizeof(vbuf), "-"); break;
+        }
+    }
+    size_t cl = strlen(c), kl = strlen(key), vl = strlen(vbuf);
+    char *out = malloc(cl + kl + vl + 3), *o = out;
+    const char *val, *e = coll_find(c, key, &val);
+    if (e) {   /* everything but the old entry */
+        const char *end = strchr(e, C_END) + 1;
+        memcpy(o, c, (size_t)(e - c));
+        o += e - c;
+        memcpy(o, end, strlen(end));
+        o += strlen(end);
+    } else {
+        memcpy(o, c, cl);
+        o += cl;
+    }
+    if (v) {
+        memcpy(o, key, kl);
+        o += kl;
+        *o++ = C_KEY;
+        memcpy(o, vbuf, vl);
+        o += vl;
+        *o++ = C_END;
+    }
+    *o = 0;
+    Value r = {VAL_STR, 0, out};
+    return r;
+}
+
 static void callf(VM *vm, u8 fn, u8 nargs)
 {
     Value args[8];
@@ -369,7 +453,14 @@ static void callf(VM *vm, u8 fn, u8 nargs)
             if (a < 0)
                 a += n;
             if (a < 0 || a >= n) {
-                fail(vm, "string index out of range");
+                /* Ren'Py would stop here, but the value mostly comes from
+                 * something vn3ds left out (a screen's return value it never
+                 * got): an empty string lets the story go on. */
+                static bool warned;
+                if (!warned)
+                    LOG("script: string index %ld of \"%.40s\" is out of range; using \"\"", a, s);
+                warned = true;
+                r = v_str("");
                 break;
             }
             b = a + 1;
@@ -413,6 +504,51 @@ static void callf(VM *vm, u8 fn, u8 nargs)
         }
         r.type = VAL_STR;
         r.str = s;
+        break;
+    }
+    case 18: case 19: case 20: case 21: case 22: case 23: {
+        /* has(c, k), add(c, k), discard(c, k), get(c, k, default), set(c, k, v), len(c) */
+        const char *c = nargs && args[0].type == VAL_STR ? args[0].str : "";
+        char key[VM_TEXT];
+        to_string(nargs > 1 ? &args[1] : &r, key, sizeof(key));
+        for (char *k = key; *k; k++)   /* (the separators can't be in a key) */
+            if (*k == C_KEY || *k == C_END)
+                *k = ' ';
+        const char *val;
+        if (fn == 18) {
+            r = v_bool(coll_find(c, key, &val) != NULL);
+        } else if (fn == 19) {
+            Value t = v_bool(true);
+            r = coll_set(c, key, &t);
+        } else if (fn == 20) {
+            r = coll_set(c, key, NULL);
+        } else if (fn == 21) {
+            if (coll_find(c, key, &val))
+                r = coll_value(val);
+            else if (nargs > 2)
+                r = v_copy(&args[2]);
+        } else if (fn == 22) {
+            r = coll_set(c, key, nargs > 2 ? &args[2] : &r);
+        } else {
+            double n = 0;
+            for (const char *e = c; (e = strchr(e, C_END)); e++)
+                n++;
+            r = v_num(n);
+        }
+        break;
+    }
+    case 24: case 25: { /* getattr(store, name), setattr(store, name, value) */
+        char name[128];
+        to_string(nargs ? &args[0] : &r, name, sizeof(name));
+        int i = find_var(vm->g, name, strlen(name));
+        if (i < 0) {
+            LOG("script: no variable '%s'", name);
+        } else if (fn == 24) {
+            r = v_copy(&vm->vars[i]);
+        } else if (nargs > 1) {
+            value_free(&vm->vars[i]);
+            vm->vars[i] = v_copy(&args[1]);
+        }
         break;
     }
     default: fail(vm, "unknown builtin %d", fn); break;
@@ -530,6 +666,23 @@ static void step(VM *vm)
         vm->calls[vm->ncalls++] = vm->pc + 4;
         vm->pc = U32();
         break;
+    case OP_JMP_NAME:   /* jump/call expression: the label named by a string */
+    case OP_CALL_NAME: {
+        Value v = pop(vm);
+        s32 addr = v.type == VAL_STR && v.str ? game_label(g, v.str) : -1;
+        if (addr < 0) {   /* (an unknown name: the story goes on past it) */
+            LOG("script: no label '%s' to %s", v.type == VAL_STR && v.str ? v.str : "?",
+                op == OP_JMP_NAME ? "jump to" : "call");
+        } else if (op == OP_CALL_NAME && vm->ncalls >= VM_CALLS) {
+            fail(vm, "call stack overflow (too deep recursion)");
+        } else {
+            if (op == OP_CALL_NAME)
+                vm->calls[vm->ncalls++] = vm->pc;
+            vm->pc = (u32)addr;
+        }
+        value_free(&v);
+        break;
+    }
     case OP_RET:
         if (vm->ncalls == 0)
             vm->state = VM_ENDED;

@@ -19,6 +19,7 @@
 struct GfxTex {
     C3D_Tex tex;
     Tex3DS_SubTexture sub;
+    u16 iw, ih;   /* the image's size (sub is the gfx_tex_window part) */
 };
 
 static C3D_RenderTarget *top_t[2], *bottom_t, *cap_t[2], *snap_t;
@@ -153,8 +154,8 @@ GfxTex *gfx_tex_load(const char *path, u32 *bytes)
     C3D_TexFlush(&t->tex);
     C3D_TexSetFilter(&t->tex, GPU_LINEAR, GPU_LINEAR);
     C3D_TexSetWrap(&t->tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
-    t->sub.width = (u16)iw;
-    t->sub.height = (u16)ih;
+    t->sub.width = t->iw = (u16)iw;
+    t->sub.height = t->ih = (u16)ih;
     t->sub.left = 0.0f;
     t->sub.top = 1.0f;
     t->sub.right = (float)iw / (float)tw;
@@ -176,6 +177,12 @@ void gfx_tex_window(GfxTex *t, int x, int y, int w, int h)
     t->sub.bottom = 1.0f - (float)(y + h) / th;
 }
 
+void gfx_tex_size(GfxTex *t, int *w, int *h)
+{
+    *w = t ? t->iw : 0;
+    *h = t ? t->ih : 0;
+}
+
 GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
 {
     GPU_TEXCOLOR gfmt = fmt == 0 ? GPU_RGBA8 : fmt == 1 ? GPU_RGB8 : GPU_RGB565;
@@ -186,8 +193,8 @@ GfxTex *gfx_tex_alloc(int tw, int th, int fmt, int iw, int ih)
     }
     C3D_TexSetFilter(&t->tex, GPU_LINEAR, GPU_LINEAR);
     C3D_TexSetWrap(&t->tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
-    t->sub.width = (u16)iw;
-    t->sub.height = (u16)ih;
+    t->sub.width = t->iw = (u16)iw;
+    t->sub.height = t->ih = (u16)ih;
     t->sub.left = 0.0f;
     t->sub.top = 1.0f;
     t->sub.right = (float)iw / (float)tw;

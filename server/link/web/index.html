@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Send to your 3DS · vn3ds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* vn3ds.com's own tokens (vn3ds-website/index.html), so this drops into the home page as a section */
+  :root {
+    --bg: #0d0e0f; --surface: #141617; --ink: #edece8; --muted: #9b9ea2; --faint: #66696d;
+    --line: #25282a; --accent: #ffffff; --accent-soft: #1f2224; --sage: #b9c9bd; --warn: #d9b08c;
+    --radius: 10px;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--sans); }
+  .wrap { max-width: 620px; margin: 0 auto; padding-block: 48px 72px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-weight: 500; font-size: clamp(26px, 5vw, 34px); letter-spacing: -0.02em; margin: 0 0 8px; text-wrap: balance; }
+  .lede { color: var(--muted); margin: 0 0 32px; max-width: 52ch; }
+  .label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+  .block { border-top: 1px solid var(--line); padding-block: 22px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1 1 220px; min-width: 0; }
+  button, .btn { font: 500 15px var(--sans); border-radius: var(--radius); border: 1px solid var(--line);
+    background: var(--accent-soft); color: var(--ink); padding: 11px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button:focus-visible, input:focus-visible, .drop:focus-within { outline: 2px solid var(--sage); outline-offset: 2px; }
+  input[type=text], input[type=url] { width: 100%; font: 400 16px var(--sans); color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 13px; }
+  input::placeholder { color: var(--faint); }
+
+  .consoles { display: grid; gap: 8px; }
+  .console { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; background: var(--surface); }
+  .console[aria-pressed="true"] { border-color: var(--sage); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.on { background: var(--sage); }
+  .console .code { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-left: auto; letter-spacing: .06em; }
+  .hint { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
+  .hint.warn { color: var(--warn); }
+
+  .drop { display: block; border: 1px dashed #3a3e41; border-radius: var(--radius); padding: 30px 18px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop strong { display: block; color: var(--ink); font-weight: 500; font-size: 17px; margin-bottom: 2px; }
+  .drop.over { border-color: var(--ink); background: var(--surface); }
+  .or { color: var(--faint); font-size: 13px; text-align: center; margin: 14px 0; }
+
+  .job { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 10px; }
+  .job .name { font-weight: 500; overflow-wrap: anywhere; }
+  .stages { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; color: var(--faint); }
+  .stages .now { color: var(--ink); } .stages .past { color: var(--sage); }
+  .bar { height: 4px; background: var(--accent-soft); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
+  .bar.indef i { width: 28%; animation: slide 1.3s ease-in-out infinite; }
+  @keyframes slide { from { margin-left: -28%; } to { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .bar.indef i { animation: none; width: 100%; opacity: .35; } }
+  .detail { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .err { color: var(--warn); font-size: 14px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Send a visual novel to your 3DS</h1>
+  <p class="lede">Drop a Ren'Py game or paste its itch.io link. This page converts it for the 3DS and sends it to vn3ds over Wi-Fi.
+    On your 3DS, open vn3ds and press Y once.</p>
+
+  <section class="block" aria-labelledby="l-3ds">
+    <p class="label" id="l-3ds">Your 3DS</p>
+    <div class="consoles" id="consoles"></div>
+    <p class="hint" id="find-hint" aria-live="polite">Looking for a 3DS on this network…</p>
+    <form class="row" id="code-form" style="margin-top:12px">
+      <input class="grow" id="code-in" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+             maxlength="11" placeholder="Or type the code from the 3DS: ABCD 2345" aria-label="Code shown on the 3DS">
+      <button>Use code</button>
+    </form>
+  </section>
+
+  <section class="block" aria-labelledby="l-game">
+    <p class="label" id="l-game">The game</p>
+    <label class="drop" id="drop" for="file-in">
+      <strong>Drop the game here</strong>
+      or tap to choose the .zip, .apk or .rpa
+      <input id="file-in" type="file" accept=".zip,.apk,.rpa,.tar,.gz,.tgz,.bz2" hidden>
+    </label>
+    <div class="or">or</div>
+    <form class="row" id="url-form">
+      <input class="grow" id="url-in" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="https://someone.itch.io/game" aria-label="Link to the game">
+      <button>Get it</button>
+    </form>
+    <p class="hint">Free itch.io games work with the game page's link; for a bought one, paste the download link from your itch.io library. A game folder: zip it first.</p>
+  </section>
+
+  <section class="block" id="work" hidden aria-live="polite">
+    <p class="label">On its way</p>
+    <div class="job">
+      <div class="row" style="justify-content:space-between">
+        <div class="name grow" id="job-name"></div>
+        <button id="cancel">Cancel</button>
+      </div>
+      <div class="stages" id="stages"></div>
+      <div class="bar" id="bar"><i></i></div>
+      <div class="detail" id="detail"></div>
+      <div class="err" id="err" hidden></div>
+    </div>
+    <p class="hint">Keep this page open until it says Done: the converting happens here, on this device. If the Wi-Fi drops, it carries on by itself.</p>
+  </section>
+</main>
+<script type="module">
+import { LINK as DEFAULT_LINK, findNearby, sendGame, Cancelled } from "./vn3ds-send.js";
+import { convertGame, fetchGame } from "./vn3ds-convert.js";
+
+const LINK = new URLSearchParams(location.search).get("link") || window.VN3DS_LINK || DEFAULT_LINK;
+const $ = id => document.getElementById(id);
+const CODE = /^[2-9A-HJ-NP-Z]{8}$/;
+const clean = s => (s || "").replace(/[\s-]/g, "").toUpperCase();
+const pretty = c => c.slice(0, 4) + " " + c.slice(4);
+const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+let consoles = [], chosen = null, busy = false, stopped = false, wake = null;
+
+// ---- which 3DS ----------------------------------------------------------------
+function drawConsoles() {
+  $("consoles").innerHTML = "";
+  for (const c of consoles) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "console";
+    b.setAttribute("aria-pressed", String(c.code === chosen));
+    b.innerHTML = `<span class="dot${c.online ? " on" : ""}"></span><span></span><span class="code">${pretty(c.code)}</span>`;
+    b.children[1].textContent = (c.name || "3DS") + (c.online ? "" : " · open vn3ds on it");
+    b.onclick = () => choose(c.code);
+    $("consoles").append(b);
+  }
+}
+function choose(code) {
+  chosen = code;
+  store.set("vn3ds.code", code);
+  if (!consoles.some(c => c.code === code)) consoles.push({ code, name: "3DS", online: false });
+  drawConsoles();
+}
+async function look() {
+  try {
+    const near = await findNearby(LINK);
+    for (const n of near) {
+      const had = consoles.find(c => c.code === n.code);
+      if (had) Object.assign(had, n); else consoles.push(n);
+    }
+    const on = consoles.filter(c => c.online);
+    if (!chosen && on.length === 1) chosen = on[0].code;
+    $("find-hint").textContent = on.length ? (on.length === 1 ? "Found on this network." : "Pick one.")
+      : near.length ? "Your 3DS is known here but offline: open vn3ds on it." :
+      "None found on this network yet. Open vn3ds and press Y, or type the code it shows.";
+  } catch (e) {
+    $("find-hint").textContent = "Can't reach the vn3ds link right now. Check this device's internet connection.";
+  }
+  drawConsoles();
+}
+$("code-form").onsubmit = e => {
+  e.preventDefault();
+  const c = clean($("code-in").value);
+  if (!CODE.test(c)) { $("find-hint").textContent = "The code has 8 letters and digits, like ABCD 2345."; return; }
+  $("code-in").value = "";
+  choose(c);
+};
+const fromHash = clean(location.hash.slice(1));
+if (CODE.test(fromHash)) choose(fromHash);
+else if (CODE.test(clean(store.get("vn3ds.code")))) chosen = clean(store.get("vn3ds.code"));
+look();
+setInterval(() => { if (!busy) look(); }, 5000);
+
+// ---- the job ------------------------------------------------------------------
+const STAGES = ["Download", "Convert", "Send", "Done"];
+function show(stage, detail, frac) {
+  $("stages").innerHTML = STAGES.map((s, i) => `<span class="${i < stage ? "past" : i === stage ? "now" : ""}">${s}</span>`).join("");
+  $("detail").textContent = detail || "";
+  const bar = $("bar");
+  bar.classList.toggle("indef", frac == null);
+  bar.firstElementChild.style.width = frac == null ? "" : (frac * 100).toFixed(1) + "%";
+}
+const mb = n => (n / 1e6).toFixed(n < 10e6 ? 1 : 0) + " MB";
+const left = s => s < 1 ? "" : s < 90 ? ` · ${Math.round(s)} s left` : ` · ${Math.round(s / 60)} min left`;
+
+async function run(getFile, label) {
+  if (busy) return;
+  if (!chosen) { $("find-hint").textContent = "Pick your 3DS first (or type the code it shows)."; $("find-hint").classList.add("warn"); return; }
+  $("find-hint").classList.remove("warn");
+  busy = true; stopped = false;
+  $("work").hidden = false;
+  $("err").hidden = true;
+  $("cancel").disabled = false;
+  $("cancel").textContent = "Cancel";
+  $("job-name").textContent = label;
+  try { wake = await navigator.wakeLock?.request("screen"); } catch (e) { wake = null; }
+  try {
+    const file = await getFile();
+    $("job-name").textContent = file.name;
+    show(1, "Getting the converter ready", null);
+    const t0 = Date.now();
+    const game = await convertGame(file, (kind, d) => {
+      if (stopped) return;
+      if (globalThis.VN3DS_DEBUG && (kind === "log" || kind === "hint")) console.info(kind + ": " + JSON.stringify(d));
+      if (kind === "loading") show(1, `Getting the converter ready: ${d.what} (the first time only, about 50 MB)`, null);
+      else if (kind === "step" && d.state !== "done") {
+        const frac = d.total ? d.done / d.total : null;
+        const count = d.total ? `${d.done} of ${d.total}` : "";
+        show(1, [d.label || d.id, d.detail, count].filter(Boolean).join(": "), frac);
+      }
+    });
+    if (stopped) throw new Cancelled();
+    const size = game.files.reduce((a, f) => a + f.size, 0);
+    show(2, `Converted in ${Math.round((Date.now() - t0) / 1000)} s: ${mb(size)} for the 3DS`, 0);
+    const r = await sendGame({
+      code: chosen, files: game.files, link: LINK, stop: () => stopped,
+      onProgress: (ev, d) => {
+        if (ev === "waiting") show(2, "Waiting for the 3DS: open vn3ds on it", null);
+        else if (ev === "checking") show(2, "Checking what the 3DS already has", null);
+        else if (ev === "skipped") show(2, `${d.skipped} files were already there`, 0);
+        else if (ev === "bytes") show(2, `${mb(d.done)} of ${mb(d.total)} · ${(d.rate / 1e6).toFixed(1)} MB/s${left(d.left)}`, d.total ? d.done / d.total : 1);
+        else if (ev === "retry") show(2, d.text, null);
+      },
+    });
+    show(3, r.failed ? `${r.failed} files could not be saved on the 3DS (is the SD card full?)` :
+      `Done: ${game.id} is in vn3ds's list on your 3DS.`, 1);
+  } catch (e) {
+    if (e instanceof Cancelled || stopped) show(0, "Stopped.", 0);
+    else { $("err").hidden = false; $("err").textContent = e.message; }
+  } finally {
+    busy = false;
+    $("cancel").textContent = "Close";
+    try { await wake?.release(); } catch (e) {}
+  }
+}
+$("cancel").onclick = () => {
+  if (busy) { stopped = true; $("cancel").disabled = true; }
+  else $("work").hidden = true;
+};
+
+$("file-in").onchange = e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (f) run(async () => f, f.name);
+};
+$("url-form").onsubmit = e => {
+  e.preventDefault();
+  const url = $("url-in").value.trim();
+  if (!url) return;
+  run(() => {
+    show(0, "Starting the download", null);
+    return fetchGame(url, LINK, d => show(0, `${mb(d.done)}${d.total ? " of " + mb(d.total) : ""} · ${(d.rate / 1e6).toFixed(1)} MB/s`, d.total ? d.done / d.total : null));
+  }, url);
+};
+const drop = $("drop");
+addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+addEventListener("dragleave", e => { if (!e.relatedTarget) drop.classList.remove("over"); });
+addEventListener("drop", e => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  const item = e.dataTransfer.items?.[0];
+  if (item?.webkitGetAsEntry?.()?.isDirectory) { $("err").hidden = false; $("work").hidden = false; $("err").textContent = "That's a folder: zip it first, then drop the .zip."; return; }
+  const f = e.dataTransfer.files[0];
+  if (f) run(async () => f, f.name);
+  else {
+    const text = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    if (text) { $("url-in").value = text.trim(); $("url-form").requestSubmit(); }
+  }
+});
+</script>
+</body>
+</html>

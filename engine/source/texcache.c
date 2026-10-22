@@ -526,7 +526,13 @@ GfxTex *texcache_image(const ImageDef *im)
         if (t)
             return t;   /* else the base picture alone: close, and better than nothing */
     }
-    return texcache_get(im->res);
+    GfxTex *t = texcache_get(im->res);
+    if (t && (im->flags & IMG_STEREO)) {   /* a stereo pair: the left view (render.c picks per eye) */
+        int w, h;
+        gfx_tex_size(t, &w, &h);
+        gfx_tex_window(t, 0, 0, w / 2, h);
+    }
+    return t;
 }
 
 /* ---- predictions ------------------------------------------------------------------ */
@@ -579,7 +585,8 @@ void texcache_want(const ImageDef *im)
     else
         want_one(im->res, -1, 0, 0);
     for (int k = 0; k < im->nlayers; k++)
-        want_one(im->layers[k].res, -1, 0, 0);
+        if (im->layers[k].anim != ANIM_VIDEO)
+            want_one(im->layers[k].res, -1, 0, 0);
 }
 
 void texcache_want_end(void)

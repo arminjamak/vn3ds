@@ -66,12 +66,18 @@ typedef struct {
 
     char games[MAX_GAMES][64];
     char game_titles[MAX_GAMES][96];
+    /* a novel exported as its own app (link.h): its .3dsx and the folder with
+     * its saves and cover; "" for a game in games/ */
+    char game_app[MAX_GAMES][200];
+    char game_app_dir[MAX_GAMES][200];
     int ngames, game_sel;
     /* the home screen's coverflow: where each game was left */
     float cf_pos;
-    GfxTex *game_thumb[MAX_GAMES];
+    GfxTex *game_thumb[MAX_GAMES];   /* the resume snapshot */
+    GfxTex *game_cover[MAX_GAMES];   /* the game's own cover (cover.thm, made by vnpack) */
     SlotInfo game_resume[MAX_GAMES];
     float autosave_t;
+    u32 story_step;       /* lines read since the story began (story.c) */
     bool has_resume;      /* the loaded game has a resume save (title: Continue) */
     /* opening a game: a "Preparing ..." card once it takes longer than a moment */
     bool opening;
@@ -119,6 +125,7 @@ typedef struct {
     bool rx_new;              /* the arriving game is new: show its card */
     char rx_new_id[64];
     char rx_new_title[96];
+    GfxTex *rx_new_cover;     /* its cover, once that file is in */
     float rx_rate;            /* bytes per second, smoothed; 0 until known */
     bool mg_board;   /* Minigames menu: the online leaderboard is showing */
     char toast[96];
@@ -152,6 +159,8 @@ void app_init(const char *game_dir);
 /* Wi-Fi receive screen (games and engine updates from vn3ds-port --3ds). */
 void app_receive_open(void);
 void app_receive_close(void);
+/* Quitting a novel inside vn3ds: back to the library with its card selected. */
+void app_to_library(void);
 /* Resume: slot 0 is the automatic save (on HOME, quitting, leaving a game,
  * and every two minutes), with a snapshot of the screen for the home menu. */
 #define RESUME_SLOT 0
@@ -170,6 +179,12 @@ void app_rx_eta_text(char *out, size_t len);
 void app_rescan_games(void);
 extern bool app_start_receiving; /* set before app_init, e.g. when launched via 3dslink */
 extern bool app_listen_background; /* accept transfers at any time (3DS default) */
+/* A standalone app (vn3ds-port --app), set before app_init: the one game it
+ * carries is opened at once, and there is no library, home or receive screen. */
+extern bool app_single_game;
+/* "Export as app" (export.h): the open library game as sdmc:/3ds/<id>.3dsx. */
+bool app_can_export(void);
+void app_export_game(void);
 void app_update(const Input *in, float dt);
 void app_render(void);
 void app_frame_done_without_drawing(void);   /* (desktop tests: instead of app_render) */
@@ -181,6 +196,7 @@ bool app_load_game(int index);
 void app_to_title(void);
 void app_new_game(void);
 bool app_new_game_at(const char *label); /* debugging: skip to a label */
+bool app_story_jump(const char *label);
 bool app_load_slot(int slot);
 void app_choose(int choice);
 void app_error(const char *msg);
@@ -202,6 +218,13 @@ void ui_draw_opening(int eye);   /* "Preparing ..." while a game opens (eye -1: 
 /* A filled rounded rectangle (buttons, cards, panels). */
 void ui_rrect(float x, float y, float w, float h, float r, u32 c);
 void ui_draw_bottom(void);
+/* Drawing helpers for home.c. */
+void ui_round_corners(float x, float y, float w, float h, float r, u32 top, u32 bottom);
+void ui_text_centered(const char *s, float cx, float y, float scale, u32 color);
+float ui_fit_scale(const char *s, float scale, float width);
+u32 ui_mix(u32 a, u32 b, float t);
+void ui_progress_bar(float x, float y, float w, float h, float p, u32 track, u32 fill);
+void ui_download_glyph(float cx, float cy, float s, u32 c);
 void ui_wrap(const char *src, float width, float scale, char *out, size_t len);
 int ui_count_lines(const char *s);
 void ui_hist_add(const char *who, u32 color, const char *text, bool extend);
@@ -236,7 +259,39 @@ bool save_write(int slot);
 /* background: the file is written by the background thread (autosaves). */
 bool save_write_ex(int slot, bool background);
 bool save_peek(const char *game_id, int slot, SlotInfo *info);
+bool save_peek_at(const char *root, const char *game_id, int slot, SlotInfo *info);
 bool save_read(int slot);
 void save_scan(int page, SlotInfo out[SLOTS_PER_PAGE]);
 void settings_load(void);
 void settings_save(void);
+
+/* story.c: story points, the home screen's timeline. Each is a save in slot
+ * STORY_SLOT0 + k with a STORY_W x STORY_H snapshot. */
+#define STORY_SLOT0 100
+#define STORY_MAX 40
+#define STORY_W 160
+#define STORY_H 96
+typedef struct {
+    u16 k, pad;   /* its slot: STORY_SLOT0 + k */
+    u32 pc;       /* where in the script (the line's address) */
+    u32 step;     /* E.story_step there */
+    u32 time;
+    char preview[96];
+} StoryPoint;
+/* Any game's points, in story order; returns how many. */
+int story_read(const char *game_id, StoryPoint *out, int max);
+void story_thumb_path(const char *id, int k, char *out, size_t len);
+void story_game_opened(void);
+u32 story_latest_step(void);   /* for saves from before story steps */
+void story_scene(void);        /* a `scene` ran */
+void story_snapshot(void);     /* a line's snapshot is being taken */
+void story_thumb(const u16 *px, int w, int h);   /* ...and here it is */
+
+/* home.c: the home screen (SCR_GAMELIST). */
+void home_update(const Input *in, float dt);
+void home_draw_top(int eye);
+void home_draw_bottom(void);
+void home_reset(void);   /* the game list changed */
+void app_home_refresh_loaded(void);   /* re-reads where the open game was left */
+/* A picture in a .thm file (snapshots, covers), or NULL. */
+GfxTex *app_load_thm(const char *path);

@@ -22,7 +22,9 @@ from PIL import Image
 
 from . import rpy
 from .assets import (AUDIO_EXTS, IMAGE_EXTS, AssetFS, ImageBuilder,
-                     convert_audio, encode_ctex, encode_cvh, encode_cvid, resize_rgba, video_frames)
+                     convert_audio, encode_ctex, encode_cvh, encode_cvh_cached, encode_cvid,
+                     prefetch_cvh, prefetching,
+                     resize_rgba, video_frames)
 from .compiler import CompileError, Compiler, write_game
 
 DEFAULT_DEPTH_BY_TAG = {"cg": 0.45, "event": 0.45, "ev": 0.45}
@@ -84,14 +86,8 @@ def _image_job(name):
                 f = min(1024 / w, 1024 / h)
                 w, h = int(w * f), int(h * f)
             if _W.get("video_codec", "h264") == "h264":
-                kbps = _W["video_kbps"]
-                data, poster, _ = encode_cvh(
-                    b.fs.read(key), key, lw, lh, loop, kbps=kbps,
-                    fps_cap=_W["video_fps"] or 30, max_seconds=_W["video_seconds"],
-                    profile=_W["video_profile"], poster_scale=1.0 if kbps > 400 else 0.5,
-                    poster_jpeg=_W.get("jpeg", 0) if _W.get("jpeg_posters") else 0,
-                    jpeg_encoder=_W.get("jpeg_encoder", "pillow"),
-                    jpeg_qscale=_W.get("jpeg_qscale", 5.0))
+                args, kwargs = _cvh_args(lw, lh, loop)
+                data, poster, _ = encode_cvh_cached(b.fs.read(key), key, *args, **kwargs)
                 return name, ("cvh", data, lw, lh, True, poster), warnings
             fps = _W["video_fps"] or 12
             frames = video_frames(b.fs.read(key), key, w, h, fps, _W["video_seconds"] or 12)
@@ -112,14 +108,76 @@ def _image_job(name):
                                    jpeg_qscale=_W.get("jpeg_qscale", 5.0),
                                    jpeg_rgb8=_W.get("jpeg_rgb8", False))
         full = img.width >= _W["gw"] * 0.95 and img.height >= _W["gh"] * 0.95
-        if _W.get("cg_patches") and opaque and full and _W.get("jpeg", 0) > 0:
+        # --scenes-3d: a whole-screen opaque picture becomes a stereo pair
+        # (after the loop, all through the depth filter at once); side by
+        # side it must still fit a 1024-wide texture
+        stereo = bool(_W.get("scenes_3d")) and opaque and full and 2 * w <= 1024
+        if stereo or (_W.get("cg_patches") and opaque and full and _W.get("jpeg", 0) > 0):
             # the picture as stored, for comparing with its neighbours (--cg-patches)
             pixels = np.asarray(small.convert("RGB"), dtype=np.uint8)
-            return name, ("tex", data, lw, lh, full, pixels), warnings
+            return name, ("tex", data, lw, lh, full, pixels, stereo), warnings
         return name, ("tex", data, lw, lh, full), warnings
     except (OSError, ValueError, SyntaxError, MemoryError) as e:
         warnings.append(f"image '{name}': {e}")
         return name, None, warnings
+
+
+def _cvh_args(lw, lh, loop):
+    """encode_cvh's arguments for a movie shown at lw x lh."""
+    kbps = _W["video_kbps"]
+    if _W.get("video_3d"):
+        kbps = _W.get("video_3d_kbps") or int(round(kbps * 1.5))
+    return (lw, lh, loop), dict(
+        kbps=kbps, fps_cap=_W["video_fps"] or 30, max_seconds=_W["video_seconds"],
+        profile=_W["video_profile"], poster_scale=1.0 if _W["video_kbps"] > 400 else 0.5,
+        poster_jpeg=_W.get("jpeg", 0) if _W.get("jpeg_posters") else 0,
+        jpeg_encoder=_W.get("jpeg_encoder", "pillow"),
+        jpeg_qscale=_W.get("jpeg_qscale", 5.0), stereo=_W.get("video_3d"))
+
+
+def _stereo_scenes(pictures, stereo, progress, quiet):
+    """--scenes-3d: {name: side-by-side pair} for the pictures (name ->
+    (pixels, ...)), through the depth filter once per picture size. A size
+    the filter fails on stays 2D (absent from the result), with a warning."""
+    from . import stereo as st
+    by_size = {}
+    for name, (pixels, *_rest) in pictures.items():
+        by_size.setdefault(pixels.shape[:2], []).append(name)
+    made, done = {}, 0
+    progress("scenes3d", state="active", done=0, total=len(pictures))
+    for (h, w), names in sorted(by_size.items()):
+        try:
+            pairs = st.stereo_stills([pictures[n][0] for n in names], stereo, w, h)
+        except OSError as e:
+            if not quiet:
+                print(f"  --scenes-3d: {len(names)} pictures of {w}x{h} stay 2D ({e})",
+                      file=sys.stderr)
+            continue
+        made.update(zip(names, pairs))
+        done += len(names)
+        progress("scenes3d", state="active", done=done, total=len(pictures))
+    progress("scenes3d", state="done", done=done, total=len(pictures))
+    return made
+
+
+def _prefetch_movie(name):
+    """Start encoding a movie ahead of its turn (an H.264 encoder that runs
+    alongside, as the browser's; see assets.prefetch_cvh)."""
+    b = _W["builder"]
+    try:
+        src = b.source(_W["defs"][name])
+        if not src or src[0] != "movie" or _W.get("video_codec", "h264") != "h264":
+            return
+        _, key, loop = src
+        args, kwargs = _cvh_args(_W["gw"] * _W["scale"], _W["gh"] * _W["scale"], loop)
+        prefetch_cvh(b.fs.read(key), key, *args, **kwargs)
+    except (OSError, ValueError, KeyError):
+        pass   # (its turn says what is wrong)
+
+
+# Movies started ahead of their turn by an encoder that can run several
+# side by side (assets.H264_ENCODER in a browser).
+MOVIE_PREFETCH = 6
 
 
 ANIM_KINDS = {"sway": 1, "pulse": 2, "breathe": 3, "fall": 4, "rise": 5, "stars": 6}
@@ -161,6 +219,11 @@ PATCH_KEYFRAMES = 4    # compare with this many of the last pictures stored whol
 PATCH_MAX_AREA = 0.5   # at most this share of the picture becomes a patch
 PATCH_MAX_BYTES = 0.8  # and the patch must be this much smaller than the whole
 ANIM_PATCH = 7         # layer record kind the engine composites at load time
+ANIM_VIDEO = 8         # layer record kind: the res is a looping clip
+VIDEO_EXTS = (".mp4", ".webm", ".mkv", ".mov", ".m4v", ".ogv", ".avi")
+TITLE_LAYERS = "gui/main_menu"
+LAYER_VIDEO_KBPS = 200  # a full-screen moving backdrop under the art: soft, slow, small;
+                        # smaller boxes get less, by area (at least 50)
 
 
 def natural_key(s):
@@ -261,6 +324,77 @@ def _no_progress(step, **info):
     pass
 
 
+# The home screen's card for a game (engine/source/app.h THUMB_W x THUMB_H):
+# "THM1", u16 width, u16 height, then RGB565 pixels row by row.
+COVER_W, COVER_H = 200, 120
+
+
+def cover_source(fs, cfg):
+    """A game's own cover art, if it sets one (vn3ds.json "cover",
+    game/cover.png)."""
+    for name in (cfg.get("cover"), "cover.png", "cover.jpg"):
+        key = name and fs.find(name, dirs=("",))
+        if key:
+            return ("file", key)
+    return None
+
+
+def cover_score(img):
+    """How well a picture works as a cover: detail and colour count, a dark,
+    washed-out or flat one (like Ren'Py's plain default menu) doesn't."""
+    a = np.asarray(img.convert("RGB").resize((100, 60), Image.BILINEAR), dtype=np.float32) / 255
+    lum = a @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+    detail = lum.std() + np.abs(np.diff(lum, axis=0)).mean() + np.abs(np.diff(lum, axis=1)).mean()
+    colour = (a.max(-1) - a.min(-1)).mean()
+    bright = lum.mean()
+    return 2 * detail + colour - 4 * max(0.0, 0.15 - bright) - 4 * max(0.0, bright - 0.85)
+
+
+def pick_cover(builder, fs, defs, used_specs, most=12):
+    """Without a cover: the best of the main menu picture and the backgrounds
+    the story shows (a dozen, spread over the story). The main menu, the
+    game's own title art, wins a close call."""
+    cands = []
+    for name in ("gui/main_menu.png", "gui/main_menu.jpg"):
+        key = fs.find(name, dirs=("",))
+        if key:
+            cands.append((("file", key), 0.1))
+            break
+    bgs = []
+    for spec in list(used_specs) + sorted(defs):
+        if spec.split()[0] == "bg" and spec in defs and defs[spec] not in bgs:
+            bgs.append(defs[spec])
+    if len(bgs) > most:
+        bgs = [bgs[i * len(bgs) // most] for i in range(most)]
+    cands += [(src, 0.0) for src in bgs]
+    best, best_score = None, None
+    for src, bonus in cands:
+        try:
+            img = builder.render(src)
+        except Exception:
+            continue
+        if img is None or img.width < 16 or img.height < 16:
+            continue
+        score = cover_score(img) + bonus
+        if best_score is None or score > best_score:
+            best, best_score = img, score
+    return best
+
+
+def write_cover(path, img):
+    from PIL import ImageOps
+    if img is None:
+        raise ValueError("nothing to show")
+    img = ImageOps.fit(img.convert("RGB"), (COVER_W, COVER_H), Image.LANCZOS)
+    a = np.asarray(img, dtype=np.float32)
+    r = np.round(a[..., 0] * 31 / 255).astype(np.uint16)
+    g = np.round(a[..., 1] * 63 / 255).astype(np.uint16)
+    b = np.round(a[..., 2] * 31 / 255).astype(np.uint16)
+    px = (r << 11) | (g << 5) | b
+    with open(path, "wb") as f:
+        f.write(b"THM1" + np.array([COVER_W, COVER_H], "<u2").tobytes() + px.astype("<u2").tobytes())
+
+
 def main(argv=None, progress=None):
     """Packs a game; returns a summary dict. `progress(step, **info)` is
     called as the work goes along: step "scripts", "audio", "images",
@@ -309,7 +443,7 @@ def main(argv=None, progress=None):
                     help="don't measure the tempo of music tracks vn3ds.json has no grid for "
                          "(without a grid the engine crossfades music changes)")
     ap.add_argument("--no-audio", action="store_true", help="skip audio")
-    ap.add_argument("--audio-profile", choices=("sd", "wifi"), default="sd",
+    ap.add_argument("--audio-profile", choices=("sd", "balanced", "wifi"), default="sd",
                     help="sd: keep Ogg files as they are, the rest as Opus at a high bitrate; "
                          "wifi: re-encode everything small")
     ap.add_argument("--audio-masters", metavar="DIR",
@@ -330,6 +464,16 @@ def main(argv=None, progress=None):
     ap.add_argument("--video-seconds", type=float, default=None,
                     help="longest movie kept, in seconds (default: all of it for h264, "
                          "12 for cvid)")
+    ap.add_argument("--video-3d", action="store_true",
+                    help="stereoscopic movies: a right-eye view from each frame's estimated depth "
+                         "(needs the depth model and onnxruntime, see stereo.py; plays in 3D on "
+                         "a New 3DS)")
+    ap.add_argument("--scenes-3d", action="store_true",
+                    help="stereoscopic scenes: every whole-screen picture (backgrounds, CGs) "
+                         "gets a right-eye view from its estimated depth, as --video-3d does "
+                         "for movies (same model)")
+    ap.add_argument("--video-3d-kbps", type=int, default=None,
+                    help="H.264 bitrate of 3D movies (both views; default 1.5 x --video-kbps)")
     ap.add_argument("-j", "--jobs", type=int, default=0,
                     help="processes for image conversion (default: up to 4)")
     ap.add_argument("--only-images", action="append", default=[], metavar="GLOB",
@@ -346,6 +490,24 @@ def main(argv=None, progress=None):
         ap.error("--jpeg takes a quality from 1 to 100 (0 = off)")
 
     warn = Warnings(args.quiet)
+    video_3d = None
+    if args.video_3d and not args.no_video and args.video_codec == "h264":
+        from . import stereo
+        video_3d = stereo.available()
+        if not video_3d:
+            warn(None, "--video-3d: " + ("no Python with onnxruntime (pip install onnxruntime)"
+                                         if stereo.find_model() else
+                                         f"no depth model ({stereo.MODEL_FILE} in "
+                                         f"{stereo.model_dirs()[0]})") + "; movies stay 2D")
+    scenes_3d = None
+    if args.scenes_3d:
+        from . import stereo
+        scenes_3d = stereo.available()
+        if not scenes_3d:
+            warn(None, "--scenes-3d: " + ("no Python with onnxruntime (pip install onnxruntime)"
+                                          if stereo.find_model() else
+                                          f"no depth model ({stereo.MODEL_FILE} in "
+                                          f"{stereo.model_dirs()[0]})") + "; scenes stay 2D")
     game_dir = find_game_dir(args.project)
     if not os.path.exists(game_dir):
         ap.error(f"{args.project} does not exist")
@@ -381,10 +543,11 @@ def main(argv=None, progress=None):
                      "--dump-rpyc DIR, decompile them (for example with unrpyc), then "
                      "pass the folder with --scripts DIR.")
         sys.exit(f"vnpack: no .rpy files in {game_dir}")
-    files = []
+    files, sources = [], []
     for key in scripts:
         name = fs.display(key)
         src = fs.read(key).decode("utf-8", "replace")
+        sources.append(src)
         try:
             files.append(rpy.parse_file(src, name))
         except rpy.ParseError as e:
@@ -404,6 +567,8 @@ def main(argv=None, progress=None):
     # every game gets one: adapted screens, overlays, and outcome cards for
     # custom minigames nothing can play
     comp.ported = Ported(load_spec(_gid, cfg), files, warn, load_overlays(_gid, cfg))
+    from .pyinline import Inliner
+    comp.inliner = Inliner(files)
     try:
         comp.compile(files)
     except (CompileError, rpy.ParseError) as e:
@@ -453,6 +618,24 @@ def main(argv=None, progress=None):
 
     used_tags = {spec.split()[0] for spec in comp.used_specs}
     used_tags |= {c.image for c in comp.chars if c.image}
+
+    # The game's own screens and Python, for the engine's (pyscreens.py):
+    # their images are packed under their own names.
+    if comp.pyscreens:
+        from .pyscreens import build_program
+        progress("screens", state="active")
+        prog = build_program(comp, files, fs, warn, gw, gh, defs)
+        if prog is not None:
+            defs.update(prog.extra_defs)
+            used_tags |= {n.split()[0] for n in prog.used_images}
+            comp.pysc = (prog.runtime + "\n" + prog.source).encode("utf-8")
+            comp.pyscreen_summary = dict(screens=len(prog.screens), statements=prog.chunks,
+                                         used=sorted(comp.pyscreen_used),
+                                         images=len(prog.extra_defs),
+                                         kib=len(comp.pysc) >> 10)
+        progress("screens", state="done", done=1, total=1)
+    else:
+        progress("screens", total=0)
 
     by_tag = {}
     for name in defs:
@@ -676,12 +859,15 @@ def main(argv=None, progress=None):
         names = [n for n in names if any(fnmatch.fnmatch(n, g) for g in args.only_images)]
     # Layered illustrations (vn3ds.json "layers"): each layer becomes its own
     # texture with its own depth; the flat image is only for Ren'Py itself.
-    layer_cfg = {k: v for k, v in cfg.get("layers", {}).items() if k.split()[0] in used_tags}
+    # "gui/main_menu" in "layers" is the title screen's picture as planes.
+    layer_cfg = {k: v for k, v in cfg.get("layers", {}).items()
+                 if k.split()[0] in used_tags or k == TITLE_LAYERS}
     names = [n for n in names if n not in layer_cfg]
     _W.update(builder=builder, defs=defs, scale=scale, gw=gw, gh=gh, vw=vw, vh=vh,
               rgb565=args.rgb565, video=not args.no_video, video_fps=args.video_fps,
               video_seconds=args.video_seconds, video_codec=args.video_codec,
-              video_kbps=args.video_kbps, video_profile=args.video_profile)
+              video_kbps=args.video_kbps, video_profile=args.video_profile,
+              video_3d=video_3d, video_3d_kbps=args.video_3d_kbps, scenes_3d=scenes_3d)
     _W["jpeg"] = args.jpeg
     _W.update(jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale, jpeg_rgb8=args.jpeg_rgb8,
               jpeg_posters=args.jpeg_posters, cg_patches=args.cg_patches)
@@ -705,6 +891,18 @@ def main(argv=None, progress=None):
     def results():
         # Workers inherit the state above by forking; where there is no fork
         # (Windows) the images are converted in this process.
+        if prefetching():
+            # in order, the next few movies already under way
+            movie_at = [i for i, n in enumerate(names) if "Movie" in repr(defs[n])]
+            started = finished = 0
+            for i, n in enumerate(names):
+                while started < len(movie_at) and started < finished + MOVIE_PREFETCH:
+                    _prefetch_movie(names[movie_at[started]])
+                    started += 1
+                yield _image_job(n)
+                if finished < len(movie_at) and movie_at[finished] == i:
+                    finished += 1
+            return
         if jobs == 1 or len(names) < 50 or "fork" not in multiprocessing.get_all_start_methods():
             yield from map(_image_job, names)
             return
@@ -713,6 +911,7 @@ def main(argv=None, progress=None):
             yield from pool.imap(_image_job, names, chunksize=8)
 
     entries = {}       # name -> (image record, layer items or None)
+    stereo_scenes = {}  # --scenes-3d: name -> (pixels, lw, lh, depth), made after the loop
     keyframes = []     # [(res, pixels)] of the last pictures stored whole
     patches = [0, 0]   # pictures stored as a patch, bytes saved
 
@@ -752,6 +951,9 @@ def main(argv=None, progress=None):
                                   flags=1 | (2 if full else 0), depth=depth), None)
             continue
         kind, data, lw, lh, full = result[:5]
+        if kind == "tex" and len(result) > 6 and result[6]:
+            stereo_scenes[name] = (result[5], lw, lh, depth)   # made after the loop
+            continue
         digest = hashlib.sha1(data).digest()
         if kind == "tex" and len(result) > 5 and digest not in by_hash:
             pixels = result[5]
@@ -805,6 +1007,18 @@ def main(argv=None, progress=None):
                               flags=(2 if full else 0) | (4 if kind in ("video", "cvh") else 0),
                               depth=depth), None)
 
+    if stereo_scenes:
+        made = _stereo_scenes(stereo_scenes, scenes_3d, progress, args.quiet)
+        for name, (pixels, lw, lh, depth) in stereo_scenes.items():
+            pair = made.get(name)
+            img = Image.fromarray(pair if pair is not None else pixels)
+            data, _ = encode_ctex(img.convert("RGBA"), lw * (2 if pair is not None else 1), lh,
+                                  allow_565=args.rgb565, jpeg_quality=args.jpeg,
+                                  jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale,
+                                  jpeg_rgb8=args.jpeg_rgb8)
+            entries[name] = (dict(name=name, res=write_res(data, "ctex"), color=0xFFFFFFFF, w=lw,
+                                  h=lh, flags=2 | (8 if pair is not None else 0), depth=depth), None)
+
     # Image records in name order, whatever order they were converted in.
     for name in sorted(entries):
         record, items = entries[name]
@@ -819,6 +1033,51 @@ def main(argv=None, progress=None):
     if movies or movies_done:
         progress("video", state="done", done=movies_done, total=max(movies, movies_done))
     progress("pack", state="active")
+    def video_layer(layer, key, canvas):
+        """A layer that is a movie (vn3ds.json: "file" a movie, "box" its
+        place in the picture's px, default the whole picture, "kbps", and
+        "stereo": the movie is a left | right pair side by side). Returns
+        (res, box) or None. Without video it is still there as its first
+        frame."""
+        nonlocal total_bytes
+        x, y, bw, bh = layer.get("box") or (0, 0, canvas[0], canvas[1])
+        lw, lh = bw * scale, bh * scale
+        sbs = bool(layer.get("stereo"))
+        if not args.no_video and args.video_codec == "h264":
+            area = min(1.0, lw * lh / float(gw * scale * gh * scale))
+            kbps = int(layer.get("kbps", max(50, LAYER_VIDEO_KBPS * area)))
+            data, poster, info = encode_cvh(
+                fs.read(key), key, lw, lh, True, kbps=kbps,
+                fps_cap=args.video_fps or 30, profile=args.video_profile, sbs=sbs,
+                poster_jpeg=args.jpeg if args.jpeg_posters else 0,
+                jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale)
+            digest = hashlib.sha1(data).digest()
+            res = by_hash.get(digest)
+            if res is None:
+                res = write_res(data, "cvh")
+                with open(os.path.join(out_dir, resources[res][:-4] + ".ctex"), "wb") as f:
+                    f.write(poster)
+                total_bytes += len(poster)
+            return res, (x * scale, y * scale, lw, lh), ANIM_VIDEO
+        w, h = max(1, int(round(lw))), max(1, int(round(lh)))
+        if not args.no_video:   # cvid: the movie itself, at its tile format's low rate
+            fps = args.video_fps or 12
+            frames = video_frames(fs.read(key), key, 2 * w if sbs else w, h, fps,
+                                  args.video_seconds or 12)
+            if sbs:
+                frames = [f[:, :w] for f in frames]
+            if len(frames):
+                return (write_res(encode_cvid(frames, lw, lh, fps, True), "cvid"),
+                        (x * scale, y * scale, lw, lh), ANIM_VIDEO)
+        frames = video_frames(fs.read(key), key, 2 * w if sbs else w, h, 1, 1)
+        if not len(frames):
+            return None
+        data, _ = encode_ctex(Image.fromarray(np.ascontiguousarray(frames[0][:, :w])).convert("RGBA"),
+                              lw, lh, allow_565=True, jpeg_quality=args.jpeg,
+                              jpeg_encoder=args.jpeg_encoder, jpeg_qscale=args.jpeg_qscale)
+        return write_res(data, "ctex"), (x * scale, y * scale, lw, lh), 0
+
+    title_image = -1
     for name in sorted(layer_cfg):
         items = []
         canvas = None
@@ -826,6 +1085,21 @@ def main(argv=None, progress=None):
             key = fs.find(layer["file"])
             if key is None:
                 warn(None, f"layer file '{layer['file']}' of '{name}' not found")
+                continue
+            if key.lower().endswith(VIDEO_EXTS):
+                if canvas is None:
+                    first = next((fs.find(o["file"]) for o in layer_cfg[name]
+                                  if not o["file"].lower().endswith(VIDEO_EXTS)), None)
+                    canvas = builder.render(("file", first)).size if first else (gw, gh)
+                try:
+                    got = video_layer(layer, key, canvas)
+                except OSError as e:
+                    warn(None, f"layer movie '{layer['file']}' of '{name}': {e}")
+                    got = None
+                if got:
+                    res, (bx, by, lw, lh), kind = got
+                    items.append((res, float(layer.get("depth", 0.0)), bx, by, lw, lh,
+                                  (kind, 0.0, 0.0, 1.0)))
                 continue
             img = builder.render(("file", key))
             if canvas is None:
@@ -854,13 +1128,15 @@ def main(argv=None, progress=None):
         if not items:
             continue
         full = canvas[0] >= gw * 0.95 and canvas[1] >= gh * 0.95
+        if name == TITLE_LAYERS:
+            title_image = len(images)
+            name = "__title"
         layer_records.append((len(images), items))
         images.append(dict(name=name, res=-1, color=0xFFFFFFFF, w=canvas[0] * scale,
                            h=canvas[1] * scale, flags=2 if full else 0, depth=float("nan")))
 
-    title_image = -1
     key = fs.find("gui/main_menu.png") or fs.find("gui/main_menu.jpg")
-    if key:
+    if key and title_image < 0:
         img = builder.render(("file", key))
         res, _ = add_texture(img, img.width * scale, img.height * scale)
         title_image = len(images)
@@ -868,13 +1144,25 @@ def main(argv=None, progress=None):
                            w=img.width * scale, h=img.height * scale, flags=2,
                            depth=float("nan")))
 
+    cover_path = os.path.join(out_dir, "cover.thm")
+    src = cover_source(fs, cfg)
+    try:
+        write_cover(cover_path, builder.render(src) if src else
+                    pick_cover(builder, fs, defs, comp.used_specs))
+    except Exception as e:   # the card falls back to the game's name
+        if src:
+            warn(None, f"no cover for the home screen: {e}")
+        if os.path.exists(cover_path):
+            os.remove(cover_path)
+
     meta = dict(title=title, version=comp.meta["version"] or "", game_w=gw, game_h=gh,
                 scale=scale, view_x=vx, view_y=vy, view_w=vw, view_h=vh,
                 depth_bg=float(cfg.get("depth_bg", 1.0)),
                 depth_sprite=float(cfg.get("depth_sprite", 0.0)),
                 depth_ui=float(cfg.get("depth_ui", -0.35)),
                 max_shift=float(cfg.get("max_shift", 6.0)),
-                title_image=title_image, camera=cfg.get("camera"))
+                title_image=title_image, title_music=comp.meta.get("title_music", -1),
+                camera=cfg.get("camera"))
     size = write_game(os.path.join(out_dir, "game.bin"), comp, meta, images, resources,
                       layer_records, voices, music=music_meta)
 
@@ -887,6 +1175,11 @@ def main(argv=None, progress=None):
             os.rmdir(os.path.join(out_dir, "pk"))
         except OSError:
             pass
+    try:   # for carrying Ren'Py saves over (savemap.py; after the packs, which change game.bin)
+        from . import savemap
+        savemap.build(comp, fs, out_dir, game_id, title, os.path.abspath(game_dir), sources, warn)
+    except Exception as e:
+        warn(None, f"saves can't be carried over ({e.__class__.__name__}: {e})")
     progress("pack", state="done", bytes=size + total_bytes)
     warn.report(limit=10**9 if args.all_warnings else 60)
     if not args.quiet:
@@ -903,7 +1196,8 @@ def main(argv=None, progress=None):
                 music_grids=[(name, (r or {}).get("confidence", 0.0), e, why)
                              for name, r, e, why in music_auto],
                 outcomes=list(comp.ported.outcomes) if comp.ported else [],
-                audio_refs=len(comp.resources), screen=(gw, gh))
+                audio_refs=len(comp.resources), screen=(gw, gh), video_3d=bool(video_3d),
+                pyscreens=getattr(comp, "pyscreen_summary", None))
 
 
 if __name__ == "__main__":

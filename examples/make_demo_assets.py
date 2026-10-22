@@ -33,52 +33,11 @@ def font(size):
     return ImageFont.load_default()
 
 
-def gradient(w, h, top, bottom):
-    t = np.linspace(0, 1, h)[:, None, None]
-    a = np.array(top, np.float32)[None, None, :]
-    b = np.array(bottom, np.float32)[None, None, :]
-    rows = (a * (1 - t) + b * t).astype(np.uint8)
-    return Image.fromarray(np.repeat(rows, w, axis=1), "RGB")
-
-
-def glow(img, xy, radius, color, strength=0.8):
-    """Additive soft light."""
-    layer = Image.new("RGB", img.size, (0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    x, y = xy
-    for i in range(12, 0, -1):
-        r = radius * i / 12
-        c = tuple(int(v * strength * (13 - i) / 12) for v in color)
-        d.ellipse([x - r, y - r, x + r, y + r], fill=c)
-    layer = layer.filter(ImageFilter.GaussianBlur(radius / 6))
-    a = np.asarray(img, np.int32) + np.asarray(layer, np.int32)
-    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
-
-
-def stars(d, n, ymax, seed=3):
-    rng = np.random.default_rng(seed)
-    for _ in range(n):
-        x, y = rng.integers(0, W), rng.integers(0, ymax)
-        r = int(rng.integers(1, 4))
-        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 230))
-
-
 # ---------------------------------------------------------------- places
 # The scenes themselves live in scenes3d.py, drawn as stereoscopic layers.
 
 
-def main_menu():
-    img = gradient(W, H, (20, 15, 45), (120, 60, 110))
-    d = ImageDraw.Draw(img)
-    stars(d, 160, H // 2)
-    for i, (col, off) in enumerate([((40, 25, 70), 0), ((70, 35, 90), 160)]):
-        pts = [(x, 520 + off // 2 + 50 * math.sin(x / 140 + i)) for x in range(0, W + 40, 40)]
-        d.polygon(pts + [(W, H), (0, H)], fill=col)
-    # a window frame splitting into copies
-    for k in range(5):
-        o = k * 14
-        d.rectangle([520 + o, 140 - o, 760 + o, 380 - o], outline=(255, 220, 150, 255), width=3)
-    return glow(img, (640, 260), 220, (90, 60, 30), 0.5)
+# The title screen (gui/main_menu.png and its planes) is scenes3d.title().
 
 
 # ---------------------------------------------------------------- people
@@ -871,7 +830,6 @@ def main():
     cast = make_people(img_dir)
     write_talk_rpy(GAME)
     contact_sheets(img_dir, os.path.join(HERE, "demo", "expressions"), cast)
-    main_menu().save(os.path.join(GAME, "gui", "main_menu.png"))
 
     for name in ("theme", "morning", "unease", "ward", "entities", "watch", "voices"):
         path = os.path.join(aud_dir, name + ".ogg")

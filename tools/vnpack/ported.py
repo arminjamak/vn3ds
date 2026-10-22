@@ -48,7 +48,8 @@ import re
 from . import rpy
 
 ADAPTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adapters")
-MECHANICS = ("lockpick", "swing_timing", "instrument", "captions", "outcome", "loglist")
+MECHANICS = ("lockpick", "swing_timing", "instrument", "captions", "outcome", "loglist",
+             "free_roam", "topics", "shop")
 _SETVAR = re.compile(r"SetVariable\(\s*[\"'](\w+)[\"']\s*,\s*([^),]+)\)")
 
 
@@ -167,6 +168,14 @@ class Ported:
         # passed to screens.
         self.assignments = {}
         self.defaults = {}         # `default x = ...` anywhere, even inside a label
+        # free roam (freeroam.py): its screens, the screens that just `use`
+        # one, and the loop's code once it is compiled
+        from . import freeroam
+        self.free = {k: v for k, v in spec.items()
+                     if v.get("mechanic") in ("free_roam", "topics", "shop")}
+        self.free_wrappers = freeroam.wrappers(files, self.free) if self.free else {}
+        self.free_files = files
+        self.free_done = set()
         for nodes in files:
             for n in rpy.iter_nodes(nodes):
                 if isinstance(n, rpy.Default):
@@ -182,7 +191,7 @@ class Ported:
                             self.assignments.setdefault(st.targets[0].id, []).append((n.line, st.value))
 
     def handles(self, screen):
-        return screen in self.spec
+        return screen in self.spec or screen in self.free_wrappers
 
     # -- compiling ------------------------------------------------------
 
@@ -209,6 +218,9 @@ class Ported:
         return ctx
 
     def compile_call(self, comp, n):
+        if n.name in self.free or n.name in self.free_wrappers:
+            self.compile_free_roam(comp, n)
+            return
         cfg = self.spec[n.name]
         ctx = self.build_entry(comp, n, cfg)
         idx, mech = ctx["idx"], cfg["mechanic"]
@@ -222,6 +234,109 @@ class Ported:
         if ctx["jump"]:
             code.op("JMP")
             code.ref(comp.label_ref(comp.qualify(ctx["jump"], n.line)))
+
+    def compile_free_roam(self, comp, n):
+        """`call screen room(...)`: set the room, then the free roam loop
+        (compiled the first time, see freeroam.py)."""
+        from . import freeroam
+        screen, args = n.name, getattr(n, "args", None)
+        if screen in self.free_wrappers:
+            screen, args = self.free_wrappers[screen]
+        cfg = self.free[screen]
+        if cfg["mechanic"] == "topics":
+            return self.compile_topics(comp, n, screen, cfg, args)
+        if cfg["mechanic"] == "shop":
+            return self.compile_shop(comp, n, screen, cfg)
+        room = freeroam.room_arg(args)
+        room_var = cfg.get("room", "current_room")
+        if room and room != room_var:
+            comp.c_python(f"{room_var} = {room}", n.line)
+        comp.warn_once(f"freeroam:{n.name}", n.line,
+                       f"call screen {n.name} is free roam: each room's hotspots and the rooms "
+                       f"to walk to are choices")
+        loop = comp.label_ref(freeroam.LOOP)
+        comp.code.op("JMP")
+        comp.code.ref(loop)
+        if screen in self.free_done:
+            return
+        self.free_done.add(screen)
+        labels = {x.name for nodes in self.free_files for x in rpy.iter_nodes(nodes)
+                  if isinstance(x, rpy.Label)}
+        text = freeroam.generate(cfg, self.tables(), labels, comp.warn, n.line)
+        if text is None:   # (the jump above still needs its label)
+            text = f"label {freeroam.LOOP}:\n    \"The rooms can't be shown on the 3DS.\"\n    return\n"
+        nodes = rpy.parse_file(text, f"<free roam {screen}>")
+        keep = comp.global_label   # (the loop is compiled in the middle of a label)
+        comp.c_block(nodes)
+        comp.global_label = keep
+
+    def tables(self):
+        """The game's init-python tables, with objects of its simple classes."""
+        if getattr(self, "_tables", None) is None:
+            from .pyinline import Inliner
+            self._tables = Inliner(self.free_files).t
+        return self._tables
+
+    def compile_shop(self, comp, n, screen, cfg):
+        """`call screen gift_menu`: a menu of what can be bought (called: its
+        "Go back" carries on after the call screen statement)."""
+        from . import freeroam
+        comp.warn_once(f"shop:{n.name}", n.line,
+                       f"call screen {n.name} is a shop: what can be bought is a choice")
+        comp.code.op("CALL")
+        comp.code.ref(comp.label_ref(freeroam.SHOP + screen))
+        if ("shop", screen) in self.free_done:
+            return
+        self.free_done.add(("shop", screen))
+        labels = {x.name for nodes in self.free_files for x in rpy.iter_nodes(nodes)
+                  if isinstance(x, rpy.Label)}
+        text = freeroam.generate_shop(cfg, self.tables(), labels,
+                                      comp.warn, n.line, screen) or \
+            f"label {freeroam.SHOP}{screen}:\n    return\n"
+        from .compiler import Ref
+        end = Ref()   # (compiled in place: jump over it)
+        comp.code.op("JMP")
+        comp.code.ref(end)
+        keep = comp.global_label
+        comp.c_block(rpy.parse_file(text, f"<shop {screen}>"))
+        comp.global_label = keep
+        comp.code.mark(end)
+
+    def compile_topics(self, comp, n, screen, cfg, args):
+        """`call screen robin_interact("livingroom", "day", start_page=...)`:
+        that room's talk menu (freeroam.generate_topics), compiled the first
+        time it is needed. Without literal room and time: an outcome card."""
+        from . import freeroam
+        try:
+            call = ast.parse("f" + (args or "()"), mode="eval").body
+            pos = [ast.literal_eval(a) for a in call.args[:2]]
+            kw = {k.arg: ast.literal_eval(k.value) for k in call.keywords if k.arg == "start_page"}
+        except (SyntaxError, ValueError):
+            pos, kw = [], {}
+        roam = next((c for c in self.free.values() if c["mechanic"] == "free_roam"), None)
+        if len(pos) < 2 or not all(isinstance(p, str) for p in pos) or roam is None:
+            return self.compile_outcome(comp, n)
+        rid, slot = pos
+        page = kw.get("start_page") if kw.get("start_page") not in (None, "main") else None
+        comp.warn_once(f"topics:{n.name}", n.line,
+                       f"call screen {n.name} is a talk menu: its pages and topics are choices")
+        key = (screen, rid, slot)
+        comp.code.op("JMP")
+        comp.code.ref(comp.label_ref(freeroam.topics_label(rid, slot, page)))
+        if key in self.free_done:
+            return
+        self.free_done.add(key)
+        labels = {x.name for nodes in self.free_files for x in rpy.iter_nodes(nodes)
+                  if isinstance(x, rpy.Label)}
+        text = freeroam.generate_topics(cfg, roam, self.tables(), labels,
+                                        comp.warn, n.line, rid, slot)
+        if text is None:
+            text = f"label {freeroam.topics_label(rid, slot)}:\n    jump {freeroam.LOOP}\n"
+        if page and f"label {freeroam.topics_label(rid, slot, page)}:" not in text:
+            text += f"label {freeroam.topics_label(rid, slot, page)}:\n    jump {freeroam.LOOP}\n"
+        keep = comp.global_label
+        comp.c_block(rpy.parse_file(text, f"<talk menu {rid} {slot}>"))
+        comp.global_label = keep
 
     # helpers --------------------------------------------------------------
 

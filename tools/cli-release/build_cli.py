@@ -114,6 +114,10 @@ def main():
            "--collect-submodules", "decompiler",
            "--exclude-module", "tkinter", "--exclude-module", "matplotlib",
            "--add-data", f"{args.engine}{sep}engine",
+           # per-game adapters (ported minigames, free roam): data, read beside ported.py
+           "--add-data", f"{os.path.join(REPO, 'tools', 'vnpack', 'adapters')}{sep}vnpack/adapters",
+           # the screen runtime's source, packed into games that run their own screens
+           "--add-data", f"{os.path.join(REPO, 'tools', 'vnpack', 'vn3ds_rt.py')}{sep}vnpack",
            # ffmpeg is copied as it is (data, not analysed or re-signed)
            "--add-data", f"{ffmpeg}{sep}ffmpeg", "--add-data", f"{ffprobe}{sep}ffmpeg",
            os.path.join(HERE, "vn3ds_cli.py")]

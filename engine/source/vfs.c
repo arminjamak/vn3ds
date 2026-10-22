@@ -6,14 +6,30 @@
 #include <3ds.h>
 typedef Handle PackHandle;
 #define PACK_NONE 0
+/* main_3ds.c: a standalone app's packs, inside its .3dsx */
+bool appfs_locate(const char *path, Handle *h, u64 *off, u64 *size);
+Handle appfs_handle(void);
+static LightLock lock;
+static void lock_init(void) { LightLock_Init(&lock); }
+static void lock_on(void) { LightLock_Lock(&lock); }
+static void lock_off(void) { LightLock_Unlock(&lock); }
 #else
 #include <fcntl.h>
+#include <pthread.h>
 #include <unistd.h>
 typedef int PackHandle;
 #define PACK_NONE (-1)
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static void lock_init(void) {}
+static void lock_on(void) { pthread_mutex_lock(&lock); }
+static void lock_off(void) { pthread_mutex_unlock(&lock); }
 #endif
 
 #define MAX_PACKS 4096
+/* A 3DS lets a program hold only so many files open, so packs are opened
+ * when first read and at most this many stay open, closing the one unused
+ * the longest (when an open fails, every idle one, and it tries again). */
+#define MAX_OPEN 8
 #define VBUF 32768   /* read-ahead per open file: Ogg pages and video frames are small */
 
 typedef struct {
@@ -24,7 +40,11 @@ typedef struct {
 static struct {
     char dir[400];
     size_t dirlen;
-    PackHandle *h;
+    PackHandle *h;    /* PACK_NONE while closed (see MAX_OPEN) */
+    u64 *pack_base;   /* where each pack starts in its file (0, or inside a .3dsx) */
+    u16 *refs;        /* reads in progress per pack (an open one isn't closed under them) */
+    u32 *last_use;
+    u32 nopen, tick;
     char **pack_names;
     u32 npacks;
     Entry *e;
@@ -55,14 +75,21 @@ static u32 hash_name(const char *s)
 
 /* ---- the platform's positioned reads ----------------------------------- */
 
-static bool pack_open(const char *path, PackHandle *out)
+static bool pack_open(const char *path, PackHandle *out, u64 *base)
 {
+    *base = 0;
 #ifdef __3DS__
+    u64 size;
+    if (appfs_locate(path, out, base, &size))
+        return true;
     const char *p = strncmp(path, "sdmc:", 5) ? path : path + 5;
     Handle h = 0;
-    if (R_FAILED(FSUSER_OpenFileDirectly(&h, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""),
-                                         fsMakePath(PATH_ASCII, p), FS_OPEN_READ, 0)))
+    Result rc = FSUSER_OpenFileDirectly(&h, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""),
+                                        fsMakePath(PATH_ASCII, p), FS_OPEN_READ, 0);
+    if (R_FAILED(rc)) {
+        LOG("cannot open %s (FS result 0x%08lX)", path, (unsigned long)rc);
         return false;
+    }
     *out = h;
     return true;
 #else
@@ -77,7 +104,7 @@ static bool pack_open(const char *path, PackHandle *out)
 static void pack_close(PackHandle h)
 {
 #ifdef __3DS__
-    if (h)
+    if (h && h != appfs_handle())
         FSFILE_Close(h);
 #else
     if (h >= 0)
@@ -106,13 +133,28 @@ static size_t pack_read(PackHandle h, u64 off, void *dst, size_t n)
 
 /* ---- the table ---------------------------------------------------------- */
 
+static void ensure_lock(void)
+{
+    static bool ready;   /* (first used on the main thread, before any reader) */
+    if (!ready) {
+        lock_init();
+        ready = true;
+    }
+}
+
 void vfs_unmount(void)
 {
+    ensure_lock();
+    lock_on();
     for (u32 i = 0; i < V.npacks; i++) {
-        pack_close(V.h[i]);
+        if (V.h && V.h[i] != PACK_NONE)
+            pack_close(V.h[i]);
         free(V.pack_names[i]);
     }
     free(V.h);
+    free(V.pack_base);
+    free(V.refs);
+    free(V.last_use);
     free(V.pack_names);
     free(V.e);
     free(V.slots);
@@ -120,6 +162,75 @@ void vfs_unmount(void)
     u32 gen = V.gen;
     memset(&V, 0, sizeof(V));
     V.gen = gen + 1;
+    lock_off();
+}
+
+static bool shared_handle(u32 i)
+{
+    /* a standalone app's packs live in its .3dsx: one handle, never closed */
+#ifdef __3DS__
+    return V.h[i] != PACK_NONE && V.h[i] == appfs_handle();
+#else
+    (void)i;
+    return false;
+#endif
+}
+
+/* An open handle for pack i, counted as in use until release(i); NULL-like
+ * PACK_NONE if it can't be opened. */
+static PackHandle acquire(u32 i, u32 gen)
+{
+    lock_on();
+    if (gen != V.gen || !V.h || i >= V.npacks) {   /* unmounted meanwhile */
+        lock_off();
+        return PACK_NONE;
+    }
+    if (V.h[i] == PACK_NONE) {
+        if (V.nopen >= MAX_OPEN) {   /* make room: the idle one unused the longest */
+            s32 victim = -1;
+            for (u32 k = 0; k < V.npacks; k++)
+                if (V.h[k] != PACK_NONE && !V.refs[k] && !shared_handle(k) &&
+                    (victim < 0 || V.last_use[k] < V.last_use[victim]))
+                    victim = (s32)k;
+            if (victim >= 0) {
+                pack_close(V.h[victim]);
+                V.h[victim] = PACK_NONE;
+                V.nopen--;
+            }
+        }
+        char full[600];
+        snprintf(full, sizeof(full), "%s/%s", V.dir, V.pack_names[i]);
+        u64 base;
+        if (!pack_open(full, &V.h[i], &base)) {
+            /* out of handles? close every idle pack and try once more */
+            for (u32 k = 0; k < V.npacks; k++)
+                if (k != i && V.h[k] != PACK_NONE && !V.refs[k] && !shared_handle(k)) {
+                    pack_close(V.h[k]);
+                    V.h[k] = PACK_NONE;
+                    V.nopen--;
+                }
+            if (!pack_open(full, &V.h[i], &base)) {
+                V.h[i] = PACK_NONE;
+                lock_off();
+                return PACK_NONE;
+            }
+        }
+        if (!shared_handle(i))
+            V.nopen++;
+    }
+    V.refs[i]++;
+    V.last_use[i] = ++V.tick;
+    PackHandle h = V.h[i];
+    lock_off();
+    return h;
+}
+
+static void release(u32 i)
+{
+    lock_on();
+    if (V.refs && i < V.npacks && V.refs[i])
+        V.refs[i]--;
+    lock_off();
 }
 
 int vfs_packs(void) { return (int)V.npacks; }
@@ -155,8 +266,11 @@ bool vfs_mount(const char *dir, const u8 *sec, u32 size)
     if (np > MAX_PACKS)
         goto bad;
     V.h = malloc(sizeof(PackHandle) * np);
+    V.pack_base = calloc(np, sizeof(u64));
     V.pack_names = calloc(np, sizeof(char *));
-    if (!V.h || !V.pack_names)
+    V.refs = calloc(np, sizeof(u16));
+    V.last_use = calloc(np, sizeof(u32));
+    if (!V.h || !V.pack_base || !V.pack_names || !V.refs || !V.last_use)
         goto bad;
     for (u32 i = 0; i < np; i++)
         V.h[i] = PACK_NONE;
@@ -212,13 +326,19 @@ bool vfs_mount(const char *dir, const u8 *sec, u32 size)
         V.slots[k] = i + 1;
         V.ne = i + 1;
     }
+    /* Packs are opened when first read (see MAX_OPEN); a standalone app's,
+     * inside its .3dsx, are located now (that costs no file handle). A pack
+     * missing on the card only loses its own files. */
     for (u32 i = 0; i < np; i++) {
+        V.h[i] = PACK_NONE;
+#ifdef __3DS__
         char full[600];
         snprintf(full, sizeof(full), "%s/%s", dir, V.pack_names[i]);
-        if (!pack_open(full, &V.h[i])) {
-            LOG("cannot open %s", full);
-            goto bad;
-        }
+        u64 size;
+        Handle h;
+        if (appfs_locate(full, &h, &V.pack_base[i], &size))
+            V.h[i] = h;
+#endif
     }
     snprintf(V.dir, sizeof(V.dir), "%s", dir);
     V.dirlen = strlen(V.dir);
@@ -243,7 +363,7 @@ VFile *vf_open(const char *path)
             return NULL;
         f->pack = (s32)e->pack;
         f->gen = V.gen;
-        f->base = e->offset;
+        f->base = V.pack_base[e->pack] + e->offset;
         f->size = e->size;
         return f;
     }
@@ -281,15 +401,22 @@ size_t vf_read(VFile *f, void *buf, size_t n)
     }
     if (done < n) {
         size_t left = n - done;
+        PackHandle h = acquire((u32)f->pack, f->gen);
+        if (h == PACK_NONE)
+            return done;
         if (left >= VBUF) {   /* big reads go straight to the card */
-            size_t got = pack_read(V.h[f->pack], f->base + f->pos, out + done, left);
+            size_t got = pack_read(h, f->base + f->pos, out + done, left);
+            release((u32)f->pack);
             f->pos += got;
             done += got;
         } else {
-            if (!f->buf && !(f->buf = malloc(VBUF)))
+            if (!f->buf && !(f->buf = malloc(VBUF))) {
+                release((u32)f->pack);
                 return done;
+            }
             u64 want = f->size - f->pos < VBUF ? f->size - f->pos : VBUF;
-            size_t got = pack_read(V.h[f->pack], f->base + f->pos, f->buf, (size_t)want);
+            size_t got = pack_read(h, f->base + f->pos, f->buf, (size_t)want);
+            release((u32)f->pack);
             f->buf_at = f->pos;
             f->buf_len = (u32)got;
             size_t k = got < left ? got : left;

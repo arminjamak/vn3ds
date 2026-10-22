@@ -1,0 +1,54 @@
+{
+  "minigames": {
+    "room": {
+      "mechanic": "free_roam",
+      "rooms": "ROOMS",
+      "hotspots": "HOTSPOTS",
+      "nav_order": "NAV_ORDER",
+      "slots": "SLOTS",
+      "time": "time_of_day",
+      "room": "current_room",
+      "background": "images/backgrounds/{bg}.png",
+      "room_tips": "ROOM_TIP",
+      "hotspot_tips": "HOTSPOT_TIP",
+      "slot_tips": {
+        "nap": "NAP_TIP"
+      },
+      "collectibles": {
+        "table": "ARTIFACTS",
+        "var": "artifact{n}",
+        "level": "robin_progression_level",
+        "text": "Pick up the collectible"
+      }
+    },
+    "robin_interact": {
+      "mechanic": "topics",
+      "buttons": "interact_buttons",
+      "topics": "CI_TOPICS",
+      "key": "{page}_{slot}",
+      "show": "robin neutral",
+      "gifts": {
+        "page": "gift",
+        "items": "GIFT_LIST",
+        "name": "name",
+        "id": "id",
+        "owned": "flag",
+        "var": "gift_to_give",
+        "label": "give_gift"
+      }
+    },
+    "gift_menu": {
+      "mechanic": "shop",
+      "items": "GIFT_LIST",
+      "label": "purchase_label",
+      "name": "name",
+      "price": "price",
+      "owned": "flag",
+      "level": [
+        "min_level",
+        "robin_progression_level"
+      ],
+      "back": "show_correct_gift_screen"
+    }
+  }
+}

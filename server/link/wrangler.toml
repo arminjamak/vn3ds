@@ -1,0 +1,25 @@
+# vn3ds link (see worker.js and README.md). Deploy: npx wrangler deploy
+name = "vn3ds-link"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# The 3DS speaks plain HTTP (it has no TLS worth using), so this host must be
+# reachable on http:// too: in the vn3ds.com zone, add a Configuration Rule
+# for link.vn3ds.com with "Automatic HTTPS Rewrites" and "Always Use HTTPS"
+# off. The page uses https:// and wss:// as usual.
+routes = [{ pattern = "link.vn3ds.com", custom_domain = true }]
+
+[vars]
+ORIGINS = "https://vn3ds.com,https://www.vn3ds.com"
+
+[[durable_objects.bindings]]
+name = "LINK"
+class_name = "Link"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Link", "Room"]

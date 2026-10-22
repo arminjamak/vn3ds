@@ -30,16 +30,19 @@ STEPS = {
     "unpack": "Unpacking",
     "decompile": "Decompiling scripts",
     "scripts": "Reading the scripts",
+    "screens": "The game's screens",
     "audio": "Audio",
     "music": "Music tempo",
     "images": "Images",
     "video": "Video",
+    "scenes3d": "3D scenes",
     "pack": "Packing",
     "target": "Finding your 3DS",
     "engine": "vn3ds",
     "game": "Your game",
+    "saves": "Your saves",
 }
-CONVERT_STEPS = ("unpack", "decompile", "scripts", "audio", "music", "images", "video", "pack")
+CONVERT_STEPS = ("unpack", "decompile", "scripts", "screens", "audio", "music", "images", "video", "scenes3d", "pack")
 
 HINT_NETLOADER = [
     "1. On the 3DS, open the Homebrew Launcher.",
@@ -47,6 +50,31 @@ HINT_NETLOADER = [
 ]
 HINT_OR_VN3DS = "Already have vn3ds? Open it and press Y instead."
 HINT_OR_SD = "Or put the 3DS's SD card into this computer."
+
+
+def hint_restart(ip):
+    """The 3DS is on the Wi-Fi but nothing on it listens."""
+    return [
+        f"Your 3DS is on the Wi-Fi ({ip}), but nothing on it is listening.",
+        "If vn3ds says it can't open (or listen on) the port, restart the 3DS:",
+        "power it off and on, then open vn3ds, or the Homebrew Launcher and press Y.",
+        "This carries on by itself when the 3DS is back, even at a new IP.",
+    ]
+
+
+HINT_OFFLINE = [
+    "Your 3DS isn't on the Wi-Fi: wake it up and check that its Wi-Fi is on,",
+    "then open vn3ds, or the Homebrew Launcher and press Y.",
+]
+# how long the 3DS may stay silent at its last address before the whole
+# network is searched (DHCP can hand out a new IP after a restart), and
+# before the user is told what might be wrong
+RELOCATE_AFTER = 6
+DIAGNOSE_AFTER = 30
+
+
+def _diagnose_hint(state, ip):
+    return hint_restart(ip) if state == "online" else HINT_OFFLINE
 
 
 class Cancelled(send.Cancelled):
@@ -84,6 +112,9 @@ class UI:
     def converted(self, summary):
         """The game is converted (summary["out_dir"] holds it)."""
 
+    def saves(self, result):
+        """The player's Ren'Py saves went along (savesync.after_delivery)."""
+
 
 @dataclass
 class Options:
@@ -108,6 +139,7 @@ class Options:
     video_kbps: int = None
     fit: bool = False
     jobs: int = 0
+    saves: bool = True             # take the player's Ren'Py saves along (savesync.py)
 
 
 def _check(ui):
@@ -189,7 +221,7 @@ def install_game_sd(out_dir, game_id, sd, report=None, stop=None):
         dirs_.add(os.path.normcase(os.path.normpath(os.path.join(dest, rel_root))))
         os.makedirs(os.path.join(dest, rel_root), exist_ok=True)
         for n in sorted(names):
-            if n.endswith(".part"):
+            if n.endswith(".part") or n == "savemap.json":
                 continue
             full = os.path.join(root, n)
             files.append((os.path.relpath(full, out_dir), full))
@@ -251,39 +283,54 @@ def deliver_sd(game_dirs, sd, engine, ui):
 
 def find_3ds(opts, ui, allow_sd=True):
     """Waits until the 3DS shows up. Returns (kind, where): "vn3ds" with an
-    IP, "netloader" with an IP, "ftp" with IP:PORT, or "sd" with a card."""
+    IP, "netloader" with an IP, "ftp" with IP:PORT, or "sd" with a card.
+
+    A given IP is only where the 3DS was last: when it stays silent there,
+    the whole network is searched (a restart can bring a new IP). When the
+    3DS is on the Wi-Fi but nothing on it listens, or it isn't on the Wi-Fi
+    at all, the user is told what to do (e.g. restart it), and this carries
+    on by itself."""
     ui.phase("Finding your 3DS")
     where = f" at {opts.console}" if opts.console else " on the Wi-Fi"
     ui.step("target", "active", "looking" + where)
-    hinted = False
+    t0 = time.time()
+    shown = None
     while True:
         _check(ui)
-        if opts.console:
-            ip = opts.console
-            if detect.listening(ip, send.VN3DS_PORT):
-                return "vn3ds", ip
-            if detect.ping_netloader(ip):
-                return "netloader", ip
-        else:
-            if allow_sd:
-                cards = detect.find_sd()
-                if cards:
-                    return "sd", cards[0]
-            lan = detect.scan_lan()
-            if lan.get(detect.VN3DS_PORT):
-                return "vn3ds", lan[detect.VN3DS_PORT][0]
-            ip = detect.find_netloader()
-            if ip:
-                return "netloader", ip
-            if lan.get(detect.FTPD_PORT):
-                return "ftp", f"{lan[detect.FTPD_PORT][0]}:{detect.FTPD_PORT}"
-        if not hinted:
+        waited = time.time() - t0
+        state, seen = "?", None
+        if opts.console and detect.listening(opts.console, send.VN3DS_PORT):
+            return "vn3ds", opts.console
+        if allow_sd and not opts.console:
+            cards = detect.find_sd()
+            if cards:
+                return "sd", cards[0]
+        if not opts.console or waited > RELOCATE_AFTER:
+            state, seen = detect.locate(opts.console)
+            if state in ("vn3ds", "netloader"):
+                if opts.console and seen != opts.console:
+                    ui.log(f"your 3DS is now at {seen} (it was at {opts.console}); sending there")
+                return state, seen
+            if not opts.console:
+                ftp = detect.scan_lan(ports=(detect.FTPD_PORT,)).get(detect.FTPD_PORT)
+                if ftp:
+                    return "ftp", f"{ftp[0]}:{detect.FTPD_PORT}"
+        elif detect.ping_netloader(opts.console):
+            return "netloader", opts.console
+        if waited > DIAGNOSE_AFTER and state != "?":
+            lines = _diagnose_hint(state, seen)
+            if lines != shown:
+                ui.hint(lines)
+                ui.step("target", "active", "your 3DS is on the Wi-Fi, but not listening yet"
+                        if state == "online" else "your 3DS isn't on the Wi-Fi yet")
+                shown = lines
+        elif shown is None:
             lines = HINT_NETLOADER + [HINT_OR_VN3DS]
             if allow_sd and not opts.console:
                 lines.append(HINT_OR_SD)
             ui.hint(lines)
             ui.step("target", "active", "waiting for your 3DS" + where)
-            hinted = True
+            shown = lines
         send._sleep(2, ui.stopped)
 
 
@@ -314,6 +361,37 @@ def _send_engine_netloader(ip, engine, ui):
             ui.hint([])
 
 
+def _wait_for_receiver(ip, engine, ui, label):
+    """Waits for vn3ds's receiver; returns where it answers. Follows the 3DS
+    to a new IP, resends vn3ds if the 3DS comes back in the Homebrew
+    Launcher (after a restart), and says what to do while nothing answers."""
+    t0 = time.time()
+    shown = None
+    while not send.wait_for_receiver(ip, seconds=5, stop=ui.stopped):
+        waited = time.time() - t0
+        if waited < 20:
+            continue
+        if shown is None:
+            shown = ["vn3ds should open on its own. If it doesn't, open vn3ds and press Y."]
+            ui.hint(shown)
+        state, seen = detect.locate(ip)
+        if state == "vn3ds":
+            if seen != ip:
+                ui.log(f"your 3DS is now at {seen} (it was at {ip}); sending there")
+            return seen
+        if state == "netloader" and engine:
+            _send_engine_netloader(seen, engine, ui)
+            ip, t0, shown = seen, time.time(), None
+            ui.step("game", "active", "waiting for vn3ds to open its receiver", label=label)
+            continue
+        if waited > DIAGNOSE_AFTER + 15 and state in ("online", None):
+            lines = _diagnose_hint(state, seen)
+            if lines != shown:
+                ui.hint(lines)
+                shown = lines
+    return ip
+
+
 def deliver_wifi(game_dirs, ip, kind, engine, ui):
     ui.target("wifi", ip)
     if kind == "netloader":
@@ -328,12 +406,7 @@ def deliver_wifi(game_dirs, ip, kind, engine, ui):
     ui.phase("Sending your game" if game_dirs else "Saving vn3ds to the SD card")
     if not detect.listening(ip, send.VN3DS_PORT):
         ui.step("game", "active", "waiting for vn3ds to open its receiver", label=label)
-        t0 = time.time()
-        hinted = False
-        while not send.wait_for_receiver(ip, seconds=5, stop=ui.stopped):
-            if not hinted and time.time() - t0 > 20:
-                ui.hint(["vn3ds should open on its own. If it doesn't, open vn3ds and press Y."])
-                hinted = True
+        ip = _wait_for_receiver(ip, engine, ui, label)
         ui.hint([])
     t_total = sum(os.path.getsize(p) for _, p in files)
 
@@ -355,8 +428,24 @@ def deliver_wifi(game_dirs, ip, kind, engine, ui):
         elif event == "info":
             ui.log(info["text"])
     info = {}
+
+    def relocate(old):
+        """The connection dropped and vn3ds is silent: find it again."""
+        state, seen = detect.locate(old)
+        if state == "vn3ds":
+            ui.hint([])
+            return seen
+        if state == "netloader" and engine:   # restarted into the Homebrew Launcher
+            _send_engine_netloader(seen, engine, ui)
+            ui.phase("Sending your game" if game_dirs else "Saving vn3ds to the SD card")
+            return _wait_for_receiver(seen, engine, ui, label)
+        if state == "netloader":
+            ui.hint(["The Homebrew Launcher is open: open vn3ds instead and press Y."])
+        elif state in ("online", None):
+            ui.hint(_diagnose_hint(state, seen))
+        return None
     sent, refused = send.send_vn3ds(ip, files, forever=True, report=report, stop=ui.stopped,
-                                    info=info)
+                                    info=info, relocate=relocate)
     need = info.get("need")
     n_needed = len(need) if need is not None else sent
     engine_sent = engine and need is not None and (len(files) - 1) in need
@@ -375,6 +464,8 @@ def deliver_wifi(game_dirs, ip, kind, engine, ui):
             "" if kind == "netloader" else "; restart vn3ds to use the new version"))
     if refused:
         raise FlowError(f"The 3DS could not write {refused} files (is the SD card full?)")
+    # the vn3ds that is running is the old one until it restarts
+    return bool(engine_sent and kind != "netloader")
 
 
 def deliver_ftp(game_dirs, where, engine, ui):
@@ -411,7 +502,9 @@ def plan_target(opts):
         kind, where = None, None
     quality = opts.quality
     if quality == "auto":
-        quality = "wifi" if kind in ("wifi", "ftp") else "sd"
+        # Wi-Fi is fast enough now (about 1.7 MB/s) that both ways get the same
+        # files: the smallest without a visible or audible loss
+        quality = "balanced"
     return kind, where, quality
 
 
@@ -440,7 +533,8 @@ def run(opts, ui=None):
             for d in ported:
                 ui.converted(dict(out_dir=d, id=os.path.basename(d.rstrip("/\\")), title=None))
         else:
-            what = {"sd": "best quality, for the SD card", "wifi": "compact, for Wi-Fi"}[quality]
+            what = {"balanced": "full quality, compact", "sd": "largest files",
+                    "wifi": "smallest files"}[quality]
             ui.phase(f"Converting ({what})")
             if kind == "wifi" and not where:
                 ui.hint(["While this converts, get your 3DS ready:"] + HINT_NETLOADER +
@@ -475,9 +569,23 @@ def run(opts, ui=None):
             if found == "ftp":
                 deliver_ftp(game_dirs, at, engine, ui)
             else:
-                deliver_wifi(game_dirs, at, found, engine, ui)
+                result["engine_restart"] = deliver_wifi(game_dirs, at, found, engine, ui)
         kind, where = ("sd" if found == "sd" else "ftp" if found == "ftp" else "wifi"), at
     result.update(target=kind, where=where)
+    if game_dirs and opts.saves and kind in ("sd", "wifi"):
+        # the player's Ren'Py saves go along (savesync.py); a problem there
+        # never undoes the delivery
+        from . import savesync
+        try:
+            res = savesync.after_delivery(game_dirs, kind, where, ui,
+                                          later=result.get("engine_restart", False))
+        except Exception as e:
+            res = None
+            ui.step("saves", "fail", f"saves weren't sent ({e.__class__.__name__}: {e})",
+                    label="Saves")
+        if res is not None:
+            result["saves"] = res
+            ui.saves(res)
     return result
 
 

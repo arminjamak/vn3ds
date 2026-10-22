@@ -21,7 +21,7 @@ NONE = 0xFFFFFFFF
 
 OP = dict(
     NOP=0x00, END=0x01, JMP=0x02, JZ=0x03, JNZ=0x04, CALL=0x05, RET=0x06,
-    POP=0x07, DUP=0x08,
+    POP=0x07, DUP=0x08, JMP_NAME=0x09, CALL_NAME=0x0A,
     PUSH_NUM=0x10, PUSH_STR=0x11, PUSH_NONE=0x12, PUSH_TRUE=0x13,
     PUSH_FALSE=0x14, LOAD=0x15, STORE=0x16,
     ADD=0x20, SUB=0x21, MUL=0x22, DIV=0x23, FLOORDIV=0x24, MOD=0x25, POW=0x26,
@@ -40,7 +40,11 @@ CMPOPS = {ast.Eq: "EQ", ast.NotEq: "NE", ast.Lt: "LT", ast.LtE: "LE",
 BUILTINS = {"renpy.random.randint": 0, "renpy.random.random": 1, "len": 2,
             "str": 3, "int": 4, "float": 5, "abs": 6, "min": 7, "max": 8,
             "round": 9, "bool": 10, "_getitem": 11, "_slice": 12,
-            "_upper": 13, "_lower": 14, "_title": 15, "_strip": 16, "_capitalize": 17}
+            "_upper": 13, "_lower": 14, "_title": 15, "_strip": 16, "_capitalize": 17,
+            # sets and dicts kept in a string variable (engine/source/vm.c)
+            "_c_has": 18, "_c_add": 19, "_c_del": 20, "_c_get": 21, "_c_set": 22, "_c_len": 23,
+            # getattr(store, name) / setattr(store, name, value) with a computed name
+            "_var_get": 24, "_var_set": 25}
 STR_METHODS = {"upper": "_upper", "lower": "_lower", "title": "_title", "strip": "_strip",
                "capitalize": "_capitalize", "lstrip": "_strip", "rstrip": "_strip"}
 
@@ -158,6 +162,52 @@ def parse_color(s, default=0xFFFFFFFF):
     except ValueError:
         pass
     return default
+
+
+def collection_kind(src):
+    """"set" / "dict" when a default's value is a set or dict (of constants)."""
+    try:
+        e = ast.parse(src.strip(), mode="eval").body
+    except (SyntaxError, AttributeError):
+        return None
+    if isinstance(e, ast.Call) and dotted(e.func) in ("set", "dict"):
+        return dotted(e.func)
+    if isinstance(e, ast.Set) or (isinstance(e, ast.Dict) and not e.keys):
+        return "set" if isinstance(e, ast.Set) else "dict"
+    if isinstance(e, ast.Dict):
+        try:
+            ast.literal_eval(e)
+            return "dict"
+        except ValueError:
+            return None
+    return None
+
+
+def encode_collection(src):
+    """The engine's string for a constant set or dict (vm.c "sets and dicts")."""
+    e = ast.parse(src.strip(), mode="eval").body
+    items = []
+    if isinstance(e, ast.Call):
+        if e.args:
+            try:
+                v = ast.literal_eval(e.args[0])
+            except ValueError:
+                v = ()
+            items = [(k, True) for k in v] if dotted(e.func) == "set" else list(dict(v).items())
+    elif isinstance(e, ast.Set):
+        items = [(ast.literal_eval(x), True) for x in e.elts]
+    else:
+        items = list(ast.literal_eval(e).items())
+
+    def val(v):
+        if v is None:
+            return "-"
+        if isinstance(v, bool):
+            return "b1" if v else "b0"
+        if isinstance(v, (int, float)):
+            return "n%r" % float(v)
+        return "s" + str(v)
+    return "".join(f"{k}\x1f{val(v)}\x1e" for k, v in items)
 
 
 def dotted(node):
@@ -279,9 +329,18 @@ class Compiler:
         self.minigames = []          # ids passed to vn3ds_minigame(), in order
         self.named_audio = {}        # "minigame/tower_1" -> resource index
         self.screen_bodies = {}      # screen name -> its lines (ported minigames)
+        self.inliner = None          # pyinline.Inliner: the game's own simple functions
+        self.linemap = []            # (file, line, code start, code end) per statement (savemap.py)
+        self.collections = {}        # story set/dict variables -> "set" / "dict"
+        self.label_params = {}       # label -> its "(...)" parameters
+        self.inline_depth = 0
+        self.interp_n = 0            # [expression] in text: its variables
         self.py_classes = {}         # init python class name -> ast.ClassDef
         self.ported = None           # ported.Ported: screens rebuilt as native minigames
         self.dropped = 0             # statements/conditions skipped as unsupported so far
+        self.pyscreens = False       # the story shows / calls screens run by the game's Python
+        self.pyscreen_used = set()   # those screens (pyscreens.py)
+        self.pyscreen_args = set()   # the arguments they are shown with (source)
         self.loop_guards = 0
 
     # -- tables ---------------------------------------------------------
@@ -325,6 +384,7 @@ class Compiler:
 
     def collect(self, files):
         """Gather defines, defaults, images and transforms from all files."""
+        self.plan_pyscreens(files)
         seq = 0
         for nodes in files:
             stack = [(0, n) for n in nodes]
@@ -337,6 +397,8 @@ class Compiler:
                         if isinstance(c, rpy.Python) and not c.init:
                             c.init = True  # `$` inside init: runs at init time
                 elif isinstance(n, (rpy.Label, rpy.If, rpy.While, rpy.Menu)):
+                    if isinstance(n, rpy.Label) and getattr(n, "params", None):
+                        self.label_params[n.name] = n.params
                     # Ren'Py runs define/default/image/transform statements at
                     # init time wherever they appear, even indented inside a
                     # label or a branch, so look for them in nested blocks.
@@ -348,6 +410,12 @@ class Compiler:
                 elif isinstance(n, rpy.Define):
                     self.collect_define(n, prio + n.priority, seq)
                 elif isinstance(n, rpy.Default):
+                    kind = collection_kind(n.expr)
+                    if kind:   # a set or dict of the story: an (encoded) string
+                        self.collections[n.name] = kind
+                        self.init_items.append((100000, seq, n.name, repr(encode_collection(
+                            n.expr)), n.line))
+                        continue
                     self.init_items.append((100000, seq, n.name, n.expr, n.line))
                     self.remember_constant(n.name, n.expr)
                 elif isinstance(n, rpy.Image):
@@ -360,6 +428,33 @@ class Compiler:
                     self.transform_nodes[n.name] = n
                 elif isinstance(n, rpy.Python) and n.init:
                     self.collect_init_python(n, prio + getattr(n, "priority", 0), seq)
+
+    def plan_pyscreens(self, files):
+        """Screens the game's own Python runs (pyscreens.py): the story's
+        `show screen` of any screen it defines, and `call screen` of one a
+        choice menu would lose (timers, keys, Python actions, ...). Their
+        story variables are set up here, before the init code is made."""
+        from .pyscreens import needs_runtime
+        bodies = {n.name: n.body for nodes in files for n in rpy.iter_nodes(nodes)
+                  if isinstance(n, rpy.Screen)}
+        hit = False
+        for nodes in files:
+            for n in rpy.iter_nodes(nodes):
+                if isinstance(n, rpy.ShowScreen) and n.name in bodies:
+                    hit = True
+                elif isinstance(n, rpy.CallScreen) and n.name in bodies and \
+                        needs_runtime(bodies[n.name]):
+                    hit = True
+                elif isinstance(n, rpy.Python) and not n.init and \
+                        re.search(r"renpy\.(show|hide)_screen\(", n.code):
+                    hit = True
+        if not hit:
+            return
+        self.pyscreens = True
+        self.collections["_vn3ds_screens"] = "dict"
+        self.init_items.append((100000, -2, "_vn3ds_screens", repr(""), None))
+        self.init_items.append((100000, -1, "_vn3ds_jump", repr(""), None))
+        self.var("_return")
 
     def remember_constant(self, name, src):
         try:
@@ -379,6 +474,10 @@ class Compiler:
             return
         if name == "config.version":
             self.meta["version"] = self.const_str(expr) or ""
+            return
+        if name == "config.main_menu_music":
+            # the title screen's music, looped (a RES index; see META)
+            self.meta["title_music"] = self.audio_index(self.audio_path(expr, line))
             return
         if name == "config.speaking_attribute":
             self.meta["speaking_attribute"] = self.const_str(expr)
@@ -440,7 +539,8 @@ class Compiler:
             elif isinstance(st, (ast.FunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
                 if isinstance(st, ast.ClassDef):
                     self.py_classes[st.name] = st   # read by ported minigames
-                self.warn(n.line, "python functions/classes in init python are ignored")
+                if not self.pyscreens:   # else the game's screens run them (pyscreens.py)
+                    self.warn(n.line, "python functions/classes in init python are ignored")
 
     def const_value(self, expr):
         try:
@@ -508,7 +608,8 @@ class Compiler:
             try:
                 self.c_expr(src, line)
             except Unsupported as e:
-                self.warn(line, f"cannot evaluate '{name}' ({e}); it starts as None")
+                if not self.pyscreens:   # else it lives in the screens' Python (pyscreens.py)
+                    self.warn(line, f"cannot evaluate '{name}' ({e}); it starts as None")
                 code.op("PUSH_NONE")
             code.op("STORE")
             code.u32(self.var(name))
@@ -546,9 +647,14 @@ class Compiler:
     def c_block(self, nodes, top=False):
         for n in nodes:
             cp = self.checkpoint()
+            mark = len(self.linemap)
             try:
                 self.c_node(n, top)
+                line = getattr(n, "line", None)
+                if line is not None and self.code.here() > cp[0]:
+                    self.linemap.append((line.filename, line.lineno, cp[0], self.code.here()))
             except Unsupported as e:
+                del self.linemap[mark:]
                 self.rollback(cp)
                 self.dropped += 1
                 self.warn(n.line, str(e))
@@ -653,6 +759,8 @@ class Compiler:
             self.c_jump(n, "JMP")
             return
         if t is rpy.Call:
+            if getattr(n, "args", None) and not n.expression:
+                self.c_label_args(n)
             self.c_jump(n, "CALL")
             return
         if t is rpy.Return:
@@ -717,8 +825,13 @@ class Compiler:
                 except ValueError as e:
                     raise Unsupported(str(e))
                 return
+            if self.pyscreens and n.name in self.screen_bodies:
+                self.c_pyscreen_show(n.name, (getattr(n, "args", None) or "()")[1:-1].strip(), n.hide, n.line)
+                return
             raise Unsupported(f"{what} is not supported and was skipped")
         if t is rpy.Unsupported:
+            if n.what == "style statements" and self.pyscreens:
+                return   # the screens' runtime has them (pyscreens.py)
             if n.what.startswith("unparseable"):
                 raise Unsupported(f"{n.what}; skipped")
             raise Unsupported(f"{n.what} is not supported and was skipped")
@@ -765,11 +878,42 @@ class Compiler:
         if n.with_:
             self.c_with("None", n.line)
             self.c_with(n.with_, n.line)
+        what = self.interp_exprs(n.what, n.line)
         code.op("SAY")
         code.i32(idx)
         code.u32(self.s(who))
-        code.u32(self.s(n.what))
+        code.u32(self.s(what))
         code.u8(flags)
+
+    INTERP = re.compile(r"(?<!\[)\[([^\[\]]+)\]")
+
+    def interp_exprs(self, text, line):
+        """Text that shows `[20 - money]`: the engine fills in names only, so
+        each expression is worked out into a variable just before the line."""
+        if not text or "[" not in text:
+            return text
+
+        def one(m):
+            body = m.group(1)
+            src, _, rest = body.partition("!")
+            if src.strip().isidentifier() or "." in src or not src.strip():
+                return m.group(0)
+            try:
+                node = ast.parse(src.strip(), mode="eval").body
+            except SyntaxError:
+                return m.group(0)
+            name = "_vn3ds_text%d" % self.interp_n
+            cp = self.checkpoint()
+            try:
+                self.c_ast_or_fold(node, line)
+            except Unsupported:
+                self.rollback(cp)
+                return m.group(0)
+            self.interp_n += 1
+            self.code.op("STORE")
+            self.code.u32(self.var(name))
+            return f"[{name}{'!' + rest if rest else ''}]"
+        return self.INTERP.sub(one, text)
 
     def c_menu(self, n):
         code = self.code
@@ -811,6 +955,33 @@ class Compiler:
             code.ref(end)
         code.mark(end)
 
+    def c_pyscreen_call(self, n):
+        """`call screen x` run by the game's own Python (pyscreen.c): its
+        Jump comes back in _vn3ds_jump."""
+        args = (n.args or "()")[1:-1].strip()
+        idx = len(self.ported.entries)
+        self.ported.entries.append(("pyscreen", [("screen", n.name), ("args", args)]))
+        self.pyscreen_used.add(n.name)
+        self.pyscreen_args.add(args)
+        code = self.code
+        code.op("PUSH_STR")
+        code.u32(self.s(f"@{idx}"))
+        code.op("MINIGAME")
+        code.op("POP")
+        self.c_python("if _vn3ds_jump:\n    renpy.jump(_vn3ds_jump)", n.line)
+
+    def c_pyscreen_show(self, name, args, hide, line):
+        """`show screen x(...)` / `hide screen x`: the story dict
+        _vn3ds_screens (the overlays pyscreen.c draws, kept in saves)."""
+        self.pyscreen_used.add(name)
+        if not hide:
+            self.pyscreen_args.add(args)
+        if self.ported is not None and not any(
+                m == "pyscreen" and ("mode", "overlay") in p for m, p in self.ported.entries):
+            self.ported.entries.append(("pyscreen", [("mode", "overlay")]))
+        self.c_python(f"_vn3ds_screens.pop({name!r})" if hide else
+                      f"_vn3ds_screens[{name!r}] = {args!r}", line)
+
     def c_call_screen(self, n):
         """A navigation screen (buttons that Jump/Call/Return) becomes a menu."""
         code = self.code
@@ -820,6 +991,11 @@ class Compiler:
             except ValueError as e:
                 raise Unsupported(str(e))
             return
+        if self.pyscreens and self.ported is not None and n.name in self.screen_bodies:
+            from .pyscreens import needs_runtime
+            if needs_runtime(self.screen_bodies[n.name]):
+                self.c_pyscreen_call(n)
+                return
         items = self.screens.get(n.name)
         if not items and self.ported is not None:
             # a custom minigame nothing can play: the player picks the outcome
@@ -957,13 +1133,46 @@ class Compiler:
             return f"{base} ({where})"
         return base
 
+    def c_label_args(self, n):
+        """`call gain("trust", 5)` of `label gain(stat, amount, message=True)`:
+        the parameters are set before the call (as story variables)."""
+        params = self.label_params.get(self.qualify(n.target, n.line)) or \
+            self.label_params.get(n.target)
+        if not params:
+            return
+        try:
+            fdef = ast.parse(f"def f{params}: pass").body[0]
+            call = ast.parse(f"f{n.args}", mode="eval").body
+        except SyntaxError:
+            self.warn(n.line, f"call {n.target}{n.args}: can't read the arguments")
+            return
+        names = [a.arg for a in fdef.args.args]
+        defaults = dict(zip(names[len(names) - len(fdef.args.defaults):], fdef.args.defaults))
+        given = dict(zip(names, call.args))
+        given.update({k.arg: k.value for k in call.keywords if k.arg in names})
+        for name in names:
+            value = given.get(name, defaults.get(name))
+            if value is None:
+                continue
+            cp = self.checkpoint()
+            try:
+                self.c_ast_or_fold(value, n.line)
+                self.code.op("STORE")
+                self.code.u32(self.var(name))
+            except Unsupported as e:
+                self.rollback(cp)
+                self.warn(n.line, f"call {n.target}: argument {name} ({e}) is left as it was")
+
     def c_jump(self, n, op):
         target = n.target
         if n.expression:
             try:
                 target = ast.literal_eval(target)
             except (ValueError, SyntaxError):
-                raise Unsupported(f"{op.lower()} expression with a computed label")
+                # computed at run time: the engine looks the name up (LABL)
+                self.c_expr(target, n.line)
+                self.code.op(op + "_NAME")
+                return
             if not isinstance(target, str):
                 raise Unsupported("jump expression needs a string")
         self.code.op(op)
@@ -1529,10 +1738,59 @@ class Compiler:
             node = ast.parse(src.strip(), mode="eval").body
         except SyntaxError:
             raise Unsupported(f"cannot parse expression '{src}'")
-        self.c_ast(node, line)
+        self.c_ast_or_fold(node, line)
+
+    def callf(self, name, args, line):
+        for a in args:
+            if isinstance(a, ast.AST):
+                self.c_ast(a, line)
+            else:   # a value
+                self.c_ast(ast.Constant(a), line)
+        self.code.op("CALLF")
+        self.code.u8(BUILTINS[name])
+        self.code.u8(len(args))
+
+    def c_ast_special(self, n, line):
+        """Sets and dicts of the story, getattr(store, x): True when compiled."""
+        code = self.code
+        if isinstance(n, ast.Compare) and len(n.ops) == 1 and \
+                isinstance(n.ops[0], (ast.In, ast.NotIn)) and self.coll(n.comparators[0]):
+            self.callf("_c_has", [n.comparators[0], n.left], line)
+            if isinstance(n.ops[0], ast.NotIn):
+                code.op("NOT")
+            return True
+        if isinstance(n, ast.Subscript) and self.coll(n.value) and \
+                not isinstance(n.slice, ast.Slice):
+            self.callf("_c_get", [n.value, n.slice, None], line)
+            return True
+        if isinstance(n, ast.Dict) and not n.keys:
+            self.c_ast(ast.Constant(""), line)
+            return True
+        if isinstance(n, ast.Call):
+            fn = dotted(n.func)
+            if fn in ("set", "dict") and not n.args and not n.keywords:
+                self.c_ast(ast.Constant(""), line)
+                return True
+            if fn == "len" and len(n.args) == 1 and self.coll(n.args[0]):
+                self.callf("_c_len", [n.args[0]], line)
+                return True
+            if isinstance(n.func, ast.Attribute) and self.coll(n.func.value) and \
+                    n.func.attr == "get" and 1 <= len(n.args) <= 2:
+                self.callf("_c_get", [n.func.value, n.args[0],
+                                      n.args[1] if len(n.args) > 1 else None], line)
+                return True
+            if fn == "getattr" and len(n.args) >= 2 and dotted(n.args[0]) == "store":
+                if isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str):
+                    self.c_ast(ast.Name(id=n.args[1].value, ctx=ast.Load()), line)
+                else:
+                    self.callf("_var_get", [n.args[1]], line)
+                return True
+        return False
 
     def c_ast(self, n, line):
         code = self.code
+        if self.c_ast_special(n, line):
+            return
         if isinstance(n, ast.Constant):
             v = n.value
             if v is True:
@@ -1701,6 +1959,12 @@ class Compiler:
                 code.u8(BUILTINS[fn])
                 code.u8(len(n.args))
                 return
+            if fn and self.inliner is not None and fn in self.inliner.funcs:
+                # the game's own function, folded into an expression (pyinline.py)
+                src = self.inliner.inline(fn, n.args)
+                if src is not None:
+                    self.c_ast(ast.parse(src, mode="eval").body, line)
+                    return
             raise Unsupported(f"call to {fn or ast.unparse(n.func)}()")
         if isinstance(n, ast.JoinedStr):
             code.op("PUSH_STR")
@@ -1718,6 +1982,37 @@ class Compiler:
         raise Unsupported(f"unsupported expression {ast.unparse(n)}")
 
     # -- python statements -------------------------------------------------
+
+    def c_ast_or_fold(self, n, line):
+        """c_ast, and when that can't: the expression folded over the game's
+        init-python tables (pyinline.py), e.g. GIFTS[gift_to_give].scene_label.
+        An expression that reads a table the compiler itself couldn't evaluate
+        (it would start as None) is folded first."""
+        inl = self.inliner
+        if inl is not None and any(
+                isinstance(x, ast.Name) and x.id in inl.t.src and x.id not in inl.mutable
+                and not isinstance(self.constants.get(x.id), (str, int, float, bool))
+                for x in ast.walk(n)):
+            src = inl.fold(n)
+            if src is not None:
+                self.c_ast(ast.parse(src, mode="eval").body, line)
+                return
+        cp = self.checkpoint()
+        try:
+            self.c_ast(n, line)
+        except Unsupported:
+            self.rollback(cp)
+            src = self.inliner.fold(n) if self.inliner is not None else None
+            if src is None:
+                raise
+            self.c_ast(ast.parse(src, mode="eval").body, line)
+
+    def coll(self, n):
+        """The story set/dict a node names (x or store.x), or None."""
+        name = dotted(n)
+        if name and name.startswith("store."):
+            name = name[6:]
+        return name if name in self.collections else None
 
     def c_python(self, src, line):
         try:
@@ -1743,6 +2038,13 @@ class Compiler:
             if st.value is None:
                 return
             names = []
+            if len(targets) == 1 and isinstance(targets[0], ast.Subscript) and \
+                    self.coll(targets[0].value):   # d[k] = v
+                t = targets[0]
+                self.callf("_c_set", [t.value, t.slice, st.value], line)
+                code.op("STORE")
+                code.u32(self.var(self.coll(t.value)))
+                return
             for t in targets:
                 name = dotted(t)
                 if name is None:
@@ -1751,12 +2053,26 @@ class Compiler:
             if any(nm.startswith(("config.", "preferences.", "_preferences.", "gui."))
                    for nm in names):
                 return
-            self.c_ast(st.value, line)
+            self.c_ast_or_fold(st.value, line)
             for i, name in enumerate(names):
                 if i < len(names) - 1:
                     code.op("DUP")
                 code.op("STORE")
                 code.u32(self.var(name))
+            return
+        if isinstance(st, ast.AugAssign) and isinstance(st.target, ast.Subscript) and \
+                self.coll(st.target.value) and type(st.op) in BINOPS:   # d[k] += v
+            t = st.target
+            self.c_ast(t.value, line)
+            self.c_ast(t.slice, line)
+            self.callf("_c_get", [t.value, t.slice, 0], line)
+            self.c_ast(st.value, line)
+            code.op(BINOPS[type(st.op)])
+            code.op("CALLF")
+            code.u8(BUILTINS["_c_set"])
+            code.u8(3)
+            code.op("STORE")
+            code.u32(self.var(self.coll(t.value)))
             return
         if isinstance(st, ast.AugAssign):
             name = dotted(st.target)
@@ -1793,8 +2109,46 @@ class Compiler:
         fn = dotted(call.func)
         kw = {k.arg: k.value for k in call.keywords if k.arg}
         args = call.args
+        if fn in ("renpy.show_screen", "renpy.hide_screen") and self.pyscreens and args and \
+                isinstance(args[0], ast.Constant) and args[0].value in self.screen_bodies:
+            rest = [ast.unparse(a) for a in args[1:]] + \
+                [f"{k.arg}={ast.unparse(k.value)}" for k in call.keywords
+                 if k.arg and not k.arg.startswith("_")]
+            self.c_pyscreen_show(args[0].value, ", ".join(rest), fn == "renpy.hide_screen", line)
+            return
         if fn in IGNORED_CALLS:
             return
+        if isinstance(call.func, ast.Attribute) and self.coll(call.func.value):
+            c, meth = call.func.value, call.func.attr
+            if meth == "add" and len(args) == 1:
+                self.callf("_c_add", [c, args[0]], line)
+            elif meth in ("discard", "remove", "pop") and len(args) >= 1:
+                self.callf("_c_del", [c, args[0]], line)
+            elif meth == "clear" and not args:
+                self.c_ast(ast.Constant(""), line)
+            else:
+                raise Unsupported(f"{ast.unparse(call.func)}()")
+            code.op("STORE")
+            code.u32(self.var(self.coll(c)))
+            return
+        if fn == "setattr" and len(args) == 3 and dotted(args[0]) == "store":
+            if isinstance(args[1], ast.Constant) and isinstance(args[1].value, str):
+                self.c_pystmt(ast.Assign([ast.Name(args[1].value, ast.Store())], args[2]), line)
+            else:
+                self.callf("_var_set", [args[1], args[2]], line)
+                code.op("POP")
+            return
+        if fn and self.inliner is not None and fn in self.inliner.funcs and \
+                self.inline_depth < 8:
+            body = self.inliner.procedure(fn, args, kw)
+            if body is not None:   # the game's own function, its statements in place
+                self.inline_depth += 1
+                try:
+                    for st in body:
+                        self.c_pystmt(st, line)
+                finally:
+                    self.inline_depth -= 1
+                return
         if fn == "renpy.pause":
             node = args[0] if args else kw.get("delay")
             if node is None:
@@ -1806,8 +2160,12 @@ class Compiler:
                 code.u8(1)
             return
         if fn in ("renpy.jump", "renpy.call"):
-            if not args or not isinstance(args[0], ast.Constant):
-                raise Unsupported(f"{fn} with a computed label")
+            if not args:
+                raise Unsupported(f"{fn} without a label")
+            if not isinstance(args[0], ast.Constant):   # looked up at run time (LABL)
+                self.c_ast(args[0], line)
+                code.op("JMP_NAME" if fn == "renpy.jump" else "CALL_NAME")
+                return
             code.op("JMP" if fn == "renpy.jump" else "CALL")
             code.ref(self.label_ref(self.qualify(args[0].value, line)))
             return
@@ -1952,11 +2310,11 @@ def write_game(path, comp, meta, images, resources, layers=(), voices=None, musi
     # Interning happens while the tables are built, so the string table is
     # emitted last.
     meta_data = struct.pack(
-        "<IIHHfffffIIffffi",
+        "<IIHHfffffIIffffii",
         s(meta["title"]), s(meta["version"]), meta["game_w"], meta["game_h"],
         meta["scale"], meta["view_x"], meta["view_y"], meta["view_w"], meta["view_h"],
         comp.init_addr, len(comp.vars), meta["depth_bg"], meta["depth_sprite"],
-        meta["depth_ui"], meta["max_shift"], meta["title_image"])
+        meta["depth_ui"], meta["max_shift"], meta["title_image"], meta.get("title_music", -1))
 
     var_names = sorted(comp.vars, key=comp.vars.get)
     vars_data = struct.pack("<I", len(var_names)) + strs(var_names)
@@ -1994,6 +2352,8 @@ def write_game(path, comp, meta, images, resources, layers=(), voices=None, musi
         section("MINI", struct.pack("<I", len(comp.minigames)) + strs(comp.minigames))
     if comp.ported is not None and comp.ported.entries:
         section("PORT", comp.ported.section(s))
+    if getattr(comp, "pysc", None):
+        section("PYSC", comp.pysc)
     if comp.named_audio:
         audn = bytearray(struct.pack("<I", len(comp.named_audio)))
         for name, res in sorted(comp.named_audio.items()):

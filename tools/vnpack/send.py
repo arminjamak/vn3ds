@@ -32,8 +32,8 @@ def _files_of(folder, prefix):
     out = []
     for root, _, files in os.walk(folder):
         for f in sorted(files):
-            if f.endswith((".part", ".txt")) and f != "port-report.txt":
-                continue
+            if f.endswith((".part", ".txt")) and f != "port-report.txt" or f == "savemap.json":
+                continue   # (savemap.json is for the computer's save sync)
             full = os.path.join(root, f)
             rel = os.path.relpath(full, folder).replace(os.sep, "/")
             out.append((f"{prefix}/{rel}", full))
@@ -325,7 +325,7 @@ class Cancelled(Exception):
 
 
 def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8, forever=False,
-               report=None, stop=None, info=None):
+               report=None, stop=None, info=None, relocate=None):
     """Stream files to vn3ds's receive screen. Returns (sent, refused).
 
     Newer vn3ds builds get protocol 4 (3 with each file deflated when that
@@ -339,7 +339,9 @@ def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8, forever=Fals
     "bytes" counts unpacked bytes (wire= what actually went out). stop()
     is asked now and then; when it returns True, Cancelled is raised. If
     `info` is a dict, info["need"] lists the indices of the files that had
-    to be sent (protocols 3 and 4) and info["wire"] the bytes sent."""
+    to be sent (protocols 3 and 4) and info["wire"] the bytes sent.
+    relocate(host), when given, is asked while vn3ds stays silent after a
+    drop; it returns where the 3DS answers now (a new IP), or None."""
     report = report or _print_progress
     progress = {"done": 0} if info is None else info
     progress.setdefault("done", 0)
@@ -378,7 +380,16 @@ def send_vn3ds(host, files, port=VN3DS_PORT, timeout=15, retries=8, forever=Fals
                text=f"connection dropped ({err.__class__.__name__}); retrying in {wait} s "
                     f"(attempt {attempt}{'' if forever else f' of {retries}'})")
         _sleep(wait, stop)
-        while not wait_for_receiver(host, port, seconds=120, stop=stop):
+        while not wait_for_receiver(host, port, seconds=20 if relocate else 120, stop=stop):
+            if relocate:
+                new = relocate(host)
+                if new and new != host:
+                    report("info", text=f"your 3DS is now at {new} (it was at {host}); carrying on there")
+                    _PROTO[new] = _PROTO.get(host, proto)
+                    host = new
+                    break
+                if new == host:
+                    break
             if not forever:
                 raise err
             report("waiting", text="waiting for vn3ds (keep it open; it listens on its own)")

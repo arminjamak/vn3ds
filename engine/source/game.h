@@ -3,7 +3,9 @@
 
 #define MAX_ATTRS 8
 
-enum { IMG_SOLID = 1, IMG_FULLSCREEN = 2, IMG_VIDEO = 4 };
+/* IMG_STEREO: the texture is a stereo pair side by side (left view | right
+ * view, vnpack --scenes-3d); each eye draws its half, anything else the left. */
+enum { IMG_SOLID = 1, IMG_FULLSCREEN = 2, IMG_VIDEO = 4, IMG_STEREO = 8 };
 enum { CHR_ADV = 0, CHR_NVL = 1, CHR_CENTERED = 2 };
 enum { TR_DISSOLVE = 1, TR_FADE, TR_MOVE, TR_MOVEIN, TR_MOVEOUT, TR_PUNCH };
 enum { DIR_LEFT, DIR_RIGHT, DIR_TOP, DIR_BOTTOM };
@@ -18,7 +20,8 @@ enum {
 /* One depth layer of a layered illustration; x/y/w/h are in the image's
  * logical 3DS pixels, depth is absolute (positive = behind the screen). */
 enum { ANIM_NONE, ANIM_SWAY, ANIM_PULSE, ANIM_BREATHE, ANIM_FALL, ANIM_RISE, ANIM_STARS,
-       ANIM_PATCH /* a = x, b = y in texels: see ImageDef.patch_res */ };
+       ANIM_PATCH /* a = x, b = y in texels: see ImageDef.patch_res */,
+       ANIM_VIDEO /* res is a looping .cvh / .cvid clip (video.c), not a texture */ };
 
 typedef struct {
     s32 res;
@@ -96,6 +99,7 @@ typedef struct {
     u32 init_addr, nvars;
     float depth_bg, depth_sprite, depth_ui, max_shift;
     s32 title_image;
+    s32 title_music;   /* RES index of config.main_menu_music, -1 if none */
 
     const char **var_names;
     const char **res;
@@ -129,6 +133,9 @@ typedef struct {
      * FORMAT.md); the script starts entry i as vn3ds_minigame("@i"). */
     const u8 *ported;
     u32 ported_size;
+    /* PYSC: the game's own screens and Python (pyscreen.c), source text */
+    const char *pysc;
+    u32 pysc_size;
     bool packed;   /* PACK: files are read from pack files (vfs.h) */
 } Game;
 

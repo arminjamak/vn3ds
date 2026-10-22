@@ -1498,7 +1498,7 @@ label ch1_spiral:
     at "Kessler's marching song. The taped windows. Something learning to be us from a war film with the sound off."
     camera at doc_wide
     show miso curious
-    "Then something glitters along the skirting board. Tiny square specks of light, like dust in a sunbeam, except there's no sunbeam."
+    "Then something glitters along the skirting board. Tiny round motes of light, like dust in a sunbeam, except there's no sunbeam."
     "They seep out of the wall and drift across the floorboards. Now and then a pale beam sweeps the room, like headlights through the curtains. There's no car."
     camera at ch1_floor(0.78)
     "Miso's ears go up. Her pupils go huge. Her tail starts to lash."
@@ -1512,7 +1512,7 @@ label ch1_spiral:
     $ p_rest += (1 if p_rest >= 0 else -1) * mg_miso / 50.0
     if mg_miso >= 70:
         show miso happy
-        "Miso pounces, and pounces, and pounces. Every speck she lands on goes out like a blown match. Soon the floor is dark and ordinary."
+        "Miso pounces, and pounces, and pounces. Every mote she lands on goes out like a blown match. Soon the floor is dark and ordinary."
         camera at doc_medium(0.5)
         a laugh "You absolute hunter. You cleaned the whole room."
         at "Whatever they were, they were catchable. That's oddly comforting at three in the morning."
@@ -1523,7 +1523,7 @@ label ch1_spiral:
         a smile "Not bad. Very respectable. The wall owes you a rematch."
     else:
         show miso stare
-        "The specks dance away from every pounce, then fade on their own. Miso sits in the middle of the floor and stares at the wall, deeply offended."
+        "The motes dance away from every pounce, then fade on their own. Miso sits in the middle of the floor and stares at the wall, deeply offended."
         camera at doc_medium(0.5)
         a smile "They cheated. I saw it. You were robbed."
     show miso loaf

@@ -39,3 +39,7 @@ tools/cli-release/work/
 
 # depth model for stereo video (vnpack --video-3d downloads it)
 tools/vnpack/models/
+engine/cia/tools/
+engine/vn3ds.cia
+apps/mac/.build/
+apps/mac/dist/

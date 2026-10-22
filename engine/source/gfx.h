@@ -23,6 +23,8 @@ void gfx_tex_commit(GfxTex *t);
  * origin) from now on, e.g. one eye's half of a side-by-side stereo video
  * frame. Draws use the window as it is when they are made. */
 void gfx_tex_window(GfxTex *t, int x, int y, int w, int h);
+/* The image's own size in pixels (the whole of it, whatever the window). */
+void gfx_tex_size(GfxTex *t, int *w, int *h);
 /* Like gfx_tex_create without clearing the pixels (the caller writes all
  * of them). Background loading (texcache.c): the main thread allocates and
  * commits, the background thread decodes into gfx_tex_data() in between. */
