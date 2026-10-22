@@ -32,12 +32,16 @@ jobs:
         # the tag is the version vn3ds compares against /latest to update itself
         run: make -C engine VERSION="$([ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" || echo dev)"
       - name: Build vn3ds.cia (the HOME Menu app FBI installs)
+        # optional: makerom's Linux release needs a newer glibc than this
+        # container has, and the FBI install route is on hold for now
+        continue-on-error: true
         run: |
           apt-get update -qq && apt-get install -y -qq g++ unzip git curl >/dev/null
           sh engine/cia/build_cia.sh
       - uses: actions/upload-artifact@v4
         with:
           name: engine
+          if-no-files-found: warn
           path: |
             engine/vn3ds.3dsx
             engine/vn3ds.cia
@@ -168,13 +172,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > notes.md <<'EOF'
-          One command ports a Ren'Py visual novel to the 3DS and puts it there (SD card or Wi-Fi).
+          The Mac app or one command ports a Ren'Py visual novel to the 3DS and puts it there (SD card or Wi-Fi). Optional 3D makes movies and scenes stereoscopic.
+
+          Mac app (macOS 13+, Apple silicon): download vn3ds.dmg below, drag vn3ds into Applications, and the first time right-click it and choose Open (it isn't notarised yet).
 
           macOS (Terminal): `curl -fsSL https://arminjamak.github.io/vn3ds/install.sh | sh -s -- ` then drag your game in and press Enter.
 
           Windows (PowerShell): `& ([scriptblock]::Create([Text.Encoding]::UTF8.GetString((iwr -useb https://arminjamak.github.io/vn3ds/install.ps1).RawContentStream.ToArray()))) ` then drag your game in and press Enter.
 
-          On the 3DS: in FBI, Remote Install > Scan QR Code, and scan the code on vn3ds.com (it installs vn3ds.cia from this release as a HOME Menu app). vn3ds.3dsx is the same app for the Homebrew Launcher. Both update themselves from new releases.
+          vn3ds.3dsx is the 3DS app for the Homebrew Launcher; the Mac app and the command send it to the 3DS by themselves.
 
           The downloads bundle FFmpeg 9.0.2 (GPL v3); its source is attached (ffmpeg-9.0.2.tar.xz). See THIRD_PARTY_NOTICES.md inside each download.
           EOF
