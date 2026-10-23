@@ -9,7 +9,9 @@ label start:
     scene black
     centered "Snapshot is a work of fiction. It touches on psychosis, hospitalisation, medication and drug use.\nIf any of that is close to home, please play gently."
 
-    play music "audio/theme.ogg" fadein 1.0
+    # The title screen's theme (config.main_menu_music) carries on through the
+    # tutorial without a restart, and fades out where the story's music begins.
+    play music "audio/title.ogg" fadein 1.0 if_changed
     camera at est_orbit
     scene bg room with fade
 

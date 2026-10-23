@@ -72,9 +72,11 @@ def splices_check(wav_path, offset, changes):
         i = at - offset
         if crate != rate or i < rate or i + rate > len(mono):
             continue
-        seg = mono[i - rate // 2:i + rate // 2]
-        # gap: no 15 ms stretch near the splice that is (almost) silent
+        # gap: no 15 ms stretch at or after the splice that is (almost)
+        # silent. Before it the old track plays as recorded, its own pauses
+        # included (Snapshot's title theme breathes just before a phrase).
         win = int(0.015 * rate)
+        seg = mono[i - win:i + rate // 2]
         env = np.sqrt(np.convolve(seg ** 2, np.ones(win) / win, mode="valid"))
         before = np.sqrt(np.mean(mono[i - rate:i - rate // 4] ** 2))
         gap = env.min() < max(20.0, 0.02 * before)
